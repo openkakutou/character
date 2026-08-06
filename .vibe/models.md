@@ -251,6 +251,49 @@ Write-only counterpart to `V2SpriteEntry`, passed to `SerializeV2`; it has no `O
 
 Defined in: `sff/v2_serializer.go`
 
+## StateDef
+| Field | Type | Notes |
+|---|---|---|
+| Number | int | State number this block defines (the N in `[Statedef N]`) |
+| Type | StateType | State classification (`.cns` "type" parameter) |
+| MoveType | MoveType | Move classification (`.cns` "movetype" parameter) |
+| Physics | PhysicsType | Built-in physics applied while active (`.cns` "physics" parameter) |
+| Anim | int | Animation number played on entering this state; 0 means "not set" (defaults to Number) |
+| Ctrl | bool | Whether the player has control while this state is active |
+| PowerAdd | int | Power meter gain applied on entering this state |
+| Juggle | int | Juggle points this state costs against an airborne opponent |
+| FaceP2 | bool | Whether the character turns to face the opponent on entering this state |
+| HitDefPersist | bool | Whether an active hit definition survives into this state |
+| MoveHitPersist | bool | Whether "MoveHit"-triggered conditions survive into this state |
+| HitCountPersist | bool | Whether the hit counter survives into this state |
+| SprPriority | int | Sprite drawing (layering) priority for this state |
+| Controllers | []Controller | State controllers that run while this state is active, in file order |
+
+Scaffolding only — no `.cns` parser/serializer populates it yet (backlog items 020–022). See `.vibe/decisions/011-cns-controller-parameters-are-untyped-key-value-data.md`.
+
+Defined in: `cns/statedef.go`
+
+## Controller
+| Field | Type | Notes |
+|---|---|---|
+| Type | string | Controller type (`.cns [State N]` "type" parameter, e.g. "ChangeState", "VelSet") |
+| Triggers | []string | Trigger condition expressions, verbatim and unevaluated, in file order; nil/empty means the controller runs unconditionally |
+| Parameters | map[string]string | Remaining key/value parameters, verbatim and unevaluated |
+
+A controller's effect (e.g. which state a "ChangeState" controller transitions to) is just another `Parameters` entry, not a dedicated field.
+
+Defined in: `cns/statedef.go`
+
+## StateType / MoveType / PhysicsType
+String-based enums matching `.cns [Statedef N]` header tokens.
+| Type | Values | Notes |
+|---|---|---|
+| StateType | `StateTypeStanding` ("S"), `StateTypeCrouching` ("C"), `StateTypeAir` ("A"), `StateTypeLiedown` ("L"), `StateTypeUnchanged` ("U") | "type" parameter |
+| MoveType | `MoveTypeAttack` ("A"), `MoveTypeIdle` ("I"), `MoveTypeHit` ("H"), `MoveTypeUnchanged` ("U") | "movetype" parameter |
+| PhysicsType | `PhysicsStanding` ("S"), `PhysicsCrouching` ("C"), `PhysicsAir` ("A"), `PhysicsNone` ("N"), `PhysicsUnchanged` ("U") | "physics" parameter |
+
+Defined in: `cns/statedef.go`
+
 ## V2WritePalette
 | Field | Type | Notes |
 |---|---|---|

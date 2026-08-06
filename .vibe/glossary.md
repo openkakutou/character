@@ -39,3 +39,18 @@ _Sources: `sff/v1.go`, `sff/v2.go`_
 A named (group, number) collection of colors a `.sff` v2 sprite can be drawn with, stored in the file's own palette table separately from the sprite table. Like a Linked sprite, a palette bank can link to (reuse) another bank's already-stored color data instead of storing its own, identified by an index. A Sprite's Palette reference identifies which palette bank it uses.
 **Do not confuse with:** Sprite, which is drawn using a palette bank's colors but is not itself one.
 _Sources: `sff/v2.go`_
+
+## State
+A named mode of a character's behavior (e.g. standing, an attack, a hit reaction), defined by a `.cns` `[Statedef N]` block: a state number, its type/move-type/physics classification, and the State controllers that run while it is active.
+**Do not confuse with:** Animation, which is the visual sequence of Frames a state typically plays but is a separate `.air` concept referenced by number, not part of the state itself.
+_Sources: `cns/statedef.go`_
+
+## State controller
+A single behavior a State can perform (e.g. changing velocity, dealing a hit, transitioning to another State), defined by a `.cns` `[State N]` block. Currently modeled as unevaluated data — its Triggers and Parameters are stored verbatim, not resolved against MUGEN/Ikemen's expression language.
+**Do not confuse with:** State, which owns an ordered list of State controllers rather than being one itself.
+_Sources: `cns/statedef.go`, `.vibe/decisions/011-cns-controller-parameters-are-untyped-key-value-data.md`_
+
+## Trigger
+A condition expression attached to a State controller (e.g. `"Time = 0"`) that determines whether the controller runs. A State controller with no triggers runs unconditionally whenever its State is active.
+**Do not confuse with:** State controller, which owns triggers rather than being one.
+_Sources: `cns/statedef.go`_
