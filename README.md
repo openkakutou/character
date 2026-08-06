@@ -14,10 +14,11 @@ This project is in early-stage development. Shipped so far:
 - Decoding the compressed pixel data of `.sff` v1 sprites into a plain pixel buffer with its width and height; corrupted or cut-off sprite image data is caught with a descriptive error instead of crashing
 - Saving sprites back out to a valid `.sff` v1 sprite sheet file, including their pixel data, sprite-linking (sprites that reuse another sprite's image data), and palette-sharing settings; saved files load back correctly with no image data lost
 - Reading the header and sprite/palette index tables of the newer, Ikemen-compatible (v2) `.sff` sprite sheet format, locating every sprite's image data and every palette bank's color data, including sprites/palette banks that reuse another one's data; malformed or truncated sprite sheets are caught with a descriptive error instead of crashing
+- Decoding `.sff` v2 sprite image data — both uncompressed and PNG-encoded (indexed and true-color) — into a plain pixel buffer; an unrecognized or not-yet-supported encoding is caught with a descriptive error instead of crashing
 
 Planned:
 
-- Decoding the pixel data of `.sff` v2 sprites (several encodings, including PNG)
+- Decoding the remaining, less common `.sff` v2 compressed pixel formats (RLE-based)
 - Reading the remaining character file formats (`.def`, `.cns`) into a single, pure-data `Character` representation
 - Preserving comments and ordering when the saved file actually differs from the original (today this is guaranteed only when nothing changed)
 - No rendering dependency, so the library can compile to WebAssembly for web-based tooling
@@ -293,7 +294,46 @@ func main() {
 }
 ```
 
-Parsing/serialization for `.def` and `.cns` files, decoding `.sff` v2 pixel data, and writing `.sff` v2 files are not implemented yet — this API surface will grow as those pieces are added.
+Once you have a v2 sprite's encoded pixel data (via `table.Offset` and the sprite table entry's `Length`), decode it with `sff.DecodeV2Sprite`:
+
+```go
+package main
+
+import (
+	"fmt"
+	"os"
+
+	"github.com/openkakutou/character/sff"
+)
+
+func main() {
+	f, err := os.Open("kfm.sff")
+	if err != nil {
+		panic(err)
+	}
+	defer f.Close()
+
+	table, err := sff.ParseV2(f)
+	if err != nil {
+		panic(err)
+	}
+
+	entry := table.Sprites[0]
+	data := make([]byte, entry.Length)
+	if _, err := f.ReadAt(data, entry.Offset); err != nil {
+		panic(err)
+	}
+
+	img, err := sff.DecodeV2Sprite(entry.Format, entry.Width, entry.Height, entry.ColorDepth, data)
+	if err != nil {
+		panic(err)
+	}
+
+	fmt.Printf("sprite (%d,%d) is %dx%d pixels, %d bytes per pixel\n", entry.Group, entry.Image, img.Width, img.Height, img.BytesPerPixel)
+}
+```
+
+Parsing/serialization for `.def` and `.cns` files, decoding the remaining `.sff` v2 compressed pixel formats (RLE-based), and writing `.sff` v2 files are not implemented yet — this API surface will grow as those pieces are added.
 <!-- vibe:end:usage -->
 
 <!-- vibe:begin:docs-index -->

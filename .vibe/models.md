@@ -179,3 +179,13 @@ Defined in: `sff/v2.go`
 Read helpers: `Offset(group, image int) (int64, bool)` resolves a `(group, image)` pair to its pixel data's file offset; `PaletteOffset(group, number int) (int64, bool)` resolves a `(group, number)` pair to its palette bank's color data file offset.
 
 Defined in: `sff/v2.go`
+
+## V2Image
+| Field | Type | Notes |
+|---|---|---|
+| Width | int | Pixel width |
+| Height | int | Pixel height |
+| BytesPerPixel | int | 1 for indexed data (raw, PNG8), 3 for RGB (PNG24), 4 for RGBA (PNG32) |
+| Pixels | []byte | Row-major buffer, length Width*Height*BytesPerPixel; indexed data holds palette index values (no RGB/palette resolution performed), direct-color data holds actual color channels |
+
+Defined in: `sff/v2_decoder.go`

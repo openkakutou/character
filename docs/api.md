@@ -473,7 +473,8 @@ func (t *V2SpriteTable) PaletteOffset(group, number int) (int64, bool)
 The `V2Format*` constants (`V2FormatRaw`, `V2FormatRLE8`, `V2FormatRLE5`,
 `V2FormatLZ5`, `V2FormatPNG8`, `V2FormatPNG24`, `V2FormatPNG32`) are the raw
 on-disk encoding codes `ParseV2` records in `V2SpriteEntry.Format`; the v2
-pixel decoder interprets them, `ParseV2` only records them.
+pixel decoder (`DecodeV2Sprite`, below) interprets them, `ParseV2` only
+records them.
 
 `ParseV2` returns a descriptive error rather than panicking when the
 signature doesn't match a `.sff` file, the version byte doesn't identify a
@@ -505,4 +506,59 @@ fmt.Printf("%d sprites, %d palette banks\n", table.Header.SpriteCount, table.Hea
 if offset, ok := table.Offset(0, 0); ok {
     fmt.Printf("sprite (0,0) image data starts at byte %d\n", offset)
 }
+```
+
+### Decoding v2 pixel data
+
+```go
+func DecodeV2Sprite(format, width, height, colorDepth int, data []byte) (*V2Image, error)
+
+type V2Image struct {
+    Width         int
+    Height        int
+    BytesPerPixel int    // 1 (indexed), 3 (RGB), or 4 (RGBA)
+    Pixels        []byte // row-major, BytesPerPixel bytes per pixel
+}
+```
+
+`DecodeV2Sprite` decodes a v2 sprite's stored pixel data — the byte range
+located by a `V2SpriteEntry`'s `Offset`/`Length` — into a plain pixel
+buffer. `format`, `width`, `height`, and `colorDepth` come from that same
+`V2SpriteEntry`: unlike PCX, `V2FormatRaw` data doesn't self-describe its
+own dimensions, so the caller supplies them.
+
+Two families of `V2Format*` codes are supported:
+- `V2FormatRaw` — literal, uncompressed 8-bit indexed pixel data (one byte
+  per pixel, row-major). Requires `colorDepth == 8` and `len(data) ==
+  width*height`.
+- `V2FormatPNG8` / `V2FormatPNG24` / `V2FormatPNG32` — decoded via the
+  standard library's `image/png`. PNG8 yields indexed data
+  (`BytesPerPixel == 1`, palette index bytes, same as `V2FormatRaw` and
+  `PCXImage.Pixels` — no RGB/palette resolution performed). PNG24 yields RGB
+  data (`BytesPerPixel == 3`). PNG32 yields RGBA data (`BytesPerPixel == 4`,
+  straight/non-premultiplied alpha).
+
+`V2FormatRLE8`, `V2FormatRLE5`, and `V2FormatLZ5` are real on-disk format
+codes `ParseV2` can report in `V2SpriteEntry.Format`, but are not decoded by
+this function yet — like any other unrecognized format value, they return a
+descriptive error rather than being silently misinterpreted. A PNG whose own
+embedded dimensions disagree with `width`/`height`, or PNG data that fails
+to decode at all, also returns a descriptive error. See
+[`.vibe/decisions/006-sff-v2-pixel-decode-shape-and-scope.md`](../.vibe/decisions/006-sff-v2-pixel-decode-shape-and-scope.md).
+
+### Example
+
+```go
+entry := table.Sprites[0]
+data := make([]byte, entry.Length)
+if _, err := f.ReadAt(data, entry.Offset); err != nil {
+    log.Fatal(err)
+}
+
+img, err := sff.DecodeV2Sprite(entry.Format, entry.Width, entry.Height, entry.ColorDepth, data)
+if err != nil {
+    log.Fatal(err)
+}
+
+fmt.Printf("sprite (%d,%d) is %dx%d pixels, %d bytes per pixel\n", entry.Group, entry.Image, img.Width, img.Height, img.BytesPerPixel)
 ```

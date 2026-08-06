@@ -1,0 +1,19 @@
+---
+date: 2026-08-06
+status: accepted
+---
+# .sff v2 pixel decoding: a new image type carrying non-indexed pixels too, and only raw/PNG formats decoded
+
+**Context:** Item 011 decodes a v2 sprite's stored pixel data, given the format flag `ParseV2` (item 010) already records per sprite. v2 defines more pixel encodings than v1 ever had: raw (uncompressed indexed), three RLE/LZ compressed indexed variants, and three PNG variants (8-bit indexed, 24-bit RGB, 32-bit RGBA). The existing v1 decode result, `PCXImage`, only ever carries palette index bytes (one byte per pixel) because PCX-encoded v1 sprites are always 8-bit indexed. PNG24/PNG32 sprites are not indexed at all — each pixel is a real color, with no palette involved.
+
+**Decision:**
+- Add `V2Image{Width, Height, BytesPerPixel int; Pixels []byte}` rather than reusing `PCXImage`. `BytesPerPixel` is 1 for indexed data (raw, PNG8 — Pixels holds palette index bytes, exactly like `PCXImage.Pixels`), 3 for PNG24 (Pixels holds RGB bytes), 4 for PNG32 (Pixels holds RGBA bytes, straight/non-premultiplied alpha). No palette (RGB) resolution is performed for indexed data, mirroring `PCXImage`'s existing rule.
+- Add `DecodeV2Sprite(format, width, height, colorDepth int, data []byte) (*V2Image, error)`, mirroring `DecodePCX(data []byte)`'s plain-parameter shape rather than taking a `V2SpriteEntry`: raw-format data doesn't self-describe its own width/height (unlike PCX, which embeds its own header), so the caller must supply them from the sprite table entry it already has. This keeps the decoder decoupled from `V2SpriteEntry`'s unrelated fields (`Offset`, `PaletteIndex`, `LinkedIndex`, …).
+- Only `V2FormatRaw` (0) and the three PNG formats (`V2FormatPNG8`/`24`/`32`, 10/11/12) are decoded, using the standard library's `image/png` for the PNG formats. `V2FormatRLE8`/`RLE5`/`LZ5` (2/3/4) — real but unimplemented encodings — and any other flag value are both treated as "unrecognized" for this item: `DecodeV2Sprite` returns a descriptive error naming the unsupported format code rather than panicking or silently returning wrong pixels. This matches the item's own acceptance criteria, which only requires raw and PNG fixtures to decode correctly.
+
+**Reason:** `PCXImage` is a v1-only, always-indexed shape; forcing PNG24/32's genuine color data through it (or dropping color channels to fit 1 byte per pixel) would either misrepresent the sprite or lose color depth, and `image/png` from the standard library already provides sufficient decoding without a rendering dependency (a codec, not a GL/canvas backend) or an external dependency, keeping the project's WASM-compiles-cleanly and no-rendering-dependency constraints intact. Deferring RLE8/RLE5/LZ5 keeps this item scoped to what its acceptance criteria actually test; a real character using those encodings would still get a clear error today instead of a silent decode difference (already the standing project rule for unrecognized input).
+
+**Rejected alternatives:**
+- Extending `PCXImage` with an optional multi-byte-per-pixel mode — rejected: conflates a v1-only, PCX-specific type with v2's broader pixel-format set, and every existing `PCXImage` consumer would have to start checking a field that is always 1 for v1.
+- Implementing RLE8/RLE5/LZ5 now for completeness — rejected: no fixture or acceptance criterion in this item covers them, and getting an under-documented compressed format's bit-level details wrong would ship a decoder that produces silently corrupt pixels instead of the honest "unsupported" error a caller can act on.
+- Taking a `V2SpriteEntry` directly as `DecodeV2Sprite`'s input instead of plain parameters — rejected: couples the decoder to an unrelated table-parsing type's full field set (offset, palette index, link index) it has no use for, and breaks the existing `DecodePCX(data []byte)` precedent for no benefit.
