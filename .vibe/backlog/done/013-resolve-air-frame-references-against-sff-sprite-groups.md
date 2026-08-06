@@ -1,5 +1,5 @@
 ---
-status: todo
+status: done
 depends_on: [002, 006]
 ---
 # Resolve .air Frame References Against .sff Sprite Groups
