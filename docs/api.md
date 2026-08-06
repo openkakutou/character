@@ -290,3 +290,49 @@ if offset, ok := table.Offset(0, 0); ok {
     fmt.Printf("sprite (0,0) image data starts at byte %d\n", offset)
 }
 ```
+
+### Decoding v1 pixel data
+
+```go
+func DecodePCX(data []byte) (*PCXImage, error)
+
+type PCXImage struct {
+    Width  int
+    Height int
+    Pixels []byte // row-major palette index values, length Width*Height
+}
+```
+
+`DecodePCX` decodes the RLE-compressed, 8-bit indexed PCX pixel data used by
+`.sff` v1 sprites — the byte range located by a `V1SpriteEntry`'s `Offset`
+and `Length` — into a plain pixel buffer. It reads the standard 128-byte PCX
+header embedded in `data` to recover the image's own width and height (v1
+sprites carry no dimensions in their `.sff` subheader), then RLE-decodes the
+scanline data that follows.
+
+`PCXImage.Pixels` holds palette index values, not RGB colors: resolving an
+index to an actual color against the sprite's (possibly shared) palette is a
+separate concern this function does not take on.
+
+Only single-plane, 8-bit, RLE-encoded PCX data is supported — the encoding
+`.sff` v1 always uses. `DecodePCX` returns a descriptive error rather than
+panicking for unsupported encodings/bit depths, invalid image bounds, and
+corrupted or truncated RLE data (a run-length unit missing its value byte,
+a run overflowing its scanline, or data ending before a scanline completes).
+
+### Example
+
+```go
+entry := table.Sprites[0]
+data := make([]byte, entry.Length)
+if _, err := f.ReadAt(data, entry.Offset); err != nil {
+    log.Fatal(err)
+}
+
+img, err := sff.DecodePCX(data)
+if err != nil {
+    log.Fatal(err)
+}
+
+fmt.Printf("sprite (%d,%d) is %dx%d pixels\n", entry.Group, entry.Image, img.Width, img.Height)
+```

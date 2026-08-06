@@ -96,6 +96,15 @@ Defined in: `sff/v1.go`
 
 Defined in: `sff/v1.go`
 
+## PCXImage
+| Field | Type | Notes |
+|---|---|---|
+| Width | int | Pixel width, recovered from the PCX data's own embedded header |
+| Height | int | Pixel height, recovered from the PCX data's own embedded header |
+| Pixels | []byte | Row-major buffer of palette index values, length Width*Height; no RGB/palette resolution performed |
+
+Defined in: `sff/pcx.go`
+
 ## V1SpriteTable
 | Field | Type | Notes |
 |---|---|---|

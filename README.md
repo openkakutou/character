@@ -10,11 +10,12 @@ This project is in early-stage development. Shipped so far:
 - Writing animation data back out to valid `.air` text, ready to be read by MUGEN/Ikemen GO or read back in by this library
 - Loading a `.air` file and saving it back out unchanged reproduces the original file exactly, comments included — so re-saving a file you haven't edited never creates a noisy diff
 - Defined the sprite and sprite group data model that will represent a character's sprites once `.sff` file reading is implemented
-- Reading the header and sprite index table of MUGEN/Ikemen GO sprite sheet (`.sff`) files in their original (v1) format, locating every sprite's image data by group and image number; malformed or truncated sprite sheets are caught with a descriptive error instead of crashing (sprite pixel data itself isn't decoded yet)
+- Reading the header and sprite index table of MUGEN/Ikemen GO sprite sheet (`.sff`) files in their original (v1) format, locating every sprite's image data by group and image number; malformed or truncated sprite sheets are caught with a descriptive error instead of crashing
+- Decoding the compressed pixel data of `.sff` v1 sprites into a plain pixel buffer with its width and height; corrupted or cut-off sprite image data is caught with a descriptive error instead of crashing
 
 Planned:
 
-- Decoding sprite pixel data and reading the newer (v2) `.sff` format
+- Reading the newer (v2) `.sff` format, including its own pixel decoding
 - Reading the remaining character file formats (`.def`, `.cns`) into a single, pure-data `Character` representation
 - Preserving comments and ordering when the saved file actually differs from the original (today this is guaranteed only when nothing changed)
 - No rendering dependency, so the library can compile to WebAssembly for web-based tooling
@@ -184,7 +185,46 @@ func main() {
 }
 ```
 
-Parsing/serialization for `.def` and `.cns` files, and decoding `.sff` sprite pixel data, are not implemented yet — this API surface will grow as those pieces are added.
+Once you have a sprite's file offset and length from `table`, decode its pixel data with `sff.DecodePCX`:
+
+```go
+package main
+
+import (
+	"fmt"
+	"os"
+
+	"github.com/openkakutou/character/sff"
+)
+
+func main() {
+	f, err := os.Open("kfm.sff")
+	if err != nil {
+		panic(err)
+	}
+	defer f.Close()
+
+	table, err := sff.ParseV1(f)
+	if err != nil {
+		panic(err)
+	}
+
+	entry := table.Sprites[0]
+	data := make([]byte, entry.Length)
+	if _, err := f.ReadAt(data, entry.Offset); err != nil {
+		panic(err)
+	}
+
+	img, err := sff.DecodePCX(data)
+	if err != nil {
+		panic(err)
+	}
+
+	fmt.Printf("sprite (%d,%d) is %dx%d pixels\n", entry.Group, entry.Image, img.Width, img.Height)
+}
+```
+
+Parsing/serialization for `.def` and `.cns` files, and reading `.sff` v2 files, are not implemented yet — this API surface will grow as those pieces are added.
 <!-- vibe:end:usage -->
 
 <!-- vibe:begin:docs-index -->
