@@ -1,5 +1,5 @@
 ---
-status: in_progress
+status: done
 depends_on: [006]
 ---
 # Parse .sff v1 Header and Sprite Table
