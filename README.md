@@ -10,10 +10,12 @@ This project is in early-stage development. Shipped so far:
 - Writing animation data back out to valid `.air` text, ready to be read by MUGEN/Ikemen GO or read back in by this library
 - Loading a `.air` file and saving it back out unchanged reproduces the original file exactly, comments included — so re-saving a file you haven't edited never creates a noisy diff
 - Defined the sprite and sprite group data model that will represent a character's sprites once `.sff` file reading is implemented
+- Reading the header and sprite index table of MUGEN/Ikemen GO sprite sheet (`.sff`) files in their original (v1) format, locating every sprite's image data by group and image number; malformed or truncated sprite sheets are caught with a descriptive error instead of crashing (sprite pixel data itself isn't decoded yet)
 
 Planned:
 
-- Reading the remaining character file formats (`.def`, `.sff`, `.cns`) into a single, pure-data `Character` representation
+- Decoding sprite pixel data and reading the newer (v2) `.sff` format
+- Reading the remaining character file formats (`.def`, `.cns`) into a single, pure-data `Character` representation
 - Preserving comments and ordering when the saved file actually differs from the original (today this is guaranteed only when nothing changed)
 - No rendering dependency, so the library can compile to WebAssembly for web-based tooling
 <!-- vibe:end:features -->
@@ -150,7 +152,39 @@ func main() {
 }
 ```
 
-Parsing/serialization for `.def`, `.sff`, and `.cns` files is not implemented yet — this API surface will grow as those pieces are added.
+Read a `.sff` v1 sprite sheet's header and sprite index table with `sff.ParseV1` — this locates each sprite's image data by (group, image) without decoding pixel data yet:
+
+```go
+package main
+
+import (
+	"fmt"
+	"os"
+
+	"github.com/openkakutou/character/sff"
+)
+
+func main() {
+	f, err := os.Open("kfm.sff")
+	if err != nil {
+		panic(err)
+	}
+	defer f.Close()
+
+	table, err := sff.ParseV1(f)
+	if err != nil {
+		panic(err)
+	}
+
+	fmt.Printf("%d sprites across %d groups\n", table.Header.ImageCount, table.Header.GroupCount)
+
+	if offset, ok := table.Offset(0, 0); ok {
+		fmt.Printf("sprite (0,0) image data starts at byte %d\n", offset)
+	}
+}
+```
+
+Parsing/serialization for `.def` and `.cns` files, and decoding `.sff` sprite pixel data, are not implemented yet — this API surface will grow as those pieces are added.
 <!-- vibe:end:usage -->
 
 <!-- vibe:begin:docs-index -->

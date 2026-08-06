@@ -71,3 +71,37 @@ Defined in: `sff/sprite.go`
 | Sprites | []Sprite | Ordered collection of sprites belonging to this group; not itself validated against each Sprite's own Group field |
 
 Defined in: `sff/sprite.go`
+
+## V1Header
+| Field | Type | Notes |
+|---|---|---|
+| Version | [4]byte | Raw version bytes as stored in the file (verhi, verlo1, verlo2, verlo3) |
+| GroupCount | int | Number of sprite groups declared in the header |
+| ImageCount | int | Total number of sprites declared in the header |
+| SharedPalette | bool | True when sprites share one palette table (SPRPALTYPE_SHARED); false when each sprite carries its own (SPRPALTYPE_INDIV) |
+
+Defined in: `sff/v1.go`
+
+## V1SpriteEntry
+| Field | Type | Notes |
+|---|---|---|
+| Group | int | Sprite group index |
+| Image | int | Image index within Group |
+| AxisX | int | Horizontal offset from top-left corner to the axis (pivot) point |
+| AxisY | int | Vertical offset from top-left corner to the axis (pivot) point |
+| Offset | int64 | Absolute file offset of this sprite's pixel data, immediately after its subheader |
+| Length | int | Pixel data length in bytes; 0 means this sprite links to another sprite's data (see LinkedIndex) |
+| LinkedIndex | int | Index, within the owning V1SpriteTable's Sprites, of the sprite this one shares pixel data with; only meaningful when Length is 0 |
+| SharedPalette | bool | True when this sprite reuses the previous sprite's palette |
+
+Defined in: `sff/v1.go`
+
+## V1SpriteTable
+| Field | Type | Notes |
+|---|---|---|
+| Header | V1Header | The parsed file header |
+| Sprites | []V1SpriteEntry | Sprite index table entries, in file order |
+
+Write/read helper: `Offset(group, image int) (int64, bool)` resolves a `(group, image)` pair to its pixel data's file offset.
+
+Defined in: `sff/v1.go`

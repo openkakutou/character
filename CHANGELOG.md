@@ -15,3 +15,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Animations can now be exported back into `.air` text — actions, frame sequences, collision boxes, and loop points are all written out in valid, re-readable MUGEN/Ikemen syntax
 - `.air` files can now be round-tripped without losing comments: loading a file and saving it back unchanged reproduces the original text exactly, including comment lines, so re-saving an untouched file no longer produces a noisy diff
 - Defined the sprite and sprite group data model (`Sprite`, `SpriteGroup`) that will represent a MUGEN/Ikemen GO character's sprites once `.sff` file reading is implemented
+- `.sff` v1 sprite sheet files can now have their header and sprite index table read, resolving each sprite's (group, image) key to where its image data lives in the file; malformed or truncated files report a descriptive error instead of crashing

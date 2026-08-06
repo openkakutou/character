@@ -13,7 +13,7 @@ graph TD
     root["character (root package)<br/>Character struct"]
     air["character/air<br/>Animation, Frame, ClsnBox<br/>+ Parse/Serialize(.air text)"]
     def["character/def<br/>.def parsing — not yet implemented"]
-    sff["character/sff<br/>Sprite, SpriteGroup<br/>binary parsing not yet implemented"]
+    sff["character/sff<br/>Sprite, SpriteGroup<br/>+ ParseV1(.sff v1 header/sprite table)"]
     cns["character/cns<br/>.cns combat logic — not yet implemented"]
 
     root -.->|will assemble| air
@@ -30,7 +30,7 @@ graph TD
 | `character` (root) | Assembles the sub-packages into a single `Character{}` struct | Skeleton only (`Name` placeholder field) |
 | `character/air` | MUGEN/Ikemen GO animation (`.air`) files: the `Animation`/`Frame`/`ClsnBox` data model, a parser that reads `.air` text into that model, a serializer that writes it back out, and a `Document` type for comment-preserving round trips | Data model + read path implemented; `Serialize` produces valid, re-readable output (not a byte-exact round-trip of an original file's formatting); `Document`/`ParseDocument` round-trip unmodified files byte-for-byte, comments included |
 | `character/def` | Character definition (`.def`) files — the entry point referencing the other formats | Not yet implemented |
-| `character/sff` | Sprite (`.sff`, binary) files: the `Sprite`/`SpriteGroup` data model | Data model implemented (version-agnostic, no v1/v2-specific fields); binary parsing not yet implemented |
+| `character/sff` | Sprite (`.sff`, binary) files: the `Sprite`/`SpriteGroup` data model, plus a v1 header/sprite-index-table reader (`ParseV1`) | Data model implemented (version-agnostic, no v1/v2-specific fields); v1 header and sprite index table reading implemented (`ParseV1`); v1 pixel decoding and v2 support not yet implemented |
 | `character/cns` | Combat logic / state machine (`.cns`, text) files | Not yet implemented |
 
 ## Read/write separation
@@ -67,6 +67,12 @@ mechanism directly in the struct. The parser (`air.Parse`) resolves defaults
 and one-shot overrides while reading the file, keeping that resolution
 logic out of the pure-data type the read API exposes. See
 [`.vibe/decisions/001-frame-clsn-boxes-pre-resolved.md`](../.vibe/decisions/001-frame-clsn-boxes-pre-resolved.md).
+
+`sff.ParseV1` similarly keeps its output out of the public `Sprite`/
+`SpriteGroup` model: it returns a separate `V1SpriteTable`/`V1SpriteEntry`
+pair carrying file offsets and format-version-specific bookkeeping that
+`Sprite` deliberately does not expose. See
+[`.vibe/decisions/004-sff-v1-table-is-a-separate-low-level-type.md`](../.vibe/decisions/004-sff-v1-table-is-a-separate-low-level-type.md).
 
 ## No rendering dependency
 

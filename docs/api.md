@@ -217,6 +217,76 @@ type SpriteGroup struct {
 sprites — no binary decoding yet. The model is deliberately version-agnostic:
 MUGEN's `.sff` format has two on-disk versions (v1 and v2) with different
 header layouts and pixel encodings, but both will populate this same shape.
-Reading `.sff` files (v1 and v2 headers, sprite tables, and pixel data) is
-not implemented yet — these types establish the target shape that those
-parsers (tracked by backlog items 007–012) will produce.
+Reading `.sff` v2 headers and decoding pixel data for either version is not
+implemented yet — these types establish the target shape those parsers
+(tracked by backlog items 008 and 010–012) will produce.
+
+### Reading v1 headers and sprite tables
+
+```go
+func ParseV1(r io.ReaderAt) (*V1SpriteTable, error)
+```
+
+Reads a MUGEN/Ikemen GO `.sff` v1 file header and its sprite index table
+from `r`. This resolves every sprite's `(Group, Image)` key to the file
+offset and length of its pixel data, but does not decode that pixel data —
+that is a separate step (tracked by backlog item 008).
+
+```go
+type V1Header struct {
+    Version       [4]byte // raw version bytes as stored in the file
+    GroupCount    int
+    ImageCount    int
+    SharedPalette bool // true when sprites share one palette table
+}
+
+type V1SpriteEntry struct {
+    Group         int
+    Image         int
+    AxisX         int
+    AxisY         int
+    Offset        int64 // absolute file offset of this sprite's pixel data
+    Length        int   // pixel data length in bytes; 0 if linked to another sprite
+    LinkedIndex   int   // index of the sprite this one shares pixel data with, when Length is 0
+    SharedPalette bool  // true when this sprite reuses the previous sprite's palette
+}
+
+type V1SpriteTable struct {
+    Header  V1Header
+    Sprites []V1SpriteEntry
+}
+
+func (t *V1SpriteTable) Offset(group, image int) (int64, bool)
+```
+
+`ParseV1` returns a descriptive error rather than panicking when the
+signature doesn't match a `.sff` v1 file, the header or a sprite subheader
+is truncated, or the sprite subfile chain ends before the header's declared
+image count is reached.
+
+`V1SpriteTable`/`V1SpriteEntry` are a version-specific, low-level type
+distinct from the public `Sprite`/`SpriteGroup` model: they carry file
+offsets and lack pixel dimensions (`Width`/`Height`), which can only be
+known once pixel data is decoded. See
+[`.vibe/decisions/004-sff-v1-table-is-a-separate-low-level-type.md`](../.vibe/decisions/004-sff-v1-table-is-a-separate-low-level-type.md).
+
+### Example
+
+```go
+f, err := os.Open("kfm.sff")
+if err != nil {
+    log.Fatal(err)
+}
+defer f.Close()
+
+table, err := sff.ParseV1(f)
+if err != nil {
+    log.Fatal(err)
+}
+
+fmt.Printf("%d sprites across %d groups\n", table.Header.ImageCount, table.Header.GroupCount)
+
+if offset, ok := table.Offset(0, 0); ok {
+    fmt.Printf("sprite (0,0) image data starts at byte %d\n", offset)
+}
+```

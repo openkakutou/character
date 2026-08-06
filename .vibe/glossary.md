@@ -25,3 +25,12 @@ _Sources: `sff/sprite.go`_
 ## Sprite group
 A collection of Sprites that share the same group index — e.g. the frames of a single stance or attack, addressed by their image index within the group.
 _Sources: `sff/sprite.go`_
+
+## Sprite index table
+The part of a `.sff` file that lists every sprite by its `(group, image)` key and points to where that sprite's pixel data lives in the file, without describing the pixel data itself.
+_Sources: `sff/v1.go`_
+
+## Linked sprite
+A sprite whose pixel data is not stored separately in the `.sff` file: it reuses ("links to") a previous sprite's already-stored pixel data, identified by an index, to avoid duplicating identical image data on disk.
+**Do not confuse with:** Sprite, which always has its own metadata entry even when it links to another sprite's pixel data.
+_Sources: `sff/v1.go`_
