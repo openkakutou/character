@@ -17,6 +17,7 @@ This project is in early-stage development. Shipped so far:
 - Decoding `.sff` v2 sprite image data — both uncompressed and PNG-encoded (indexed and true-color) — into a plain pixel buffer; an unrecognized or not-yet-supported encoding is caught with a descriptive error instead of crashing
 - Saving sprites back out to a valid `.sff` v2 sprite sheet file, including uncompressed and PNG-encoded pixel data, sprite-linking, and palette bank data (with palette-linking); saved files load back correctly with no image data lost and every palette bank reference intact
 - Matching each animation frame to its actual sprite image from a loaded sprite sheet (either `.sff` version, no version-specific handling needed); a frame pointing to a sprite that doesn't exist is caught with a clear error instead of silently showing nothing
+- Assembling a character's animations and sprites into a single `Character`, so you can look up the actual sprite shown by any animation frame directly from it
 
 Planned:
 
@@ -396,6 +397,41 @@ func main() {
 		sprite, err := resolver.Resolve(frame)
 		if err != nil {
 			// e.g. the frame references a sprite that isn't in spriteGroups.
+			panic(err)
+		}
+		fmt.Printf("frame shows sprite (%d,%d), %dx%d pixels\n", sprite.Group, sprite.Image, sprite.Width, sprite.Height)
+	}
+}
+```
+
+Assemble a full `Character` from animations and sprites you've already loaded, then look up the sprite shown by any frame directly from it with `Character.ResolveSprite`:
+
+```go
+package main
+
+import (
+	"fmt"
+
+	"github.com/openkakutou/character"
+	"github.com/openkakutou/character/air"
+	"github.com/openkakutou/character/sff"
+)
+
+func main() {
+	c := character.Character{
+		Name: "Kung Fu Man",
+		Animations: []air.Animation{
+			{Number: 0, Frames: []air.Frame{{Group: 0, Image: 0, Time: 5}}},
+		},
+		Sprites: []sff.SpriteGroup{
+			{Index: 0, Sprites: []sff.Sprite{{Group: 0, Image: 0, Width: 64, Height: 128}}},
+		},
+	}
+
+	for _, frame := range c.Animations[0].Frames {
+		sprite, err := c.ResolveSprite(frame)
+		if err != nil {
+			// e.g. the frame references a sprite that isn't in c.Sprites.
 			panic(err)
 		}
 		fmt.Printf("frame shows sprite (%d,%d), %dx%d pixels\n", sprite.Group, sprite.Image, sprite.Width, sprite.Height)

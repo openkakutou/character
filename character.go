@@ -6,9 +6,31 @@
 // raw per-format structs.
 package character
 
+import (
+	"github.com/openkakutou/character/air"
+	"github.com/openkakutou/character/sff"
+)
+
 // Character is the in-memory representation of a MUGEN/Ikemen GO character,
 // combining its definition, sprites, animations, and combat logic once the
 // corresponding sub-packages are implemented.
+//
+// Animations and Sprites are exposed through the air/sff read-path types
+// only (air.Animation, sff.SpriteGroup) — never a write-only,
+// format-preservation type — per CLAUDE.md's read/write separation
+// constraint.
 type Character struct {
-	Name string
+	Name       string
+	Animations []air.Animation
+	Sprites    []sff.SpriteGroup
+}
+
+// ResolveSprite returns the Sprite that frame's (Group, Image) reference
+// names within c.Sprites. It returns a descriptive error, rather than a
+// zero Sprite, when no loaded sprite matches — including when c.Sprites is
+// empty (e.g. a zero-value Character). Resolution is delegated to
+// air.SpriteResolver, the single place the air/sff frame-to-sprite lookup
+// is implemented; see .vibe/decisions/008-air-sprite-resolution-lives-in-air-package.md.
+func (c *Character) ResolveSprite(frame air.Frame) (sff.Sprite, error) {
+	return air.NewSpriteResolver(c.Sprites).Resolve(frame)
 }

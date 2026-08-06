@@ -3,7 +3,11 @@
 ## Character
 | Field | Type | Notes |
 |---|---|---|
-| Name | string | Placeholder field only — sprites, animations, and hitboxes will be added once the `def`/`sff`/`air`/`cns` sub-packages are implemented |
+| Name | string | Placeholder — no `def` sub-package parses it into this field yet |
+| Animations | []air.Animation | Exposed through `air`'s read-path type only |
+| Sprites | []sff.SpriteGroup | Exposed through `sff`'s read-path type only |
+
+Method: `(*Character) ResolveSprite(frame air.Frame) (sff.Sprite, error)` — resolves `frame`'s `(Group, Image)` reference against `Sprites`, by delegating to `air.NewSpriteResolver(c.Sprites)`; returns the same descriptive error `SpriteResolver.Resolve` does when no match exists, including when `Sprites` is empty (e.g. a zero-value `Character`). Combat logic (`cns` sub-package) is not wired in yet.
 
 Defined in: `character.go`
 

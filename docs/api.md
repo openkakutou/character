@@ -9,12 +9,44 @@ covers what's implemented today.
 
 ```go
 type Character struct {
-    Name string
+    Name       string
+    Animations []air.Animation
+    Sprites    []sff.SpriteGroup
 }
+
+func (c *Character) ResolveSprite(frame air.Frame) (sff.Sprite, error)
 ```
 
-Placeholder only: `Name` is the sole field until the `def`/`sff`/`air`/`cns`
-sub-packages are wired in (tracked by backlog item 018).
+`Character` is the assembled unit a library consumer (editor, engine) works
+with: `Animations`/`Sprites` are exposed through the `air`/`sff` read-path
+types only — never a write-only, format-preservation type. `ResolveSprite`
+looks up the actual `sff.Sprite` a `Frame` (typically one of
+`c.Animations[i].Frames`) shows, by delegating to
+`air.NewSpriteResolver(c.Sprites)`; it returns the same kind of descriptive
+error `SpriteResolver.Resolve` does when no sprite in `c.Sprites` matches
+the frame's `(Group, Image)` — including on a zero-value `Character`, whose
+`Sprites` is empty.
+
+`.def`/`.cns` fields (name/author metadata, combat logic) are not wired in
+yet (tracked by backlog items 015–022).
+
+### Example
+
+```go
+c := character.Character{
+    Animations: animations, // from air.Parse
+    Sprites:    spriteGroups, // from sff.ParseV1/ParseV2 + decode + assembly
+}
+
+for _, frame := range c.Animations[0].Frames {
+    sprite, err := c.ResolveSprite(frame)
+    if err != nil {
+        log.Fatal(err) // frame references a sprite not present in c.Sprites
+    }
+    fmt.Printf("frame shows sprite (%d,%d), %dx%d pixels\n",
+        sprite.Group, sprite.Image, sprite.Width, sprite.Height)
+}
+```
 
 ## `character/air` — animation (`.air`) files
 
