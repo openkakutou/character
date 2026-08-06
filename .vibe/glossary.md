@@ -33,4 +33,9 @@ _Sources: `sff/v1.go`_
 ## Linked sprite
 A sprite whose pixel data is not stored separately in the `.sff` file: it reuses ("links to") a previous sprite's already-stored pixel data, identified by an index, to avoid duplicating identical image data on disk.
 **Do not confuse with:** Sprite, which always has its own metadata entry even when it links to another sprite's pixel data.
-_Sources: `sff/v1.go`_
+_Sources: `sff/v1.go`, `sff/v2.go`_
+
+## Palette bank
+A named (group, number) collection of colors a `.sff` v2 sprite can be drawn with, stored in the file's own palette table separately from the sprite table. Like a Linked sprite, a palette bank can link to (reuse) another bank's already-stored color data instead of storing its own, identified by an index. A Sprite's Palette reference identifies which palette bank it uses.
+**Do not confuse with:** Sprite, which is drawn using a palette bank's colors but is not itself one.
+_Sources: `sff/v2.go`_

@@ -13,10 +13,11 @@ This project is in early-stage development. Shipped so far:
 - Reading the header and sprite index table of MUGEN/Ikemen GO sprite sheet (`.sff`) files in their original (v1) format, locating every sprite's image data by group and image number; malformed or truncated sprite sheets are caught with a descriptive error instead of crashing
 - Decoding the compressed pixel data of `.sff` v1 sprites into a plain pixel buffer with its width and height; corrupted or cut-off sprite image data is caught with a descriptive error instead of crashing
 - Saving sprites back out to a valid `.sff` v1 sprite sheet file, including their pixel data, sprite-linking (sprites that reuse another sprite's image data), and palette-sharing settings; saved files load back correctly with no image data lost
+- Reading the header and sprite/palette index tables of the newer, Ikemen-compatible (v2) `.sff` sprite sheet format, locating every sprite's image data and every palette bank's color data, including sprites/palette banks that reuse another one's data; malformed or truncated sprite sheets are caught with a descriptive error instead of crashing
 
 Planned:
 
-- Reading the newer (v2) `.sff` format, including its own pixel decoding
+- Decoding the pixel data of `.sff` v2 sprites (several encodings, including PNG)
 - Reading the remaining character file formats (`.def`, `.cns`) into a single, pure-data `Character` representation
 - Preserving comments and ordering when the saved file actually differs from the original (today this is guaranteed only when nothing changed)
 - No rendering dependency, so the library can compile to WebAssembly for web-based tooling
@@ -260,7 +261,39 @@ func main() {
 }
 ```
 
-Parsing/serialization for `.def` and `.cns` files, and reading/writing `.sff` v2 files, are not implemented yet — this API surface will grow as those pieces are added.
+Read a `.sff` v2 sprite sheet's header and sprite/palette index tables with `sff.ParseV2` — this locates each sprite's image data by (group, image) and each palette bank's color data by (group, number), without decoding pixel/color data yet:
+
+```go
+package main
+
+import (
+	"fmt"
+	"os"
+
+	"github.com/openkakutou/character/sff"
+)
+
+func main() {
+	f, err := os.Open("kfm.sff")
+	if err != nil {
+		panic(err)
+	}
+	defer f.Close()
+
+	table, err := sff.ParseV2(f)
+	if err != nil {
+		panic(err)
+	}
+
+	fmt.Printf("%d sprites, %d palette banks\n", table.Header.SpriteCount, table.Header.PaletteCount)
+
+	if offset, ok := table.Offset(0, 0); ok {
+		fmt.Printf("sprite (0,0) image data starts at byte %d\n", offset)
+	}
+}
+```
+
+Parsing/serialization for `.def` and `.cns` files, decoding `.sff` v2 pixel data, and writing `.sff` v2 files are not implemented yet — this API surface will grow as those pieces are added.
 <!-- vibe:end:usage -->
 
 <!-- vibe:begin:docs-index -->

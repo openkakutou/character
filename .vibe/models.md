@@ -129,3 +129,53 @@ Defined in: `sff/v1.go`
 Write-only counterpart to `V1SpriteEntry`, passed to `SerializeV1`; it has no `Offset`/`Length` fields since those are computed by the writer, not supplied.
 
 Defined in: `sff/v1_serializer.go`
+
+## V2Header
+| Field | Type | Notes |
+|---|---|---|
+| Version | [4]byte | Raw version bytes as stored in the file (verlo3, verlo2, verlo1, verhi); Version[3] is 2 for a v2 file |
+| SpriteCount | int | Total number of sprites declared in the header |
+| PaletteCount | int | Total number of palette banks declared in the header |
+
+Defined in: `sff/v2.go`
+
+## V2SpriteEntry
+| Field | Type | Notes |
+|---|---|---|
+| Group | int | Sprite group index |
+| Image | int | Image index within Group |
+| Width | int | Pixel width, as declared in the table |
+| Height | int | Pixel height, as declared in the table |
+| AxisX | int | Horizontal offset from top-left corner to the axis (pivot) point |
+| AxisY | int | Vertical offset from top-left corner to the axis (pivot) point |
+| Offset | int64 | Absolute file offset of this sprite's encoded pixel data, already resolved against the file's literal or translated data section |
+| Length | int | Encoded pixel data length in bytes; 0 means this sprite links to another sprite's data (see LinkedIndex) |
+| LinkedIndex | int | Index, within the owning V2SpriteTable's Sprites, of the sprite this one shares pixel data with; only meaningful when Length is 0 |
+| Format | int | Pixel-data encoding code (see the V2Format* constants); only meaningful when Length is non-zero |
+| ColorDepth | int | Bit depth of the encoded pixel data |
+| PaletteIndex | int | Index, within the owning V2SpriteTable's Palettes, of the palette bank this sprite is drawn with |
+
+Defined in: `sff/v2.go`
+
+## V2PaletteEntry
+| Field | Type | Notes |
+|---|---|---|
+| Group | int | Palette bank's group index |
+| Number | int | Palette bank's index within Group |
+| ColorCount | int | Number of colors declared for this palette bank |
+| Offset | int64 | Absolute file offset of this palette bank's RGBA color data |
+| Length | int | Color data length in bytes; 0 means this bank links to another bank's data (see LinkedIndex) |
+| LinkedIndex | int | Index, within the owning V2SpriteTable's Palettes, of the palette bank this one shares color data with; only meaningful when Length is 0 |
+
+Defined in: `sff/v2.go`
+
+## V2SpriteTable
+| Field | Type | Notes |
+|---|---|---|
+| Header | V2Header | The parsed file header |
+| Sprites | []V2SpriteEntry | Sprite index table entries, in file order |
+| Palettes | []V2PaletteEntry | Palette bank table entries, in file order |
+
+Read helpers: `Offset(group, image int) (int64, bool)` resolves a `(group, image)` pair to its pixel data's file offset; `PaletteOffset(group, number int) (int64, bool)` resolves a `(group, number)` pair to its palette bank's color data file offset.
+
+Defined in: `sff/v2.go`

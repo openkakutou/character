@@ -217,9 +217,9 @@ type SpriteGroup struct {
 sprites — no binary decoding yet. The model is deliberately version-agnostic:
 MUGEN's `.sff` format has two on-disk versions (v1 and v2) with different
 header layouts and pixel encodings, but both will populate this same shape.
-Reading `.sff` v2 headers and decoding pixel data for either version is not
-implemented yet — these types establish the target shape those parsers
-(tracked by backlog items 008 and 010–012) will produce.
+Decoding pixel data for v2 sprites is not implemented yet — these types
+establish the target shape that decoder (tracked by backlog item 011) will
+produce.
 
 ### Reading v1 headers and sprite tables
 
@@ -413,5 +413,96 @@ sprites := []sff.V1WriteSprite{
 }
 if err := sff.SerializeV1(f, [4]byte{1, 0, 0, 1}, false, sprites); err != nil {
     log.Fatal(err)
+}
+```
+
+### Reading v2 headers and sprite/palette tables
+
+```go
+func ParseV2(r io.ReaderAt) (*V2SpriteTable, error)
+```
+
+Reads a MUGEN/Ikemen GO `.sff` v2 file header and its sprite and palette
+index tables from `r`. This resolves every sprite's `(Group, Image)` key to
+the file offset and length of its encoded pixel data, and every palette
+bank's `(Group, Number)` key to the file offset and length of its RGBA color
+data — but does not decode either (tracked by backlog item 011 for pixel
+data).
+
+```go
+type V2Header struct {
+    Version      [4]byte // raw version bytes as stored in the file; Version[3] is 2 for a v2 file
+    SpriteCount  int
+    PaletteCount int
+}
+
+type V2SpriteEntry struct {
+    Group        int
+    Image        int
+    Width        int
+    Height       int
+    AxisX        int
+    AxisY        int
+    Offset       int64 // absolute file offset of this sprite's encoded pixel data
+    Length       int   // encoded pixel data length in bytes; 0 if linked to another sprite
+    LinkedIndex  int   // index of the sprite this one shares pixel data with, when Length is 0
+    Format       int   // pixel-data encoding (see the V2Format* constants); meaningful when Length != 0
+    ColorDepth   int   // bit depth of the encoded pixel data
+    PaletteIndex int   // index of the palette bank (within Palettes) this sprite is drawn with
+}
+
+type V2PaletteEntry struct {
+    Group       int
+    Number      int
+    ColorCount  int
+    Offset      int64 // absolute file offset of this palette bank's RGBA color data
+    Length      int   // color data length in bytes; 0 if linked to another palette bank
+    LinkedIndex int   // index of the palette bank this one shares color data with, when Length is 0
+}
+
+type V2SpriteTable struct {
+    Header   V2Header
+    Sprites  []V2SpriteEntry
+    Palettes []V2PaletteEntry
+}
+
+func (t *V2SpriteTable) Offset(group, image int) (int64, bool)
+func (t *V2SpriteTable) PaletteOffset(group, number int) (int64, bool)
+```
+
+The `V2Format*` constants (`V2FormatRaw`, `V2FormatRLE8`, `V2FormatRLE5`,
+`V2FormatLZ5`, `V2FormatPNG8`, `V2FormatPNG24`, `V2FormatPNG32`) are the raw
+on-disk encoding codes `ParseV2` records in `V2SpriteEntry.Format`; the v2
+pixel decoder interprets them, `ParseV2` only records them.
+
+`ParseV2` returns a descriptive error rather than panicking when the
+signature doesn't match a `.sff` file, the version byte doesn't identify a
+v2 file, the header is truncated, or a sprite or palette table entry lies
+beyond the available data.
+
+Like the v1 reader, `V2SpriteTable`/`V2SpriteEntry`/`V2PaletteEntry` are a
+version-specific, low-level type distinct from the public `Sprite`/
+`SpriteGroup` model — see
+[`.vibe/decisions/004-sff-v1-table-is-a-separate-low-level-type.md`](../.vibe/decisions/004-sff-v1-table-is-a-separate-low-level-type.md),
+which applies equally to the v2 reader.
+
+### Example
+
+```go
+f, err := os.Open("kfm.sff")
+if err != nil {
+    log.Fatal(err)
+}
+defer f.Close()
+
+table, err := sff.ParseV2(f)
+if err != nil {
+    log.Fatal(err)
+}
+
+fmt.Printf("%d sprites, %d palette banks\n", table.Header.SpriteCount, table.Header.PaletteCount)
+
+if offset, ok := table.Offset(0, 0); ok {
+    fmt.Printf("sprite (0,0) image data starts at byte %d\n", offset)
 }
 ```
