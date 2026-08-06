@@ -265,6 +265,33 @@ for _, frame := range animation.Frames {
 }
 ```
 
+## `character/def` — character definition (`.def`) files
+
+### Data model
+
+```go
+type CharacterInfo struct {
+    Name          string   // display name
+    Author        string
+    SpriteFile    string   // path to the .sff sprite sheet
+    AnimationFile string   // path to the .air animation file
+    SoundFile     string   // path to the .snd sound file
+    CommandFile   string   // path to the .cmd command input file
+    ConstantsFile string   // path to the main .cns combat logic file
+    StateFiles    []string // additional .st files beyond ConstantsFile, in file order
+    Palettes      []string // .act palette files, in palette number order
+}
+```
+
+`CharacterInfo` is the pure-data vocabulary for a MUGEN/Ikemen character
+definition: the identifying information (`Name`/`Author`) and file
+references a `.def` file's `[Info]`/`[Files]` sections carry — no INI
+parsing or file I/O yet. Paths are stored exactly as written in the `.def`
+file (typically relative to the character's own directory); resolving them
+against a filesystem is left to the package that eventually loads a `.def`
+file (tracked by backlog item 018). Parsing `.def` text into this model is
+not implemented yet (tracked by backlog item 016).
+
 ## `character/sff` — sprite (`.sff`) files
 
 ### Data model

@@ -18,6 +18,7 @@ This project is in early-stage development. Shipped so far:
 - Saving sprites back out to a valid `.sff` v2 sprite sheet file, including uncompressed and PNG-encoded pixel data, sprite-linking, and palette bank data (with palette-linking); saved files load back correctly with no image data lost and every palette bank reference intact
 - Matching each animation frame to its actual sprite image from a loaded sprite sheet (either `.sff` version, no version-specific handling needed); a frame pointing to a sprite that doesn't exist is caught with a clear error instead of silently showing nothing
 - Assembling a character's animations and sprites into a single `Character`, so you can look up the actual sprite shown by any animation frame directly from it
+- Defined the character definition data model that will represent a character's name, author, and the file paths it references (sprite, animation, sound, commands, combat logic, additional states, and palettes) once `.def` file reading is implemented
 
 Planned:
 

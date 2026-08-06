@@ -1,5 +1,22 @@
 # Data models
 
+## CharacterInfo
+| Field | Type | Notes |
+|---|---|---|
+| Name | string | Character's display name (.def `[Info]` "name") |
+| Author | string | Character's author/creator (.def `[Info]` "author") |
+| SpriteFile | string | Path to the .sff sprite sheet (.def `[Files]` "sprite") |
+| AnimationFile | string | Path to the .air animation file (.def `[Files]` "anim") |
+| SoundFile | string | Path to the .snd sound file (.def `[Files]` "sound") |
+| CommandFile | string | Path to the .cmd command input file (.def `[Files]` "cmd") |
+| ConstantsFile | string | Path to the main .cns combat logic file (.def `[Files]` "cns") |
+| StateFiles | []string | Additional .st files beyond ConstantsFile, in .def file order |
+| Palettes | []string | .act palette files, in palette number order (.def `[Files]` "pal1", "pal2", ...) |
+
+Paths are stored exactly as written in the .def file; resolving them against a filesystem is left to the package that eventually loads a .def file. No parser populates this model yet.
+
+Defined in: `def/character_info.go`
+
 ## Character
 | Field | Type | Notes |
 |---|---|---|
