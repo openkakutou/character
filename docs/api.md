@@ -336,3 +336,82 @@ if err != nil {
 
 fmt.Printf("sprite (%d,%d) is %dx%d pixels\n", entry.Group, entry.Image, img.Width, img.Height)
 ```
+
+### Writing v1 files
+
+```go
+func EncodePCX(img *PCXImage) ([]byte, error)
+```
+
+The write-path counterpart of `DecodePCX`: RLE-encodes a plain pixel buffer
+into the 8-bit indexed PCX byte layout `.sff` v1 sprites use, including the
+128-byte PCX header `DecodePCX` reads back. It always emits run-length
+units — even for a run of a single pixel — rather than trying to match
+whatever encoding heuristic produced some original file's PCX data; see
+[`.vibe/decisions/005-sff-v1-serialize-is-semantic-not-byte-exact-round-trip.md`](../.vibe/decisions/005-sff-v1-serialize-is-semantic-not-byte-exact-round-trip.md).
+Returns a descriptive error for non-positive dimensions or a pixel buffer
+whose length doesn't match `Width*Height`.
+
+```go
+func SerializeV1(w io.Writer, version [4]byte, sharedPalette bool, sprites []V1WriteSprite) error
+
+type V1WriteSprite struct {
+    Group         int
+    Image         int
+    AxisX         int
+    AxisY         int
+    SharedPalette bool
+    PixelData     []byte // PCX-encoded pixel data, e.g. from EncodePCX; empty for a linked sprite
+    LinkedIndex   int    // index (within this call's sprites) of the sprite this one links to, when PixelData is empty
+}
+```
+
+Writes a full `.sff` v1 file to `w`: the fixed 512-byte header followed by
+one subheader plus pixel data blob per sprite, in order — the same layout
+`ParseV1` reads. `version` is written verbatim as the file's four raw
+version bytes; `sharedPalette` sets the header's file-level palette-sharing
+flag (independent of each sprite's own `SharedPalette`, which governs
+whether that individual sprite reuses the previous sprite's palette). The
+header's group/image counts are always derived from `sprites` — `ImageCount`
+is `len(sprites)`, `GroupCount` is the number of distinct `Group` values
+present — so they can never disagree with what's actually written.
+
+Leave `PixelData` empty and set `LinkedIndex` to write a sprite that links
+to (reuses the pixel data of) an earlier sprite in the same `sprites` slice,
+mirroring `V1SpriteEntry.LinkedIndex` on the read side. `SerializeV1`
+returns a descriptive error, rather than corrupting the output, when a
+`LinkedIndex` is out of range or points at the sprite itself.
+
+`V1WriteSprite` is a write-only counterpart to `V1SpriteEntry`, not that
+same type reused: `V1SpriteEntry` carries `Offset`/`Length`, facts `ParseV1`
+computes while reading a file, not values a caller should be trusted to
+supply when writing one. `SerializeV1` always produces a fresh, valid
+layout — it does not attempt to reproduce any original file's exact byte
+layout, since `.sff` is a binary format with no diff-friendliness benefit
+to preserving one. See
+[`.vibe/decisions/005-sff-v1-serialize-is-semantic-not-byte-exact-round-trip.md`](../.vibe/decisions/005-sff-v1-serialize-is-semantic-not-byte-exact-round-trip.md).
+
+### Example
+
+```go
+pixels, err := sff.EncodePCX(&sff.PCXImage{
+    Width: 2, Height: 2,
+    Pixels: []byte{0, 0, 1, 1},
+})
+if err != nil {
+    log.Fatal(err)
+}
+
+f, err := os.Create("kfm-copy.sff")
+if err != nil {
+    log.Fatal(err)
+}
+defer f.Close()
+
+sprites := []sff.V1WriteSprite{
+    {Group: 0, Image: 0, PixelData: pixels},
+}
+if err := sff.SerializeV1(f, [4]byte{1, 0, 0, 1}, false, sprites); err != nil {
+    log.Fatal(err)
+}
+```

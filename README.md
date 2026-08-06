@@ -12,6 +12,7 @@ This project is in early-stage development. Shipped so far:
 - Defined the sprite and sprite group data model that will represent a character's sprites once `.sff` file reading is implemented
 - Reading the header and sprite index table of MUGEN/Ikemen GO sprite sheet (`.sff`) files in their original (v1) format, locating every sprite's image data by group and image number; malformed or truncated sprite sheets are caught with a descriptive error instead of crashing
 - Decoding the compressed pixel data of `.sff` v1 sprites into a plain pixel buffer with its width and height; corrupted or cut-off sprite image data is caught with a descriptive error instead of crashing
+- Saving sprites back out to a valid `.sff` v1 sprite sheet file, including their pixel data, sprite-linking (sprites that reuse another sprite's image data), and palette-sharing settings; saved files load back correctly with no image data lost
 
 Planned:
 
@@ -224,7 +225,42 @@ func main() {
 }
 ```
 
-Parsing/serialization for `.def` and `.cns` files, and reading `.sff` v2 files, are not implemented yet — this API surface will grow as those pieces are added.
+Save sprites back out to a `.sff` v1 file with `sff.SerializeV1`, encoding each sprite's pixel data with `sff.EncodePCX` first:
+
+```go
+package main
+
+import (
+	"os"
+
+	"github.com/openkakutou/character/sff"
+)
+
+func main() {
+	pixels, err := sff.EncodePCX(&sff.PCXImage{
+		Width: 2, Height: 2,
+		Pixels: []byte{0, 0, 1, 1},
+	})
+	if err != nil {
+		panic(err)
+	}
+
+	f, err := os.Create("kfm-copy.sff")
+	if err != nil {
+		panic(err)
+	}
+	defer f.Close()
+
+	sprites := []sff.V1WriteSprite{
+		{Group: 0, Image: 0, PixelData: pixels},
+	}
+	if err := sff.SerializeV1(f, [4]byte{1, 0, 0, 1}, false, sprites); err != nil {
+		panic(err)
+	}
+}
+```
+
+Parsing/serialization for `.def` and `.cns` files, and reading/writing `.sff` v2 files, are not implemented yet — this API surface will grow as those pieces are added.
 <!-- vibe:end:usage -->
 
 <!-- vibe:begin:docs-index -->

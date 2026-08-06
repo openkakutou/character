@@ -114,3 +114,18 @@ Defined in: `sff/pcx.go`
 Write/read helper: `Offset(group, image int) (int64, bool)` resolves a `(group, image)` pair to its pixel data's file offset.
 
 Defined in: `sff/v1.go`
+
+## V1WriteSprite
+| Field | Type | Notes |
+|---|---|---|
+| Group | int | Sprite group index |
+| Image | int | Image index within Group |
+| AxisX | int | Horizontal offset from top-left corner to the axis (pivot) point |
+| AxisY | int | Vertical offset from top-left corner to the axis (pivot) point |
+| SharedPalette | bool | True when this sprite reuses the previous sprite's palette |
+| PixelData | []byte | This sprite's PCX-encoded pixel data (e.g. from `EncodePCX`); empty to write a linked sprite instead |
+| LinkedIndex | int | Index, within the `SerializeV1` call's sprite slice, this sprite links to; only meaningful when PixelData is empty |
+
+Write-only counterpart to `V1SpriteEntry`, passed to `SerializeV1`; it has no `Offset`/`Length` fields since those are computed by the writer, not supplied.
+
+Defined in: `sff/v1_serializer.go`
