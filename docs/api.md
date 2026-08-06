@@ -38,8 +38,9 @@ unreadable `.def`, `.air`, or `.sff` file returns a descriptive error
 naming which file and step failed, rather than panicking. See
 [`.vibe/decisions/010-def-loader-assembles-character-from-referenced-files.md`](../.vibe/decisions/010-def-loader-assembles-character-from-referenced-files.md).
 
-`.cns` fields (combat logic) are not wired in yet (tracked by backlog items
-019–022).
+`.cns` fields (combat logic) are not wired in yet: `cns.Parse` exists (see
+`character/cns` below) but `Character`/`Load` don't reference it (tracked by
+backlog items 021–022).
 
 ### Example
 
@@ -453,6 +454,104 @@ if err := doc.Serialize(out); err != nil {
     log.Fatal(err)
 }
 ```
+
+## `character/cns` — combat logic (`.cns`) files
+
+### Data model
+
+```go
+type StateDef struct {
+    Number          int
+    Type            StateType    // "S", "C", "A", "L", "U"
+    MoveType        MoveType     // "A", "I", "H", "U"
+    Physics         PhysicsType  // "S", "C", "A", "N", "U"
+    Anim            int
+    Ctrl            bool
+    PowerAdd        int
+    Juggle          int
+    FaceP2          bool
+    HitDefPersist   bool
+    MoveHitPersist  bool
+    HitCountPersist bool
+    SprPriority     int
+    Controllers     []Controller
+}
+
+type Controller struct {
+    Type       string
+    Triggers   []string
+    Parameters map[string]string
+}
+```
+
+`StateDef` is a `[Statedef N]` block's header parameters plus the state
+controllers (`[State N]` blocks) that run while it is active, in file order.
+`Controller` stores a state controller as unevaluated data rather than
+resolved or type-checked against MUGEN/Ikemen's trigger expression language:
+`Triggers` are its `trigger1`/`trigger2`/... condition lines verbatim, in
+file order (a nil/empty `Triggers` means the controller runs
+unconditionally, not "never runs"); `Parameters` are every other key/value
+line, keyed by lowercase parameter name. See
+[`.vibe/decisions/011-cns-controller-parameters-are-untyped-key-value-data.md`](../.vibe/decisions/011-cns-controller-parameters-are-untyped-key-value-data.md).
+
+### Reading
+
+```go
+func Parse(r io.Reader) ([]StateDef, error)
+```
+
+Reads MUGEN/Ikemen GO `.cns` combat logic text from `r` and returns the
+`StateDef`s it describes, in file order.
+
+A `trigger`-prefixed key (`trigger1`, `trigger2`, ..., `triggerall`) appends
+to a controller's `Triggers`; `type` sets `Controller.Type`; every other key
+becomes a `Parameters` entry, normalized to lowercase. A `[Statedef N]`/
+`[State N]` header may carry a trailing `, label` comment (e.g.
+`[Statedef 0, Standing]`), which is tolerated and ignored. Bracket sections
+that are neither of those two headers — `[Data]`, `[Clsn1Default]`, and the
+like — are skipped without validating their content, the same tolerance
+`def.Parse` applies to sections outside its own scope. See
+[`.vibe/decisions/012-cns-parse-header-detection-strategy.md`](../.vibe/decisions/012-cns-parse-header-detection-strategy.md).
+
+### Error handling
+
+`Parse` returns a descriptive error identifying the offending line number,
+rather than panicking or silently producing incorrect data, when:
+- a `[...]` section header line is missing its closing `]`
+- a bracket line starts with the `statedef`/`state` keyword but its state
+  number is missing or non-numeric
+- a `[State N]` block appears with no enclosing `[Statedef ...]` block
+- a line inside a `Statedef` header or `State` block has no `=` (or an empty
+  key before it)
+- a `Statedef` header's `anim`/`poweradd`/`juggle`/`sprpriority` value isn't
+  a valid integer, or its `ctrl`/`facep2`/`hitdefpersist`/`movehitpersist`/
+  `hitcountpersist` value isn't a valid boolean
+- the underlying reader itself fails
+
+An empty input is not an error: `Parse` returns an empty `[]StateDef` and a
+`nil` error.
+
+### Example
+
+```go
+f, err := os.Open("kfm.cns")
+if err != nil {
+    log.Fatal(err)
+}
+defer f.Close()
+
+states, err := cns.Parse(f)
+if err != nil {
+    log.Fatal(err)
+}
+
+for _, s := range states {
+    fmt.Printf("state %d: %d controllers\n", s.Number, len(s.Controllers))
+}
+```
+
+Writing `.cns` data back out, and wiring `cns.Parse` into `character.Load`,
+are not implemented yet (tracked by backlog items 021–022).
 
 ## `character/sff` — sprite (`.sff`) files
 

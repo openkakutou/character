@@ -269,20 +269,20 @@ Defined in: `sff/v2_serializer.go`
 | SprPriority | int | Sprite drawing (layering) priority for this state |
 | Controllers | []Controller | State controllers that run while this state is active, in file order |
 
-Scaffolding only — no `.cns` parser/serializer populates it yet (backlog items 020–022). See `.vibe/decisions/011-cns-controller-parameters-are-untyped-key-value-data.md`.
+Populated by `Parse(r io.Reader) ([]StateDef, error)`, which reads `[Statedef N]`/`[State N]` `.cns` text into this shape, skipping unrecognized sections. No serializer exists yet (backlog items 021–022). See `.vibe/decisions/011-cns-controller-parameters-are-untyped-key-value-data.md` and `.vibe/decisions/012-cns-parse-header-detection-strategy.md`.
 
-Defined in: `cns/statedef.go`
+Defined in: `cns/statedef.go`, `cns/parser.go`
 
 ## Controller
 | Field | Type | Notes |
 |---|---|---|
 | Type | string | Controller type (`.cns [State N]` "type" parameter, e.g. "ChangeState", "VelSet") |
 | Triggers | []string | Trigger condition expressions, verbatim and unevaluated, in file order; nil/empty means the controller runs unconditionally |
-| Parameters | map[string]string | Remaining key/value parameters, verbatim and unevaluated |
+| Parameters | map[string]string | Remaining key/value parameters, verbatim and unevaluated, keyed by lowercase parameter name |
 
 A controller's effect (e.g. which state a "ChangeState" controller transitions to) is just another `Parameters` entry, not a dedicated field.
 
-Defined in: `cns/statedef.go`
+Defined in: `cns/statedef.go`, `cns/parser.go`
 
 ## StateType / MoveType / PhysicsType
 String-based enums matching `.cns [Statedef N]` header tokens.

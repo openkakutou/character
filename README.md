@@ -23,11 +23,12 @@ This project is in early-stage development. Shipped so far:
 - Writing character definitions back out to valid `.def` text, ready to be read by MUGEN/Ikemen GO or read back in by this library
 - Loading a `.def` file and saving it back out unchanged reproduces the original file exactly, including comments, section ordering, and any sections the library doesn't otherwise recognize — so re-saving a file you haven't edited never creates a noisy diff
 - Loading a full character in one step from its `.def` file — its name, animations, and sprites (either `.sff` version) are automatically read from the files it references and assembled into a ready-to-use `Character`; a missing or unreadable referenced file is caught with a clear error instead of crashing
+- Reading MUGEN/Ikemen GO combat logic (`.cns`) files into structured state data — every state and the behaviors it runs, with their trigger conditions and parameters kept as raw data rather than evaluated; sections the library doesn't recognize are skipped instead of aborting the read, and a malformed state or behavior header is caught with a clear, line-numbered error instead of crashing
 
 Planned:
 
 - Decoding the remaining, less common `.sff` v2 compressed pixel formats (RLE-based)
-- Reading the remaining `.cns` combat logic format
+- Writing `.cns` combat logic data back out to text, and including it when a character is loaded from a `.def` file
 - Preserving comments and ordering when the saved `.def`/`.air` file actually differs from the original (today this is guaranteed only when nothing changed)
 - No rendering dependency, so the library can compile to WebAssembly for web-based tooling
 <!-- vibe:end:features -->
@@ -567,7 +568,37 @@ func main() {
 }
 ```
 
-`.cns` files, and decoding/encoding the remaining `.sff` v2 compressed pixel formats (RLE-based), are not implemented yet — this API surface will grow as those pieces are added.
+Read a `.cns` combat logic file into its states with `cns.Parse`:
+
+```go
+package main
+
+import (
+	"fmt"
+	"os"
+
+	"github.com/openkakutou/character/cns"
+)
+
+func main() {
+	f, err := os.Open("kfm.cns")
+	if err != nil {
+		panic(err)
+	}
+	defer f.Close()
+
+	states, err := cns.Parse(f)
+	if err != nil {
+		panic(err)
+	}
+
+	for _, s := range states {
+		fmt.Printf("state %d: %d controllers\n", s.Number, len(s.Controllers))
+	}
+}
+```
+
+Writing `.cns` data back out, wiring it into `Character`, and decoding/encoding the remaining `.sff` v2 compressed pixel formats (RLE-based), are not implemented yet — this API surface will grow as those pieces are added.
 <!-- vibe:end:usage -->
 
 <!-- vibe:begin:docs-index -->
