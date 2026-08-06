@@ -27,12 +27,16 @@ go vet ./...
   edge cases, and an error/invalid-input path.
 - Round-trip tests (serialize → parse → same result) are required for any
   write-path code (`.air`/`.cns`). `air.Serialize` has this today, checked
-  against `air.Parse`; it is a first-pass write path, so the round trip is
-  semantic (equivalent `Animation`/`Frame` data), not byte-exact text.
+  against `air.Parse` (semantic round trip: equivalent `Animation`/`Frame`
+  data, not byte-exact text). `air.Document` has a separate, byte-exact
+  round-trip suite: parsing a realistic fixture and serializing it back
+  reproduces the file exactly, comments included, plus edge cases (no
+  trailing newline, comment/blank-only file, CRLF line endings) and error
+  paths (a failing reader, malformed content).
 
 ## What's covered today
 
 | Package | What the tests check |
 |---|---|
 | `character` | The root `Character` struct's zero value |
-| `character/air` | `Animation`/`Frame`/`ClsnBox` zero values and field assignment; `Parse` against a multi-action `.air` sample (action numbers, frame sequences, `Clsn1Default`/`Clsn2Default` resolution, one-shot `Clsn1:`/`Clsn2:` overrides, the `Loopstart` marker, optional flip/blend fields), an action with no frames, multiple default Clsn boxes; edge cases and error paths: empty and comment-only input, whole-line/trailing comments mixed with valid data, a malformed action header (as the first line and mid-file), missing/non-numeric frame fields, negative group/image indices (rejected) vs. negative X/Y/time (accepted), and a failing reader; `Serialize` round-tripped through `Parse` for a multi-action animation, per-frame Clsn boxes, and the `Loopstart` marker (mid-animation and pointing past the last frame); edge cases and error paths: optional Flip/Blend fields omitted when unset, an empty animation list producing empty output, and a failing writer returning an error instead of panicking |
+| `character/air` | `Animation`/`Frame`/`ClsnBox` zero values and field assignment; `Parse` against a multi-action `.air` sample (action numbers, frame sequences, `Clsn1Default`/`Clsn2Default` resolution, one-shot `Clsn1:`/`Clsn2:` overrides, the `Loopstart` marker, optional flip/blend fields), an action with no frames, multiple default Clsn boxes; edge cases and error paths: empty and comment-only input, whole-line/trailing comments mixed with valid data, a malformed action header (as the first line and mid-file), missing/non-numeric frame fields, negative group/image indices (rejected) vs. negative X/Y/time (accepted), and a failing reader; `Serialize` round-tripped through `Parse` for a multi-action animation, per-frame Clsn boxes, and the `Loopstart` marker (mid-animation and pointing past the last frame); edge cases and error paths: optional Flip/Blend fields omitted when unset, an empty animation list producing empty output, and a failing writer returning an error instead of panicking; `ParseDocument`/`Document.Serialize` round-tripped byte-for-byte against a realistic multi-action fixture (`air/testdata/sample.air`), asserting both the decoded `Animations` (no lost frames/Clsn boxes/`Loopstart`) and that every comment in the fixture survives in the output; edge cases: a file with no trailing newline, a comment/blank-only file, CRLF line endings, and mutating `Animations` after parsing not affecting `Serialize`'s output; error paths: a failing reader, malformed content, and a failing writer |

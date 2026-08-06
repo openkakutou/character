@@ -8,11 +8,12 @@ This project is in early-stage development. Shipped so far:
 - Reading MUGEN/Ikemen GO animation (`.air`) files into structured animation data — actions, frame sequences, collision boxes, and loop points
 - Malformed or unusual `.air` input (bad headers, missing/negative values, comment lines, empty files) is caught with a clear, line-numbered error instead of crashing or producing wrong data
 - Writing animation data back out to valid `.air` text, ready to be read by MUGEN/Ikemen GO or read back in by this library
+- Loading a `.air` file and saving it back out unchanged reproduces the original file exactly, comments included — so re-saving a file you haven't edited never creates a noisy diff
 
 Planned:
 
 - Reading the remaining character file formats (`.def`, `.sff`, `.cns`) into a single, pure-data `Character` representation
-- Writing changes back out while preserving the original file structure (ordering, comments), so edits produce clean, reviewable diffs
+- Preserving comments and ordering when the saved file actually differs from the original (today this is guaranteed only when nothing changed)
 - No rendering dependency, so the library can compile to WebAssembly for web-based tooling
 <!-- vibe:end:features -->
 
@@ -108,6 +109,41 @@ func main() {
 	defer f.Close()
 
 	if err := air.Serialize(f, animations); err != nil {
+		panic(err)
+	}
+}
+```
+
+If you just want to load a `.air` file and save it back out unchanged (no data edits), use `air.ParseDocument`/`Document.Serialize` instead of `Parse`/`Serialize` — it keeps the file's comments intact:
+
+```go
+package main
+
+import (
+	"os"
+
+	"github.com/openkakutou/character/air"
+)
+
+func main() {
+	f, err := os.Open("kfm.air")
+	if err != nil {
+		panic(err)
+	}
+	doc, err := air.ParseDocument(f)
+	f.Close()
+	if err != nil {
+		panic(err)
+	}
+
+	out, err := os.Create("kfm-copy.air")
+	if err != nil {
+		panic(err)
+	}
+	defer out.Close()
+
+	// Reproduces kfm.air exactly, including its comments.
+	if err := doc.Serialize(out); err != nil {
 		panic(err)
 	}
 }

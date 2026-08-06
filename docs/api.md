@@ -61,16 +61,41 @@ func Serialize(w io.Writer, animations []Animation) error
 Writes `animations` to `w` as MUGEN/Ikemen GO `.air` text, one
 `[Begin Action N]` block per `Animation`, in the order given.
 
-This is a first-pass write path: it produces valid, readable `.air` text
-that `Parse` reads back into an equivalent `[]Animation`, but it does not
-attempt a byte-exact round-trip of any original file's formatting or
-comments — format-preserving serialization is a separate, not-yet-started
-concern. `Clsn1`/`Clsn2` boxes are always written per frame (never as a
-reconstructed `Clsn1Default`/`Clsn2Default`), since `Frame` only stores the
-already-resolved boxes. A `Loopstart` marker is written only when
-`LoopStart` is non-zero — the zero value already matches `.air`'s own
-default of looping to the first frame. `Serialize` returns an error rather
-than panicking if the underlying writer fails.
+This produces valid, readable `.air` text that `Parse` reads back into an
+equivalent `[]Animation`, but it does not attempt a byte-exact round-trip of
+an original file's formatting or comments — it always writes fresh output.
+`Clsn1`/`Clsn2` boxes are always written per frame (never as a reconstructed
+`Clsn1Default`/`Clsn2Default`), since `Frame` only stores the already-resolved
+boxes. A `Loopstart` marker is written only when `LoopStart` is non-zero —
+the zero value already matches `.air`'s own default of looping to the first
+frame. `Serialize` returns an error rather than panicking if the underlying
+writer fails.
+
+### Comment-preserving round trip
+
+```go
+type Document struct {
+    Animations []Animation
+    // unexported: the original source bytes
+}
+
+func ParseDocument(r io.Reader) (*Document, error)
+func (d *Document) Serialize(w io.Writer) error
+```
+
+`ParseDocument` decodes `.air` text the same way `Parse` does (into
+`Document.Animations`) while also retaining the exact source bytes it read.
+`Document.Serialize` writes those retained bytes back out verbatim, so a
+`ParseDocument` → `Serialize` round trip on **unmodified** content reproduces
+the original file byte-for-byte — comments, blank lines, and original line
+endings included.
+
+Mutating `Document.Animations` has no effect on `Serialize`'s output: this
+type guarantees a faithful round trip for the "load, don't touch, save"
+case only. Regenerating output from an edited `Animations` slice while still
+preserving unrelated comments/ordering around the edit is not implemented
+yet — see
+[`.vibe/decisions/003-air-round-trip-via-separate-document-type.md`](../.vibe/decisions/003-air-round-trip-via-separate-document-type.md).
 
 ### Data model
 
@@ -139,6 +164,30 @@ if err != nil {
 defer f.Close()
 
 if err := air.Serialize(f, animations); err != nil {
+    log.Fatal(err)
+}
+```
+
+Loading a file and saving it back out unchanged, preserving comments:
+
+```go
+f, err := os.Open("kfm.air")
+if err != nil {
+    log.Fatal(err)
+}
+doc, err := air.ParseDocument(f)
+f.Close()
+if err != nil {
+    log.Fatal(err)
+}
+
+out, err := os.Create("kfm-copy.air")
+if err != nil {
+    log.Fatal(err)
+}
+defer out.Close()
+
+if err := doc.Serialize(out); err != nil {
     log.Fatal(err)
 }
 ```

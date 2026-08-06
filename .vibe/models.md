@@ -31,6 +31,16 @@ Defined in: `air/animation.go`
 
 Defined in: `air/animation.go`
 
+## Document
+| Field | Type | Notes |
+|---|---|---|
+| Animations | []Animation | Decoded the same way `Parse`'s return value is |
+| source | []byte | Unexported; the exact bytes `ParseDocument` read, replayed verbatim by `Serialize` |
+
+Write-path type: `ParseDocument`/`Document.Serialize` round-trip an unmodified `.air` file byte-for-byte, including comments. Mutating `Animations` does not change what `Serialize` writes.
+
+Defined in: `air/document.go`
+
 ## ClsnBox
 | Field | Type | Notes |
 |---|---|---|

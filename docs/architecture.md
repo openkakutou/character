@@ -28,7 +28,7 @@ graph TD
 | Package | Responsibility | Status |
 |---|---|---|
 | `character` (root) | Assembles the sub-packages into a single `Character{}` struct | Skeleton only (`Name` placeholder field) |
-| `character/air` | MUGEN/Ikemen GO animation (`.air`) files: the `Animation`/`Frame`/`ClsnBox` data model, a parser that reads `.air` text into that model, and a serializer that writes it back out | Data model + read path implemented; a first-pass write path exists (valid, re-readable output, not yet a byte-exact round-trip of an original file's formatting) |
+| `character/air` | MUGEN/Ikemen GO animation (`.air`) files: the `Animation`/`Frame`/`ClsnBox` data model, a parser that reads `.air` text into that model, a serializer that writes it back out, and a `Document` type for comment-preserving round trips | Data model + read path implemented; `Serialize` produces valid, re-readable output (not a byte-exact round-trip of an original file's formatting); `Document`/`ParseDocument` round-trip unmodified files byte-for-byte, comments included |
 | `character/def` | Character definition (`.def`) files — the entry point referencing the other formats | Not yet implemented |
 | `character/sff` | Sprite (`.sff`, binary) files | Not yet implemented |
 | `character/cns` | Combat logic / state machine (`.cns`, text) files | Not yet implemented |
@@ -43,11 +43,16 @@ sub-concerns apart, even before they become separate files:
   `ClsnBox` (no parsing or file I/O in those types), plus the `Parse`
   function that turns `.air` text into them.
 - **Write path** — turns the pure-data model back into file text. In `air`,
-  a first-pass `Serialize` function exists, producing valid, re-readable
-  `.air` output. It does not yet preserve an original file's exact
-  formatting (ordering, comments) so edits made by the editor produce
-  small, reviewable diffs — that format-preserving round-trip is future
-  work, tracked separately from this first pass.
+  `Serialize` produces valid, re-readable `.air` output but always writes
+  fresh text, not a byte-exact reproduction of any original file's
+  formatting. A separate `Document` type (`ParseDocument` /
+  `Document.Serialize`) covers the format-preserving case: it retains the
+  original source alongside the decoded `Animation`s, so round-tripping a
+  file that wasn't modified reproduces it exactly — comments and ordering
+  included. It does not yet regenerate output around an *edited*
+  `Animations` slice while keeping unrelated comments intact; that heavier
+  reconciliation is deferred until a concrete editing workflow needs it. See
+  [`.vibe/decisions/003-air-round-trip-via-separate-document-type.md`](../.vibe/decisions/003-air-round-trip-via-separate-document-type.md).
 
 Because Go only compiles what's imported, a consumer that imports only the
 read-oriented parts of a package never pulls in write-only logic — this
