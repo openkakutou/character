@@ -34,4 +34,4 @@ go vet ./...
 | Package | What the tests check |
 |---|---|
 | `character` | The root `Character` struct's zero value |
-| `character/air` | `Animation`/`Frame`/`ClsnBox` zero values and field assignment; `Parse` against a multi-action `.air` sample (action numbers, frame sequences, `Clsn1Default`/`Clsn2Default` resolution, one-shot `Clsn1:`/`Clsn2:` overrides, the `Loopstart` marker, optional flip/blend fields), an action with no frames, multiple default Clsn boxes, and a failing reader (error path) |
+| `character/air` | `Animation`/`Frame`/`ClsnBox` zero values and field assignment; `Parse` against a multi-action `.air` sample (action numbers, frame sequences, `Clsn1Default`/`Clsn2Default` resolution, one-shot `Clsn1:`/`Clsn2:` overrides, the `Loopstart` marker, optional flip/blend fields), an action with no frames, multiple default Clsn boxes; edge cases and error paths: empty and comment-only input, whole-line/trailing comments mixed with valid data, a malformed action header (as the first line and mid-file), missing/non-numeric frame fields, negative group/image indices (rejected) vs. negative X/Y/time (accepted), and a failing reader |

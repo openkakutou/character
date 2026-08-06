@@ -9,6 +9,17 @@ import (
 	"strings"
 )
 
+// stripComment removes a ".air" comment from line — everything from the
+// first ';' to the end of the line, whether the comment stands on its own
+// line or trails after real content — and trims surrounding whitespace from
+// what remains.
+func stripComment(line string) string {
+	if idx := strings.IndexByte(line, ';'); idx != -1 {
+		line = line[:idx]
+	}
+	return strings.TrimSpace(line)
+}
+
 // actionHeaderPattern matches a "[Begin Action N]" line and captures the
 // action number.
 var actionHeaderPattern = regexp.MustCompile(`(?i)^\[\s*begin\s+action\s+(-?\d+)\s*\]`)
@@ -16,12 +27,14 @@ var actionHeaderPattern = regexp.MustCompile(`(?i)^\[\s*begin\s+action\s+(-?\d+)
 // Parse reads MUGEN/Ikemen GO .air animation text from r and returns the
 // Animations it describes, in file order.
 //
-// This covers the happy path of the .air format: "[Begin Action N]"
-// headers, frame lines, Clsn1Default/Clsn2Default declarations, indexed
-// Clsn[i] box lines, and the Loopstart marker. Handling of malformed or
-// unusual input is intentionally out of scope here (see backlog item 003);
-// Parse still reports an error rather than panicking when the underlying
-// reader fails or a line cannot be interpreted at all.
+// This covers "[Begin Action N]" headers, frame lines,
+// Clsn1Default/Clsn2Default declarations, indexed Clsn[i] box lines, and the
+// Loopstart marker. Comment lines (';', whole-line or trailing) are ignored.
+// An empty input returns an empty, non-nil-error result rather than an
+// error. Malformed input — an unrecognized action header, a frame line with
+// missing or non-numeric fields, or a negative group/image index — returns a
+// descriptive error naming the offending line rather than panicking or
+// silently producing incorrect data, as does a reader that fails outright.
 func Parse(r io.Reader) ([]Animation, error) {
 	scanner := bufio.NewScanner(r)
 
@@ -39,13 +52,17 @@ func Parse(r io.Reader) ([]Animation, error) {
 	lineNumber := 0
 	for scanner.Scan() {
 		lineNumber++
-		line := strings.TrimSpace(scanner.Text())
+		line := stripComment(scanner.Text())
 
 		if line == "" {
 			continue
 		}
 
-		if m := actionHeaderPattern.FindStringSubmatch(line); m != nil {
+		if strings.HasPrefix(line, "[") {
+			m := actionHeaderPattern.FindStringSubmatch(line)
+			if m == nil {
+				return nil, fmt.Errorf("air: line %d: malformed action header %q", lineNumber, line)
+			}
 			number, err := strconv.Atoi(m[1])
 			if err != nil {
 				return nil, fmt.Errorf("air: line %d: invalid action number %q: %w", lineNumber, m[1], err)
@@ -58,8 +75,8 @@ func Parse(r io.Reader) ([]Animation, error) {
 		}
 
 		if current == nil {
-			// Nothing before the first action header is meaningful for the
-			// happy path this item covers.
+			// Non-header content before the first action header has no
+			// action to attach to; nothing meaningful can be done with it.
 			continue
 		}
 
@@ -146,7 +163,7 @@ func readClsnBoxes(scanner *bufio.Scanner, lineNumber *int, count int) ([]ClsnBo
 			return nil, n, fmt.Errorf("air: line %d: expected %d Clsn box line(s), got %d", n, count, i)
 		}
 		n++
-		line := strings.TrimSpace(scanner.Text())
+		line := stripComment(scanner.Text())
 		m := clsnBoxLinePattern.FindStringSubmatch(line)
 		if m == nil {
 			return nil, n, fmt.Errorf("air: line %d: malformed Clsn box line %q", n, line)
@@ -173,9 +190,15 @@ func parseFrameLine(line string) (Frame, error) {
 	if err != nil {
 		return Frame{}, fmt.Errorf("malformed frame line %q: invalid group: %w", line, err)
 	}
+	if group < 0 {
+		return Frame{}, fmt.Errorf("malformed frame line %q: group index must not be negative, got %d", line, group)
+	}
 	image, err := strconv.Atoi(strings.TrimSpace(fields[1]))
 	if err != nil {
 		return Frame{}, fmt.Errorf("malformed frame line %q: invalid image: %w", line, err)
+	}
+	if image < 0 {
+		return Frame{}, fmt.Errorf("malformed frame line %q: image index must not be negative, got %d", line, image)
 	}
 	x, err := strconv.Atoi(strings.TrimSpace(fields[2]))
 	if err != nil {

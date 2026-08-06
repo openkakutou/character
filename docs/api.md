@@ -27,7 +27,7 @@ func Parse(r io.Reader) ([]Animation, error)
 Reads MUGEN/Ikemen GO `.air` animation text from `r` and returns the
 `Animation`s it describes, in file order.
 
-Covers the format's happy path:
+Covers:
 - `[Begin Action N]` headers
 - Frame lines (`Group,Image, X,Y, Time[, Flip][, Blend]`)
 - `Clsn1Default:` / `Clsn2Default:` declarations (apply to every frame of
@@ -36,13 +36,21 @@ Covers the format's happy path:
   line only, then are consumed)
 - Indexed `Clsn[i] = L,T,R,B` box lines
 - The `Loopstart` marker
+- Comment lines (`;`, whole-line or trailing after real content) — ignored
 
-Error handling for malformed or unusual input (missing/non-numeric fields,
-empty files, comment lines, negative indices) is intentionally out of
-scope for `Parse` today — `Parse` still returns an error rather than
-panicking if the underlying reader fails or a line can't be interpreted at
-all, but a dedicated error contract is tracked separately (backlog item
-003). Serialization back to `.air` text is not implemented yet (backlog
+### Error handling
+
+`Parse` returns a descriptive error identifying the offending line number,
+rather than panicking or silently producing incorrect data, when:
+- an underlying `[Begin Action N]` header is malformed (missing or
+  non-numeric action number, or any other unrecognized `[...]` line)
+- a frame line has fewer than the required fields, or a
+  missing/non-numeric group, image, X, Y, or time value
+- a frame line's group or image index is negative
+- the underlying reader itself fails
+
+An empty input is not an error: `Parse` returns an empty, `nil`-error
+result. Serialization back to `.air` text is not implemented yet (backlog
 item 004).
 
 ### Data model

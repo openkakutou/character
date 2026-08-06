@@ -6,6 +6,7 @@ A read/write Go library for MUGEN/Ikemen GO fighting-game character files (`.def
 This project is in early-stage development. Shipped so far:
 
 - Reading MUGEN/Ikemen GO animation (`.air`) files into structured animation data — actions, frame sequences, collision boxes, and loop points
+- Malformed or unusual `.air` input (bad headers, missing/negative values, comment lines, empty files) is caught with a clear, line-numbered error instead of crashing or producing wrong data
 
 Planned:
 

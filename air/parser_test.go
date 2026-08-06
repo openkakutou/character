@@ -226,3 +226,134 @@ func TestParse_ReaderFailure_ReturnsErrorNotPanic(t *testing.T) {
 		t.Fatal("expected an error when the underlying reader fails, got nil")
 	}
 }
+
+func TestParse_EmptyFile_ReturnsEmptyResultWithoutError(t *testing.T) {
+	animations, err := Parse(strings.NewReader(""))
+	if err != nil {
+		t.Fatalf("expected no error for an empty file, got: %v", err)
+	}
+	if len(animations) != 0 {
+		t.Errorf("expected an empty result for an empty file, got %d animations", len(animations))
+	}
+}
+
+func TestParse_CommentLines_AreIgnoredAroundValidData(t *testing.T) {
+	src := `; this whole action is a walk cycle
+[Begin Action 0]
+; the first frame holds the idle pose
+0,0, 0,0, 5 ; trailing comment after a frame line
+0,1, 3,-2, 4
+`
+
+	animations, err := Parse(strings.NewReader(src))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(animations) != 1 {
+		t.Fatalf("expected 1 animation, got %d", len(animations))
+	}
+	frames := animations[0].Frames
+	if len(frames) != 2 {
+		t.Fatalf("expected 2 frames, got %d", len(frames))
+	}
+	if frames[0].Group != 0 || frames[0].Image != 0 || frames[0].X != 0 || frames[0].Y != 0 || frames[0].Time != 5 {
+		t.Errorf("frame 0: expected trailing comment to be stripped, got %+v", frames[0])
+	}
+	if frames[1].Group != 0 || frames[1].Image != 1 || frames[1].X != 3 || frames[1].Y != -2 || frames[1].Time != 4 {
+		t.Errorf("frame 1: unexpected geometry, got %+v", frames[1])
+	}
+}
+
+func TestParse_CommentOnlyFile_ReturnsEmptyResultWithoutError(t *testing.T) {
+	src := "; nothing but comments here\n; still nothing\n"
+
+	animations, err := Parse(strings.NewReader(src))
+	if err != nil {
+		t.Fatalf("expected no error for a comment-only file, got: %v", err)
+	}
+	if len(animations) != 0 {
+		t.Errorf("expected an empty result, got %d animations", len(animations))
+	}
+}
+
+func TestParse_MalformedActionHeaderAsFirstLine_ReturnsErrorNamingLine(t *testing.T) {
+	src := "[Begin Action]\n0,0, 0,0, 1\n"
+
+	_, err := Parse(strings.NewReader(src))
+	if err == nil {
+		t.Fatal("expected an error for a malformed action header, got nil")
+	}
+	if !strings.Contains(err.Error(), "line 1") {
+		t.Errorf("expected the error to name line 1, got: %v", err)
+	}
+}
+
+func TestParse_MalformedActionHeaderMidFile_ReturnsErrorNamingLine(t *testing.T) {
+	src := "[Begin Action 0]\n0,0, 0,0, 1\n[Begin Foo]\n"
+
+	_, err := Parse(strings.NewReader(src))
+	if err == nil {
+		t.Fatal("expected an error for a malformed action header, got nil")
+	}
+	if !strings.Contains(err.Error(), "line 3") {
+		t.Errorf("expected the error to name line 3, got: %v", err)
+	}
+}
+
+func TestParse_FrameLineWithNonNumericField_ReturnsErrorNamingLine(t *testing.T) {
+	src := "[Begin Action 0]\nabc,0, 0,0, 5\n"
+
+	_, err := Parse(strings.NewReader(src))
+	if err == nil {
+		t.Fatal("expected an error for a non-numeric frame field, got nil")
+	}
+	if !strings.Contains(err.Error(), "line 2") {
+		t.Errorf("expected the error to name line 2, got: %v", err)
+	}
+}
+
+func TestParse_FrameLineMissingFields_ReturnsError(t *testing.T) {
+	src := "[Begin Action 0]\n0,0\n"
+
+	_, err := Parse(strings.NewReader(src))
+	if err == nil {
+		t.Fatal("expected an error for a frame line missing required fields, got nil")
+	}
+}
+
+func TestParse_NegativeGroupIndex_ReturnsDescriptiveError(t *testing.T) {
+	src := "[Begin Action 0]\n-1,0, 0,0, 5\n"
+
+	_, err := Parse(strings.NewReader(src))
+	if err == nil {
+		t.Fatal("expected an error for a negative group index, got nil")
+	}
+	if !strings.Contains(err.Error(), "group") {
+		t.Errorf("expected the error to mention the group index, got: %v", err)
+	}
+}
+
+func TestParse_NegativeImageIndex_ReturnsDescriptiveError(t *testing.T) {
+	src := "[Begin Action 0]\n0,-1, 0,0, 5\n"
+
+	_, err := Parse(strings.NewReader(src))
+	if err == nil {
+		t.Fatal("expected an error for a negative image index, got nil")
+	}
+	if !strings.Contains(err.Error(), "image") {
+		t.Errorf("expected the error to mention the image index, got: %v", err)
+	}
+}
+
+func TestParse_NegativeXYAndTime_AreStillAccepted(t *testing.T) {
+	src := "[Begin Action 0]\n0,0, -5,-10, -1\n"
+
+	animations, err := Parse(strings.NewReader(src))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	f := animations[0].Frames[0]
+	if f.X != -5 || f.Y != -10 || f.Time != -1 {
+		t.Errorf("expected negative X/Y/Time to be accepted, got %+v", f)
+	}
+}
