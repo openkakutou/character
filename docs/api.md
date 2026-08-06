@@ -50,8 +50,27 @@ rather than panicking or silently producing incorrect data, when:
 - the underlying reader itself fails
 
 An empty input is not an error: `Parse` returns an empty, `nil`-error
-result. Serialization back to `.air` text is not implemented yet (backlog
-item 004).
+result.
+
+### Writing
+
+```go
+func Serialize(w io.Writer, animations []Animation) error
+```
+
+Writes `animations` to `w` as MUGEN/Ikemen GO `.air` text, one
+`[Begin Action N]` block per `Animation`, in the order given.
+
+This is a first-pass write path: it produces valid, readable `.air` text
+that `Parse` reads back into an equivalent `[]Animation`, but it does not
+attempt a byte-exact round-trip of any original file's formatting or
+comments — format-preserving serialization is a separate, not-yet-started
+concern. `Clsn1`/`Clsn2` boxes are always written per frame (never as a
+reconstructed `Clsn1Default`/`Clsn2Default`), since `Frame` only stores the
+already-resolved boxes. A `Loopstart` marker is written only when
+`LoopStart` is non-zero — the zero value already matches `.air`'s own
+default of looping to the first frame. `Serialize` returns an error rather
+than panicking if the underlying writer fails.
 
 ### Data model
 
@@ -107,5 +126,19 @@ if err != nil {
 for _, a := range animations {
     fmt.Printf("action %d: %d frames, loops from frame %d\n",
         a.Number, len(a.Frames), a.LoopStart)
+}
+```
+
+Writing an `[]Animation` back out:
+
+```go
+f, err := os.Create("kfm.air")
+if err != nil {
+    log.Fatal(err)
+}
+defer f.Close()
+
+if err := air.Serialize(f, animations); err != nil {
+    log.Fatal(err)
 }
 ```

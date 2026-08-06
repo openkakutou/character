@@ -25,13 +25,14 @@ go vet ./...
   `TestParse`.
 - Every unit of behavior is covered by: the nominal path, at least two
   edge cases, and an error/invalid-input path.
-- Round-trip tests (parse → serialize → same result) are required for any
-  write-path code (`.air`/`.cns`) once it exists — not applicable yet,
-  since only reading is implemented so far.
+- Round-trip tests (serialize → parse → same result) are required for any
+  write-path code (`.air`/`.cns`). `air.Serialize` has this today, checked
+  against `air.Parse`; it is a first-pass write path, so the round trip is
+  semantic (equivalent `Animation`/`Frame` data), not byte-exact text.
 
 ## What's covered today
 
 | Package | What the tests check |
 |---|---|
 | `character` | The root `Character` struct's zero value |
-| `character/air` | `Animation`/`Frame`/`ClsnBox` zero values and field assignment; `Parse` against a multi-action `.air` sample (action numbers, frame sequences, `Clsn1Default`/`Clsn2Default` resolution, one-shot `Clsn1:`/`Clsn2:` overrides, the `Loopstart` marker, optional flip/blend fields), an action with no frames, multiple default Clsn boxes; edge cases and error paths: empty and comment-only input, whole-line/trailing comments mixed with valid data, a malformed action header (as the first line and mid-file), missing/non-numeric frame fields, negative group/image indices (rejected) vs. negative X/Y/time (accepted), and a failing reader |
+| `character/air` | `Animation`/`Frame`/`ClsnBox` zero values and field assignment; `Parse` against a multi-action `.air` sample (action numbers, frame sequences, `Clsn1Default`/`Clsn2Default` resolution, one-shot `Clsn1:`/`Clsn2:` overrides, the `Loopstart` marker, optional flip/blend fields), an action with no frames, multiple default Clsn boxes; edge cases and error paths: empty and comment-only input, whole-line/trailing comments mixed with valid data, a malformed action header (as the first line and mid-file), missing/non-numeric frame fields, negative group/image indices (rejected) vs. negative X/Y/time (accepted), and a failing reader; `Serialize` round-tripped through `Parse` for a multi-action animation, per-frame Clsn boxes, and the `Loopstart` marker (mid-animation and pointing past the last frame); edge cases and error paths: optional Flip/Blend fields omitted when unset, an empty animation list producing empty output, and a failing writer returning an error instead of panicking |

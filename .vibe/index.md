@@ -4,13 +4,14 @@
 
 ## Modules
 - [`modules/root.md`](modules/root.md) — entry point; will assemble sub-packages into a single `Character` struct
-- [`modules/air.md`](modules/air.md) — `.air` animation read path: pure-data model (`Animation`, `Frame`, `ClsnBox`) plus a `Parse` function reading `.air` text into it
+- [`modules/air.md`](modules/air.md) — `.air` animation read and (first-pass) write paths: pure-data model (`Animation`, `Frame`, `ClsnBox`), a `Parse` function reading `.air` text into it, and a `Serialize` function writing it back out
 
 ## Observed patterns
-- Root package (`character`) is meant to stay a thin assembly layer over format-specific sub-packages (`def/`, `sff/`, `air/`, `cns/`) — `air/` now has a data model and a read-path parser, `def/`, `sff/`, `cns/` still don't exist.
+- Root package (`character`) is meant to stay a thin assembly layer over format-specific sub-packages (`def/`, `sff/`, `air/`, `cns/`) — `air/` now has a data model, a read-path parser, and a first-pass write-path serializer; `def/`, `sff/`, `cns/` still don't exist.
 - Tests are co-located with source as `*_test.go`, one behavior per test function, named `Test<Type>_<Condition>_<Expectation>`.
-- Read-path data types (e.g. `air.Animation`/`air.Frame`) store already-resolved values (e.g. per-frame collision boxes) rather than the file format's own authoring shortcuts (e.g. default/override) — parsing concerns stay out of the pure-data model, per an explicit ADR; `air.Parse` performs that resolution while reading.
+- Read-path data types (e.g. `air.Animation`/`air.Frame`) store already-resolved values (e.g. per-frame collision boxes) rather than the file format's own authoring shortcuts (e.g. default/override) — parsing concerns stay out of the pure-data model, per an explicit ADR; `air.Parse` performs that resolution while reading, and `air.Serialize` always emits the resolved per-frame boxes rather than reconstructing a default/override split.
 - Parsing error handling was deliberately split into its own backlog item after the happy-path parser; `air.Parse` now has a full contract for malformed `.air` content — comment lines are ignored, an empty file is an explicit empty result (not an error), and a malformed header/frame line/negative index/reader failure returns a descriptive, line-numbered error rather than panicking.
+- `air.Serialize` is an explicit first pass: it guarantees a semantic round trip through `air.Parse`, not byte-exact preservation of an original file's formatting or comments — that remains a separate, not-yet-implemented concern.
 
 ## Other context files
 - [`models.md`](models.md) — data models

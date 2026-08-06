@@ -7,6 +7,7 @@ This project is in early-stage development. Shipped so far:
 
 - Reading MUGEN/Ikemen GO animation (`.air`) files into structured animation data — actions, frame sequences, collision boxes, and loop points
 - Malformed or unusual `.air` input (bad headers, missing/negative values, comment lines, empty files) is caught with a clear, line-numbered error instead of crashing or producing wrong data
+- Writing animation data back out to valid `.air` text, ready to be read by MUGEN/Ikemen GO or read back in by this library
 
 Planned:
 
@@ -79,7 +80,40 @@ func main() {
 }
 ```
 
-Parsing/serialization for `.def`, `.sff`, and `.cns` files is not implemented yet, and `.air` writing is not implemented yet either — this API surface will grow as those pieces are added.
+Write animation data back out to `.air` text with `air.Serialize`:
+
+```go
+package main
+
+import (
+	"os"
+
+	"github.com/openkakutou/character/air"
+)
+
+func main() {
+	animations := []air.Animation{
+		{
+			Number: 0,
+			Frames: []air.Frame{
+				{Group: 0, Image: 0, X: 0, Y: 0, Time: 5},
+			},
+		},
+	}
+
+	f, err := os.Create("kfm.air")
+	if err != nil {
+		panic(err)
+	}
+	defer f.Close()
+
+	if err := air.Serialize(f, animations); err != nil {
+		panic(err)
+	}
+}
+```
+
+Parsing/serialization for `.def`, `.sff`, and `.cns` files is not implemented yet — this API surface will grow as those pieces are added.
 <!-- vibe:end:usage -->
 
 <!-- vibe:begin:docs-index -->

@@ -11,7 +11,7 @@ wants to work with, rather than raw per-format structs.
 ```mermaid
 graph TD
     root["character (root package)<br/>Character struct"]
-    air["character/air<br/>Animation, Frame, ClsnBox<br/>+ Parse(.air text)"]
+    air["character/air<br/>Animation, Frame, ClsnBox<br/>+ Parse/Serialize(.air text)"]
     def["character/def<br/>.def parsing — not yet implemented"]
     sff["character/sff<br/>.sff sprite parsing — not yet implemented"]
     cns["character/cns<br/>.cns combat logic — not yet implemented"]
@@ -28,7 +28,7 @@ graph TD
 | Package | Responsibility | Status |
 |---|---|---|
 | `character` (root) | Assembles the sub-packages into a single `Character{}` struct | Skeleton only (`Name` placeholder field) |
-| `character/air` | MUGEN/Ikemen GO animation (`.air`) files: the `Animation`/`Frame`/`ClsnBox` data model, and a parser that reads `.air` text into that model | Data model + read path implemented; write path (format-preserving serialization) not started |
+| `character/air` | MUGEN/Ikemen GO animation (`.air`) files: the `Animation`/`Frame`/`ClsnBox` data model, a parser that reads `.air` text into that model, and a serializer that writes it back out | Data model + read path implemented; a first-pass write path exists (valid, re-readable output, not yet a byte-exact round-trip of an original file's formatting) |
 | `character/def` | Character definition (`.def`) files — the entry point referencing the other formats | Not yet implemented |
 | `character/sff` | Sprite (`.sff`, binary) files | Not yet implemented |
 | `character/cns` | Combat logic / state machine (`.cns`, text) files | Not yet implemented |
@@ -42,9 +42,12 @@ sub-concerns apart, even before they become separate files:
   game engine would consume. In `air`, this is `Animation`, `Frame`, and
   `ClsnBox` (no parsing or file I/O in those types), plus the `Parse`
   function that turns `.air` text into them.
-- **Write path** — format-preserving serialization (original ordering,
-  comments) so edits made by the editor produce small, reviewable diffs.
-  Not implemented yet for `.air`.
+- **Write path** — turns the pure-data model back into file text. In `air`,
+  a first-pass `Serialize` function exists, producing valid, re-readable
+  `.air` output. It does not yet preserve an original file's exact
+  formatting (ordering, comments) so edits made by the editor produce
+  small, reviewable diffs — that format-preserving round-trip is future
+  work, tracked separately from this first pass.
 
 Because Go only compiles what's imported, a consumer that imports only the
 read-oriented parts of a package never pulls in write-only logic — this
