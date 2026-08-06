@@ -13,9 +13,19 @@
 | StateFiles | []string | Additional .st files beyond ConstantsFile, in .def file order |
 | Palettes | []string | .act palette files, in palette number order (.def `[Files]` "pal1", "pal2", ...) |
 
-Paths are stored exactly as written in the .def file; resolving them against a filesystem is left to the package that eventually loads a .def file. Populated by `Parse(r io.Reader) (CharacterInfo, error)`, which reads `[Info]`/`[Files]` `.def` text into this shape, skipping unrecognized sections/keys.
+Paths are stored exactly as written in the .def file; resolving them against a filesystem is left to the package that eventually loads a .def file. Populated by `Parse(r io.Reader) (CharacterInfo, error)`, which reads `[Info]`/`[Files]` `.def` text into this shape, skipping unrecognized sections/keys. Written back out by `Serialize(w io.Writer, info CharacterInfo) error`.
 
-Defined in: `def/character_info.go`, `def/parser.go`
+Defined in: `def/character_info.go`, `def/parser.go`, `def/serializer.go`
+
+## Document (def)
+| Field | Type | Notes |
+|---|---|---|
+| Info | CharacterInfo | Decoded the same way `Parse`'s return value is |
+| source | []byte | Unexported; the exact bytes `ParseDocument` read, replayed verbatim by `Serialize` |
+
+Write-path type: `ParseDocument`/`Document.Serialize` round-trip an unmodified `.def` file byte-for-byte, including comments, section ordering, and unrecognized sections. Mutating `Info` does not change what `Serialize` writes. Mirrors `air`'s own `Document` (see below).
+
+Defined in: `def/document.go`
 
 ## Character
 | Field | Type | Notes |
@@ -52,7 +62,7 @@ Defined in: `air/animation.go`
 
 Defined in: `air/animation.go`
 
-## Document
+## Document (air)
 | Field | Type | Notes |
 |---|---|---|
 | Animations | []Animation | Decoded the same way `Parse`'s return value is |

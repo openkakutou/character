@@ -40,7 +40,12 @@ go vet ./...
   [`.vibe/decisions/005-sff-v1-serialize-is-semantic-not-byte-exact-round-trip.md`](../.vibe/decisions/005-sff-v1-serialize-is-semantic-not-byte-exact-round-trip.md)).
   `sff.SerializeV2`/`sff.EncodeV2Sprite` have the same semantic round-trip
   treatment against `ParseV2`/`DecodeV2Sprite`, including palette bank
-  metadata and color data, not just sprite pixels.
+  metadata and color data, not just sprite pixels. `def.Serialize` has the
+  same semantic round-trip treatment, checked against `def.Parse`.
+  `def.Document` has a separate, byte-exact round-trip suite, mirroring
+  `air.Document`: parsing a realistic fixture and serializing it back
+  reproduces the file exactly, comments, section ordering, and unrecognized
+  sections included.
 
 ## What's covered today
 

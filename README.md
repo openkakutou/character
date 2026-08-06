@@ -20,12 +20,14 @@ This project is in early-stage development. Shipped so far:
 - Assembling a character's animations and sprites into a single `Character`, so you can look up the actual sprite shown by any animation frame directly from it
 - Defined the character definition data model that will represent a character's name, author, and the file paths it references (sprite, animation, sound, commands, combat logic, additional states, and palettes) once `.def` file reading is implemented
 - Reading MUGEN/Ikemen GO character definition (`.def`) files into that data model: name, author, and every referenced file (sprite, animation, sound, commands, combat logic, additional states, palettes); sections the library doesn't recognize are skipped instead of aborting the read, and a malformed line is caught with a clear, line-numbered error instead of crashing
+- Writing character definitions back out to valid `.def` text, ready to be read by MUGEN/Ikemen GO or read back in by this library
+- Loading a `.def` file and saving it back out unchanged reproduces the original file exactly, including comments, section ordering, and any sections the library doesn't otherwise recognize — so re-saving a file you haven't edited never creates a noisy diff
 
 Planned:
 
 - Decoding the remaining, less common `.sff` v2 compressed pixel formats (RLE-based)
 - Wiring parsed `.def` character definitions into the single, pure-data `Character` representation, and reading the remaining `.cns` combat logic format
-- Preserving comments and ordering when the saved file actually differs from the original (today this is guaranteed only when nothing changed)
+- Preserving comments and ordering when the saved `.def`/`.air` file actually differs from the original (today this is guaranteed only when nothing changed)
 - No rendering dependency, so the library can compile to WebAssembly for web-based tooling
 <!-- vibe:end:features -->
 
@@ -469,7 +471,72 @@ func main() {
 }
 ```
 
-Serialization for `.def` files, wiring a parsed `CharacterInfo` into the root `Character` struct, `.cns` files, and decoding/encoding the remaining `.sff` v2 compressed pixel formats (RLE-based), are not implemented yet — this API surface will grow as those pieces are added.
+Write a `CharacterInfo` back out to `.def` text with `def.Serialize`:
+
+```go
+package main
+
+import (
+	"os"
+
+	"github.com/openkakutou/character/def"
+)
+
+func main() {
+	info := def.CharacterInfo{
+		Name:       "Kung Fu Man",
+		Author:     "Elecbyte",
+		SpriteFile: "kfm.sff",
+	}
+
+	f, err := os.Create("kfm.def")
+	if err != nil {
+		panic(err)
+	}
+	defer f.Close()
+
+	if err := def.Serialize(f, info); err != nil {
+		panic(err)
+	}
+}
+```
+
+If you just want to load a `.def` file and save it back out unchanged (no data edits), use `def.ParseDocument`/`Document.Serialize` instead of `Parse`/`Serialize` — it keeps the file's comments, section ordering, and unrecognized sections intact:
+
+```go
+package main
+
+import (
+	"os"
+
+	"github.com/openkakutou/character/def"
+)
+
+func main() {
+	f, err := os.Open("kfm.def")
+	if err != nil {
+		panic(err)
+	}
+	doc, err := def.ParseDocument(f)
+	f.Close()
+	if err != nil {
+		panic(err)
+	}
+
+	out, err := os.Create("kfm-copy.def")
+	if err != nil {
+		panic(err)
+	}
+	defer out.Close()
+
+	// Reproduces kfm.def exactly, including its comments.
+	if err := doc.Serialize(out); err != nil {
+		panic(err)
+	}
+}
+```
+
+Wiring a parsed `CharacterInfo` into the root `Character` struct, `.cns` files, and decoding/encoding the remaining `.sff` v2 compressed pixel formats (RLE-based), are not implemented yet — this API surface will grow as those pieces are added.
 <!-- vibe:end:usage -->
 
 <!-- vibe:begin:docs-index -->

@@ -343,8 +343,95 @@ if err != nil {
 fmt.Printf("%s by %s, sprites in %s\n", info.Name, info.Author, info.SpriteFile)
 ```
 
-Serializing a `CharacterInfo` back into `.def` text is not implemented yet
-(tracked by backlog item 017).
+### Writing
+
+```go
+func Serialize(w io.Writer, info CharacterInfo) error
+```
+
+Writes `info` to `w` as MUGEN/Ikemen GO `.def` text: an `[Info]` section
+followed by a `[Files]` section.
+
+This produces valid, readable `.def` text that `Parse` reads back into an
+equivalent `CharacterInfo`, but it does not attempt a byte-exact round-trip
+of an original file's formatting, comments, or unrecognized sections — it
+always writes fresh output (see `Document`, below, for that case). `Name`
+and `Author` are always quoted, matching common `.def` convention; file
+references are written unquoted. A field left at its zero value (an empty
+string, or a nil/empty `StateFiles`/`Palettes`) is omitted from the output
+entirely rather than written as an empty key. `StateFiles` are written as
+`st`, `st1`, `st2`, ... in slice order; `Palettes` are written as `pal1`,
+`pal2`, ... in slice order — `Parse` reconstructs both lists from
+file-appearance order (`StateFiles`) or numeric suffix (`Palettes`), so this
+numbering always round-trips regardless of the exact key chosen. `Serialize`
+returns an error rather than panicking if the underlying writer fails.
+
+### Comment-preserving round trip
+
+```go
+type Document struct {
+    Info CharacterInfo
+    // unexported: the original source bytes
+}
+
+func ParseDocument(r io.Reader) (*Document, error)
+func (d *Document) Serialize(w io.Writer) error
+```
+
+`ParseDocument` decodes `.def` text the same way `Parse` does (into
+`Document.Info`) while also retaining the exact source bytes it read.
+`Document.Serialize` writes those retained bytes back out verbatim, so a
+`ParseDocument` → `Serialize` round trip on **unmodified** content reproduces
+the original file byte-for-byte — comments, section ordering, and
+unrecognized sections included.
+
+Mutating `Document.Info` has no effect on `Serialize`'s output: this type
+guarantees a faithful round trip for the "load, don't touch, save" case
+only, mirroring `air.Document`. Regenerating output from an edited `Info`
+while still preserving unrelated comments/sections/ordering around the edit
+is not implemented yet — see
+[`.vibe/decisions/003-air-round-trip-via-separate-document-type.md`](../.vibe/decisions/003-air-round-trip-via-separate-document-type.md).
+
+### Example
+
+Writing a `CharacterInfo` back out:
+
+```go
+f, err := os.Create("kfm.def")
+if err != nil {
+    log.Fatal(err)
+}
+defer f.Close()
+
+if err := def.Serialize(f, info); err != nil {
+    log.Fatal(err)
+}
+```
+
+Loading a file and saving it back out unchanged, preserving comments,
+section ordering, and unrecognized sections:
+
+```go
+f, err := os.Open("kfm.def")
+if err != nil {
+    log.Fatal(err)
+}
+doc, err := def.ParseDocument(f)
+f.Close()
+if err != nil {
+    log.Fatal(err)
+}
+
+out, err := os.Create("kfm-copy.def")
+if err != nil {
+    log.Fatal(err)
+}
+defer out.Close()
+
+if err := doc.Serialize(out); err != nil {
+    log.Fatal(err)
+}
+```
 
 ## `character/sff` — sprite (`.sff`) files
 

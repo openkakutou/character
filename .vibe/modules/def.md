@@ -1,11 +1,13 @@
 # Module: def
 
-**Role:** MUGEN/Ikemen GO character definition (`.def`) files — the entry point that references a character's other files (sprite, animation, sound, commands, combat logic, additional states, palettes). Provides the pure-data model (`CharacterInfo`) and a text parser that reads `.def` INI-style text into it. Serializing back to `.def` text is not implemented yet (backlog item 017), nor is wiring `CharacterInfo` into the root `Character` struct (backlog item 018).
+**Role:** MUGEN/Ikemen GO character definition (`.def`) files — the entry point that references a character's other files (sprite, animation, sound, commands, combat logic, additional states, palettes). Provides the pure-data model (`CharacterInfo`), a text parser that reads `.def` INI-style text into it, a `Serialize` write path, and a `Document`/`ParseDocument` pair for byte-exact round trips of unmodified files — completing the `def` read+write cycle. Wiring `CharacterInfo` into the root `Character` struct is not implemented yet (backlog item 018).
 
-**Files:** `def/character_info.go`, `def/parser.go`
+**Files:** `def/character_info.go`, `def/parser.go`, `def/serializer.go`, `def/document.go`
 
 **Exports:**
 - `CharacterInfo` (struct: `Name`, `Author`, `SpriteFile`, `AnimationFile`, `SoundFile`, `CommandFile`, `ConstantsFile`, `StateFiles []string`, `Palettes []string`)
 - `Parse(r io.Reader) (CharacterInfo, error)` — reads `[Info]`/`[Files]` `.def` text into a `CharacterInfo`; unrecognized sections and keys are skipped rather than aborting the parse; `StateFiles` keeps file-appearance order, `Palettes` is sorted by numeric suffix; a malformed section header or `key=value` line returns a descriptive error naming the line (see `.vibe/decisions/009-def-parse-ignores-unknown-sections.md`)
+- `Serialize(w io.Writer, info CharacterInfo) error` — writes a `CharacterInfo` back out as `.def` text (`[Info]`/`[Files]` sections); a semantic round trip through `Parse`, not byte-exact preservation of an original file's formatting/comments — zero-value fields are omitted rather than written empty, `StateFiles`/`Palettes` are renumbered in slice order (`st`, `st1`, ... / `pal1`, `pal2`, ...)
+- `Document`/`ParseDocument(r io.Reader) (*Document, error)` — format-preserving write-path counterpart to `Parse`/`Serialize`: `ParseDocument` decodes `Info` the same way `Parse` does while retaining the exact source bytes; `(*Document).Serialize(w io.Writer) error` replays those bytes verbatim, reproducing an unmodified original file's comments, section ordering, and unrecognized sections exactly (see `.vibe/decisions/003-air-round-trip-via-separate-document-type.md`, whose split this mirrors). Mutating `Info` has no effect on `Serialize`'s output — it does not yet regenerate text around edits.
 
 **Depends on:** nothing (no dependency on `air`/`sff`, matching backlog item 015's note; item 018 will wire it to them)
