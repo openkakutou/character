@@ -191,3 +191,32 @@ if err := doc.Serialize(out); err != nil {
     log.Fatal(err)
 }
 ```
+
+## `character/sff` — sprite (`.sff`) files
+
+### Data model
+
+```go
+type Sprite struct {
+    Group   int // sprite group index
+    Image   int // image index within Group
+    Width   int
+    Height  int
+    AxisX   int // offset from top-left corner to the sprite's axis (pivot) point
+    AxisY   int
+    Palette int // palette reference; exact meaning defined by the .sff version that populates it
+}
+
+type SpriteGroup struct {
+    Index   int      // group index shared by every Sprite in Sprites
+    Sprites []Sprite
+}
+```
+
+`Sprite` and `SpriteGroup` are the pure-data vocabulary for a character's
+sprites — no binary decoding yet. The model is deliberately version-agnostic:
+MUGEN's `.sff` format has two on-disk versions (v1 and v2) with different
+header layouts and pixel encodings, but both will populate this same shape.
+Reading `.sff` files (v1 and v2 headers, sprite tables, and pixel data) is
+not implemented yet — these types establish the target shape that those
+parsers (tracked by backlog items 007–012) will produce.

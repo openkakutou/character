@@ -13,7 +13,7 @@ graph TD
     root["character (root package)<br/>Character struct"]
     air["character/air<br/>Animation, Frame, ClsnBox<br/>+ Parse/Serialize(.air text)"]
     def["character/def<br/>.def parsing — not yet implemented"]
-    sff["character/sff<br/>.sff sprite parsing — not yet implemented"]
+    sff["character/sff<br/>Sprite, SpriteGroup<br/>binary parsing not yet implemented"]
     cns["character/cns<br/>.cns combat logic — not yet implemented"]
 
     root -.->|will assemble| air
@@ -30,7 +30,7 @@ graph TD
 | `character` (root) | Assembles the sub-packages into a single `Character{}` struct | Skeleton only (`Name` placeholder field) |
 | `character/air` | MUGEN/Ikemen GO animation (`.air`) files: the `Animation`/`Frame`/`ClsnBox` data model, a parser that reads `.air` text into that model, a serializer that writes it back out, and a `Document` type for comment-preserving round trips | Data model + read path implemented; `Serialize` produces valid, re-readable output (not a byte-exact round-trip of an original file's formatting); `Document`/`ParseDocument` round-trip unmodified files byte-for-byte, comments included |
 | `character/def` | Character definition (`.def`) files — the entry point referencing the other formats | Not yet implemented |
-| `character/sff` | Sprite (`.sff`, binary) files | Not yet implemented |
+| `character/sff` | Sprite (`.sff`, binary) files: the `Sprite`/`SpriteGroup` data model | Data model implemented (version-agnostic, no v1/v2-specific fields); binary parsing not yet implemented |
 | `character/cns` | Combat logic / state machine (`.cns`, text) files | Not yet implemented |
 
 ## Read/write separation

@@ -1,5 +1,5 @@
 ---
-status: todo
+status: in_progress
 ---
 # Define Sprite and SpriteGroup Data Model
 

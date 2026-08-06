@@ -50,3 +50,24 @@ Defined in: `air/document.go`
 | Bottom | int | |
 
 Defined in: `air/animation.go`
+
+## Sprite
+| Field | Type | Notes |
+|---|---|---|
+| Group | int | Sprite group index |
+| Image | int | Image index within Group |
+| Width | int | Pixel width |
+| Height | int | Pixel height |
+| AxisX | int | Horizontal offset from top-left corner to the sprite's axis (pivot) point |
+| AxisY | int | Vertical offset from top-left corner to the sprite's axis (pivot) point |
+| Palette | int | Palette reference; exact meaning defined by the `.sff` version that populates it |
+
+Defined in: `sff/sprite.go`
+
+## SpriteGroup
+| Field | Type | Notes |
+|---|---|---|
+| Index | int | Group index shared by every Sprite in Sprites |
+| Sprites | []Sprite | Ordered collection of sprites belonging to this group; not itself validated against each Sprite's own Group field |
+
+Defined in: `sff/sprite.go`
