@@ -13,7 +13,7 @@ graph TD
     root["character (root package)<br/>Character struct"]
     air["character/air<br/>Animation, Frame, ClsnBox<br/>+ Parse/Serialize(.air text)"]
     def["character/def<br/>.def parsing — not yet implemented"]
-    sff["character/sff<br/>Sprite, SpriteGroup<br/>+ ParseV1/DecodePCX (.sff v1 read)<br/>+ SerializeV1/EncodePCX (.sff v1 write)<br/>+ ParseV2/DecodeV2Sprite (.sff v2 read)"]
+    sff["character/sff<br/>Sprite, SpriteGroup<br/>+ ParseV1/DecodePCX (.sff v1 read)<br/>+ SerializeV1/EncodePCX (.sff v1 write)<br/>+ ParseV2/DecodeV2Sprite (.sff v2 read)<br/>+ SerializeV2/EncodeV2Sprite (.sff v2 write)"]
     cns["character/cns<br/>.cns combat logic — not yet implemented"]
 
     root -.->|will assemble| air
@@ -30,7 +30,7 @@ graph TD
 | `character` (root) | Assembles the sub-packages into a single `Character{}` struct | Skeleton only (`Name` placeholder field) |
 | `character/air` | MUGEN/Ikemen GO animation (`.air`) files: the `Animation`/`Frame`/`ClsnBox` data model, a parser that reads `.air` text into that model, a serializer that writes it back out, and a `Document` type for comment-preserving round trips | Data model + read path implemented; `Serialize` produces valid, re-readable output (not a byte-exact round-trip of an original file's formatting); `Document`/`ParseDocument` round-trip unmodified files byte-for-byte, comments included |
 | `character/def` | Character definition (`.def`) files — the entry point referencing the other formats | Not yet implemented |
-| `character/sff` | Sprite (`.sff`, binary) files: the `Sprite`/`SpriteGroup` data model, a v1 header/sprite-index-table reader (`ParseV1`) and pixel decoder (`DecodePCX`), their write-path counterparts (`SerializeV1`, `EncodePCX`), and a v2 header/sprite-and-palette-table reader (`ParseV2`) with its own pixel decoder (`DecodeV2Sprite`) | Data model implemented (version-agnostic, no v1/v2-specific fields); v1 read path implemented (`ParseV1`, `DecodePCX`); v1 write path implemented (`SerializeV1`, `EncodePCX`), completing the v1 read+write cycle; v2 header/table reading implemented (`ParseV2`); v2 pixel decoding implemented for raw and PNG-encoded sprites (`DecodeV2Sprite`) — RLE-based v2 formats and the v2 write path not yet implemented |
+| `character/sff` | Sprite (`.sff`, binary) files: the `Sprite`/`SpriteGroup` data model, a v1 header/sprite-index-table reader (`ParseV1`) and pixel decoder (`DecodePCX`), their write-path counterparts (`SerializeV1`, `EncodePCX`), a v2 header/sprite-and-palette-table reader (`ParseV2`) with its own pixel decoder (`DecodeV2Sprite`), and the v2 write-path counterparts (`SerializeV2`, `EncodeV2Sprite`) | Data model implemented (version-agnostic, no v1/v2-specific fields); v1 read+write cycle implemented (`ParseV1`/`DecodePCX`, `SerializeV1`/`EncodePCX`); v2 header/table reading implemented (`ParseV2`); v2 pixel decoding implemented for raw and PNG-encoded sprites (`DecodeV2Sprite`); v2 write path implemented for the same raw/PNG scope (`SerializeV2`/`EncodeV2Sprite`), completing the v2 read+write cycle for those formats — RLE-based v2 formats (decode and encode) not yet implemented |
 | `character/cns` | Combat logic / state machine (`.cns`, text) files | Not yet implemented |
 
 ## Read/write separation
@@ -103,6 +103,19 @@ original file — `.sff` is a binary format with no diff-friendliness benefit
 to preserving one, so round-trip fidelity is verified semantically
 (serialize, re-parse, re-decode, compare) instead. See
 [`.vibe/decisions/005-sff-v1-serialize-is-semantic-not-byte-exact-round-trip.md`](../.vibe/decisions/005-sff-v1-serialize-is-semantic-not-byte-exact-round-trip.md).
+
+`sff.SerializeV2`/`EncodeV2Sprite` follow the same v1 write-path pattern
+(their own write-only `V2WriteSprite`/`V2WritePalette` input types, a
+semantic rather than byte-exact round trip) with two v2-specific choices:
+they always write sprite and palette data into the file's single literal
+data section, since `V2SpriteEntry` — the type a caller would round-trip
+through this write path — has no field recording which of the format's two
+data sections a sprite's bytes originally came from; and `EncodeV2Sprite`
+only encodes the same raw/PNG format scope `DecodeV2Sprite` decodes, leaving
+the real but unimplemented RLE-based formats as a descriptive error on
+write too, for the same reason item 011 gave for not guessing at their
+decode side. See
+[`.vibe/decisions/007-sff-v2-serialize-shape-and-scope.md`](../.vibe/decisions/007-sff-v2-serialize-shape-and-scope.md).
 
 ## No rendering dependency
 

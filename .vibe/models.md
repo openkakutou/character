@@ -189,3 +189,35 @@ Defined in: `sff/v2.go`
 | Pixels | []byte | Row-major buffer, length Width*Height*BytesPerPixel; indexed data holds palette index values (no RGB/palette resolution performed), direct-color data holds actual color channels |
 
 Defined in: `sff/v2_decoder.go`
+
+## V2WriteSprite
+| Field | Type | Notes |
+|---|---|---|
+| Group | int | Sprite group index |
+| Image | int | Image index within Group |
+| Width | int | Sprite width in pixels |
+| Height | int | Sprite height in pixels |
+| AxisX | int | Horizontal offset from top-left corner to the axis (pivot) point |
+| AxisY | int | Vertical offset from top-left corner to the axis (pivot) point |
+| Format | int | How PixelData is encoded (see the V2Format* constants); only meaningful when PixelData is non-empty |
+| ColorDepth | int | Bit depth of PixelData |
+| PaletteIndex | int | Index, within the `SerializeV2` call's palette slice, of the palette bank this sprite is drawn with |
+| PixelData | []byte | This sprite's already-encoded pixel data (e.g. from `EncodeV2Sprite`); empty to write a linked sprite instead |
+| LinkedIndex | int | Index, within the `SerializeV2` call's sprite slice, this sprite links to; only meaningful when PixelData is empty |
+
+Write-only counterpart to `V2SpriteEntry`, passed to `SerializeV2`; it has no `Offset`/`Length` fields since those are computed by the writer, not supplied.
+
+Defined in: `sff/v2_serializer.go`
+
+## V2WritePalette
+| Field | Type | Notes |
+|---|---|---|
+| Group | int | Palette bank's group index |
+| Number | int | Palette bank's index within Group |
+| ColorCount | int | Number of colors in this palette bank |
+| ColorData | []byte | This bank's own RGBA color data; empty to write a linked bank instead |
+| LinkedIndex | int | Index, within the `SerializeV2` call's palette slice, this bank links to; only meaningful when ColorData is empty |
+
+Write-only counterpart to `V2PaletteEntry`, passed to `SerializeV2`.
+
+Defined in: `sff/v2_serializer.go`

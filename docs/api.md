@@ -562,3 +562,103 @@ if err != nil {
 
 fmt.Printf("sprite (%d,%d) is %dx%d pixels, %d bytes per pixel\n", entry.Group, entry.Image, img.Width, img.Height, img.BytesPerPixel)
 ```
+
+### Writing v2 files
+
+```go
+func EncodeV2Sprite(format int, img *V2Image) ([]byte, error)
+```
+
+The write-path counterpart of `DecodeV2Sprite`: encodes a plain pixel buffer
+into the on-disk byte layout for `format`. Supports the same two families
+`DecodeV2Sprite` decodes — `V2FormatRaw` (requires `img.BytesPerPixel == 1`)
+and `V2FormatPNG8`/`V2FormatPNG24`/`V2FormatPNG32` (via the standard
+library's `image/png`, requiring `BytesPerPixel` 1/3/4 respectively) — and
+returns a descriptive error for any other format code, including the real
+but unimplemented `V2FormatRLE8`/`V2FormatRLE5`/`V2FormatLZ5`. PNG8 encodes
+through a synthetic palette (its actual colors are never round-tripped —
+`DecodeV2Sprite` only reads index bytes back); PNG24 encodes through an
+opaque `image.RGBA` (alpha fixed at 255, so RGB values survive unchanged);
+PNG32 encodes through `image.NRGBA` (straight, non-premultiplied alpha),
+mirroring `DecodeV2Sprite`'s own use of `color.RGBAModel`/`color.NRGBAModel`.
+See
+[`.vibe/decisions/007-sff-v2-serialize-shape-and-scope.md`](../.vibe/decisions/007-sff-v2-serialize-shape-and-scope.md).
+
+```go
+func SerializeV2(w io.Writer, version [4]byte, sprites []V2WriteSprite, palettes []V2WritePalette) error
+
+type V2WriteSprite struct {
+    Group        int
+    Image        int
+    Width        int
+    Height       int
+    AxisX        int
+    AxisY        int
+    Format       int    // pixel-data encoding (see the V2Format* constants); meaningful when PixelData is non-empty
+    ColorDepth   int
+    PaletteIndex int    // index (within this call's palettes) of the palette bank this sprite is drawn with
+    PixelData    []byte // encoded pixel data, e.g. from EncodeV2Sprite; empty for a linked sprite
+    LinkedIndex  int    // index (within this call's sprites) of the sprite this one links to, when PixelData is empty
+}
+
+type V2WritePalette struct {
+    Group       int
+    Number      int
+    ColorCount  int
+    ColorData   []byte // RGBA color data; empty for a linked palette bank
+    LinkedIndex int     // index (within this call's palettes) of the bank this one links to, when ColorData is empty
+}
+```
+
+Writes a full `.sff` v2 file to `w`: the header portion `ParseV2` reads,
+followed by the sprite table, the palette table, and a single data section
+holding every sprite's pixel data and every palette bank's color data, in
+that order. `version` is written verbatim as the file's four raw version
+bytes. Every sprite's and palette's data is always written into the file's
+literal data section (the on-disk translated-data flag bit is always 0) —
+`V2SpriteEntry`, the type a caller would round-trip through this write path,
+has no field recording which section a sprite's data originally came from,
+so there is nothing to faithfully preserve. Only the header bytes `ParseV2`
+itself reads are written; the unused comment padding of a real 512-byte v2
+header is out of scope on both the read and write side.
+
+Leave `PixelData`/`ColorData` empty and set `LinkedIndex` to write a linked
+(shared-data) sprite or palette bank, mirroring `V2SpriteEntry.LinkedIndex`/
+`V2PaletteEntry.LinkedIndex` on the read side. `SerializeV2` returns a
+descriptive error, rather than corrupting the output, when a sprite's or
+palette's `LinkedIndex` is out of range or points at itself.
+
+`V2WriteSprite`/`V2WritePalette` are write-only counterparts to
+`V2SpriteEntry`/`V2PaletteEntry`, mirroring `V1WriteSprite`'s existing
+pattern: `SerializeV2` targets a semantic round trip (serialize, re-parse,
+re-decode, compare), not a byte-exact reproduction of any original file's
+layout — the same reasoning as `SerializeV1`, since `.sff` is binary with no
+diff-friendliness benefit to preserving one. See
+[`.vibe/decisions/007-sff-v2-serialize-shape-and-scope.md`](../.vibe/decisions/007-sff-v2-serialize-shape-and-scope.md)
+and
+[`.vibe/decisions/005-sff-v1-serialize-is-semantic-not-byte-exact-round-trip.md`](../.vibe/decisions/005-sff-v1-serialize-is-semantic-not-byte-exact-round-trip.md).
+
+### Example
+
+```go
+pixels, err := sff.EncodeV2Sprite(sff.V2FormatRaw, &sff.V2Image{
+    Width: 2, Height: 2, BytesPerPixel: 1,
+    Pixels: []byte{0, 0, 1, 1},
+})
+if err != nil {
+    log.Fatal(err)
+}
+
+f, err := os.Create("kfm-copy.sff")
+if err != nil {
+    log.Fatal(err)
+}
+defer f.Close()
+
+sprites := []sff.V2WriteSprite{
+    {Group: 0, Image: 0, Width: 2, Height: 2, Format: sff.V2FormatRaw, ColorDepth: 8, PixelData: pixels},
+}
+if err := sff.SerializeV2(f, [4]byte{0, 1, 0, 2}, sprites, nil); err != nil {
+    log.Fatal(err)
+}
+```

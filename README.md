@@ -15,6 +15,7 @@ This project is in early-stage development. Shipped so far:
 - Saving sprites back out to a valid `.sff` v1 sprite sheet file, including their pixel data, sprite-linking (sprites that reuse another sprite's image data), and palette-sharing settings; saved files load back correctly with no image data lost
 - Reading the header and sprite/palette index tables of the newer, Ikemen-compatible (v2) `.sff` sprite sheet format, locating every sprite's image data and every palette bank's color data, including sprites/palette banks that reuse another one's data; malformed or truncated sprite sheets are caught with a descriptive error instead of crashing
 - Decoding `.sff` v2 sprite image data — both uncompressed and PNG-encoded (indexed and true-color) — into a plain pixel buffer; an unrecognized or not-yet-supported encoding is caught with a descriptive error instead of crashing
+- Saving sprites back out to a valid `.sff` v2 sprite sheet file, including uncompressed and PNG-encoded pixel data, sprite-linking, and palette bank data (with palette-linking); saved files load back correctly with no image data lost and every palette bank reference intact
 
 Planned:
 
@@ -333,7 +334,42 @@ func main() {
 }
 ```
 
-Parsing/serialization for `.def` and `.cns` files, decoding the remaining `.sff` v2 compressed pixel formats (RLE-based), and writing `.sff` v2 files are not implemented yet — this API surface will grow as those pieces are added.
+Save sprites back out to a `.sff` v2 file with `sff.SerializeV2`, encoding each sprite's pixel data with `sff.EncodeV2Sprite` first:
+
+```go
+package main
+
+import (
+	"os"
+
+	"github.com/openkakutou/character/sff"
+)
+
+func main() {
+	pixels, err := sff.EncodeV2Sprite(sff.V2FormatRaw, &sff.V2Image{
+		Width: 2, Height: 2, BytesPerPixel: 1,
+		Pixels: []byte{0, 0, 1, 1},
+	})
+	if err != nil {
+		panic(err)
+	}
+
+	f, err := os.Create("kfm-copy.sff")
+	if err != nil {
+		panic(err)
+	}
+	defer f.Close()
+
+	sprites := []sff.V2WriteSprite{
+		{Group: 0, Image: 0, Width: 2, Height: 2, Format: sff.V2FormatRaw, ColorDepth: 8, PixelData: pixels},
+	}
+	if err := sff.SerializeV2(f, [4]byte{0, 1, 0, 2}, sprites, nil); err != nil {
+		panic(err)
+	}
+}
+```
+
+Parsing/serialization for `.def` and `.cns` files, and decoding/encoding the remaining `.sff` v2 compressed pixel formats (RLE-based), are not implemented yet — this API surface will grow as those pieces are added.
 <!-- vibe:end:usage -->
 
 <!-- vibe:begin:docs-index -->
