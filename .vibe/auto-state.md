@@ -2,7 +2,7 @@
 status: running
 started: 2026-08-06T00:00
 limit: none
-current: 017
+current: 018
 attempt: 1
 ---
 # Auto run journal
@@ -24,3 +24,4 @@ attempt: 1
 - 014 — feature — done (263eda5)
 - 015 — feature — done (fe2160c)
 - 016 — feature — done (5642ad4)
+- 017 — feature — done (d45aaa6, resumed under /vibe:feature after session-limit interruption)

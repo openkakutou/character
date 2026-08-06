@@ -1,5 +1,5 @@
 ---
-status: todo
+status: done
 depends_on: [016]
 ---
 # Serialize CharacterInfo to .def With Round-Trip Suite
