@@ -13,9 +13,9 @@
 | StateFiles | []string | Additional .st files beyond ConstantsFile, in .def file order |
 | Palettes | []string | .act palette files, in palette number order (.def `[Files]` "pal1", "pal2", ...) |
 
-Paths are stored exactly as written in the .def file; resolving them against a filesystem is left to the package that eventually loads a .def file. No parser populates this model yet.
+Paths are stored exactly as written in the .def file; resolving them against a filesystem is left to the package that eventually loads a .def file. Populated by `Parse(r io.Reader) (CharacterInfo, error)`, which reads `[Info]`/`[Files]` `.def` text into this shape, skipping unrecognized sections/keys.
 
-Defined in: `def/character_info.go`
+Defined in: `def/character_info.go`, `def/parser.go`
 
 ## Character
 | Field | Type | Notes |

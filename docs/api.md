@@ -285,12 +285,66 @@ type CharacterInfo struct {
 
 `CharacterInfo` is the pure-data vocabulary for a MUGEN/Ikemen character
 definition: the identifying information (`Name`/`Author`) and file
-references a `.def` file's `[Info]`/`[Files]` sections carry — no INI
-parsing or file I/O yet. Paths are stored exactly as written in the `.def`
-file (typically relative to the character's own directory); resolving them
-against a filesystem is left to the package that eventually loads a `.def`
-file (tracked by backlog item 018). Parsing `.def` text into this model is
-not implemented yet (tracked by backlog item 016).
+references a `.def` file's `[Info]`/`[Files]` sections carry. Paths are
+stored exactly as written in the `.def` file (typically relative to the
+character's own directory); resolving them against a filesystem is left to
+the package that eventually loads a `.def` file (tracked by backlog item
+018).
+
+### Reading
+
+```go
+func Parse(r io.Reader) (CharacterInfo, error)
+```
+
+Reads MUGEN/Ikemen GO `.def` character definition text from `r` and returns
+the `CharacterInfo` it describes.
+
+Only the `[Info]` and `[Files]` sections are recognized (matched
+case-insensitively, as are their keys); any other section — `[Arcade]`,
+`[Palette Keymap]`, `[Quotes]`, and the like — is skipped without
+validation, and parsing continues into the next known section rather than
+aborting. Within a known section, an unrecognized key (e.g. `displayname`,
+`stcommon`) is likewise ignored. Comment lines (`;`, whole-line or trailing)
+are stripped before parsing, and a value may optionally be wrapped in double
+quotes, which are removed. `StateFiles` is collected in file-appearance
+order; `Palettes` is collected and then sorted by its numeric suffix
+(`pal1`, `pal2`, ...), matching `CharacterInfo.Palettes`'s documented "in
+palette number order" contract regardless of the order those keys appeared
+in the file. See
+[`.vibe/decisions/009-def-parse-ignores-unknown-sections.md`](../.vibe/decisions/009-def-parse-ignores-unknown-sections.md).
+
+### Error handling
+
+`Parse` returns a descriptive error identifying the offending line number,
+rather than panicking or silently producing incorrect data, when:
+- a `[...]` section header line is missing its closing `]`
+- a line inside `[Info]` or `[Files]` has no `=` (or an empty key before
+  it)
+- the underlying reader itself fails
+
+An empty input is not an error: `Parse` returns a zero-value `CharacterInfo`
+and a `nil` error.
+
+### Example
+
+```go
+f, err := os.Open("kfm.def")
+if err != nil {
+    log.Fatal(err)
+}
+defer f.Close()
+
+info, err := def.Parse(f)
+if err != nil {
+    log.Fatal(err)
+}
+
+fmt.Printf("%s by %s, sprites in %s\n", info.Name, info.Author, info.SpriteFile)
+```
+
+Serializing a `CharacterInfo` back into `.def` text is not implemented yet
+(tracked by backlog item 017).
 
 ## `character/sff` — sprite (`.sff`) files
 

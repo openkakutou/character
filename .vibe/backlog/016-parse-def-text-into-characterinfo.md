@@ -1,5 +1,5 @@
 ---
-status: todo
+status: in_progress
 depends_on: [015]
 ---
 # Parse .def Text Into CharacterInfo
