@@ -15,6 +15,8 @@ type Character struct {
 }
 
 func (c *Character) ResolveSprite(frame air.Frame) (sff.Sprite, error)
+
+func Load(path string) (*Character, error)
 ```
 
 `Character` is the assembled unit a library consumer (editor, engine) works
@@ -27,15 +29,24 @@ error `SpriteResolver.Resolve` does when no sprite in `c.Sprites` matches
 the frame's `(Group, Image)` — including on a zero-value `Character`, whose
 `Sprites` is empty.
 
-`.def`/`.cns` fields (name/author metadata, combat logic) are not wired in
-yet (tracked by backlog items 015–022).
+`Load` is the library's top-level entry point: given a `.def` file path, it
+parses the file (via `def.Parse`), resolves the `.air`/`.sff` paths it
+references relative to the `.def` file's own directory, reads both (via
+`air.Parse` and a new `sff.Load` that auto-detects the sprite sheet's
+on-disk version), and returns a fully assembled `Character`. A missing or
+unreadable `.def`, `.air`, or `.sff` file returns a descriptive error
+naming which file and step failed, rather than panicking. See
+[`.vibe/decisions/010-def-loader-assembles-character-from-referenced-files.md`](../.vibe/decisions/010-def-loader-assembles-character-from-referenced-files.md).
+
+`.cns` fields (combat logic) are not wired in yet (tracked by backlog items
+019–022).
 
 ### Example
 
 ```go
-c := character.Character{
-    Animations: animations, // from air.Parse
-    Sprites:    spriteGroups, // from sff.ParseV1/ParseV2 + decode + assembly
+c, err := character.Load("kfm.def")
+if err != nil {
+    log.Fatal(err) // .def file, or a file it references, is missing/unreadable
 }
 
 for _, frame := range c.Animations[0].Frames {
@@ -45,6 +56,16 @@ for _, frame := range c.Animations[0].Frames {
     }
     fmt.Printf("frame shows sprite (%d,%d), %dx%d pixels\n",
         sprite.Group, sprite.Image, sprite.Width, sprite.Height)
+}
+```
+
+Assembling a `Character` from animations/sprites already loaded in memory
+still works the same way, without going through `Load`:
+
+```go
+c := character.Character{
+    Animations: animations, // from air.Parse
+    Sprites:    spriteGroups, // from sff.Load, or ParseV1/ParseV2 + decode
 }
 ```
 
@@ -461,6 +482,49 @@ header layouts and pixel encodings, but both will populate this same shape.
 Decoding pixel data for v2 sprites is not implemented yet — these types
 establish the target shape that decoder (tracked by backlog item 011) will
 produce.
+
+### Loading a full sprite sheet
+
+```go
+func Load(r io.ReaderAt) ([]SpriteGroup, error)
+```
+
+The version-agnostic top-level entry point: reads a full `.sff` file — v1 or
+v2, auto-detected from the file's own signature and version bytes, the same
+check `ParseV2` uses — and assembles it directly into `[]SpriteGroup`,
+grouped by ascending `Group` index.
+
+For v1, `Width`/`Height` aren't in the sprite table (see `ParseV1`, below),
+so `Load` decodes each sprite's PCX pixel data via `DecodePCX` to recover
+them, resolving a linked sprite (no pixel data of its own) to its link
+target first; a link chain that is out of range or cycles back on itself
+returns a descriptive error instead of looping or panicking. v1's table also
+only records whether a sprite reuses the previous sprite's palette, not a
+numeric reference, so `Sprite.Palette` is derived by incrementing a counter
+on every sprite that does not share, with sharing sprites inheriting the
+current value. For v2, every field `Sprite` needs is already in the sprite
+table (including an explicit palette bank index), so no pixel data is
+decoded at all. See
+[`.vibe/decisions/010-def-loader-assembles-character-from-referenced-files.md`](../.vibe/decisions/010-def-loader-assembles-character-from-referenced-files.md).
+
+### Example
+
+```go
+f, err := os.Open("kfm.sff")
+if err != nil {
+    log.Fatal(err)
+}
+defer f.Close()
+
+groups, err := sff.Load(f)
+if err != nil {
+    log.Fatal(err)
+}
+
+for _, g := range groups {
+    fmt.Printf("group %d: %d sprites\n", g.Index, len(g.Sprites))
+}
+```
 
 ### Reading v1 headers and sprite tables
 

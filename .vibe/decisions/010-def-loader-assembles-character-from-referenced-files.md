@@ -1,0 +1,20 @@
+---
+date: 2026-08-06
+status: accepted
+---
+# .def loader assembles a full Character from its referenced files
+
+**Context:** Item 018 adds the first end-to-end "load a real character" entry point: given a `.def` file path, parse it into `CharacterInfo` (item 016), resolve the `.sff`/`.air` file paths it references, and produce a fully populated `Character` (building on item 014's air+sff assembly). Two sub-problems didn't have an existing answer: how to locate the referenced files on disk, and how to turn a raw `.sff` file (v1 or v2, on-disk formats already parsed at the table level by items 007/010 but never folded into the public `Sprite`/`SpriteGroup` model, per `.vibe/decisions/004-sff-v1-table-is-a-separate-low-level-type.md`) into `[]sff.SpriteGroup`.
+
+**Decision:**
+- Referenced paths (`CharacterInfo.SpriteFile`, `AnimationFile`) are resolved relative to the directory containing the `.def` file itself, matching `CharacterInfo`'s own doc comment ("paths are stored exactly as written in the .def file, typically relative to the character's own directory") and real MUGEN/Ikemen character folder layout.
+- A new `sff` package entry point auto-detects the file version (same signature both versions share, then the version byte `ParseV2` already checks) and dispatches to `ParseV1`/`ParseV2` internally, folding the result into `[]SpriteGroup`:
+  - **v1:** width/height are not in the table (see decision 004) — each sprite's PCX pixel data is decoded (`DecodePCX`) to recover them, resolving linked sprites (`Length == 0`) to their target's pixel data first, with a cycle/bounds guard so a malformed link chain is a descriptive error, not a panic or infinite loop. v1's sprite table only carries a per-sprite "reuses previous sprite's palette" boolean, not a numeric palette reference — `Sprite.Palette` is derived by incrementing a counter each time a sprite does *not* share (a new individual palette), and having sharing sprites inherit the current counter value; this mirrors real MUGEN v1 palette semantics well enough to give distinct, meaningful values without decoding any actual color data (matching `PCXImage`'s existing "no palette color resolution" rule).
+  - **v2:** the table already carries width/height and an explicit numeric `PaletteIndex` (see `v2.go`), so no pixel decoding is needed at all to populate `Sprite` — `V2SpriteEntry` maps directly to `Sprite`. Pixel data is not stored anywhere in the public `Sprite` model, so decoding it here would produce a value with nowhere to go.
+
+**Reason:** Keeps path resolution where the model's own documentation already said it belonged (deferred to this item on purpose). Reuses `ParseV1`/`ParseV2`/`DecodePCX` as-is rather than duplicating table-reading logic. Skipping v2 pixel decode avoids doing real work (PNG/RLE decoding) whose only observable output (`Sprite.Width`/`Height`/etc.) is already available from the table — decoding pixels only to discard them would be pure waste. The v1 palette counter scheme is the smallest rule that turns the one bit of information the format actually stores (shared vs. own) into a value distinguishing actual distinct palettes, without inventing color-resolution logic no other part of this codebase has.
+
+**Rejected alternatives:**
+- Decoding v2 pixel data unconditionally for symmetry with v1 — rejected: no field on `Sprite` can hold decoded pixels, so the work has no observable effect and would silently error out on the still-unimplemented RLE formats for no benefit.
+- Leaving v1 `Sprite.Palette` at a constant (e.g. always 0) — rejected: it would make every sprite in a v1 character appear to share one palette even when the source file clearly marks some as having their own, silently discarding real information the format does encode.
+- Resolving referenced paths against the current working directory instead of the `.def` file's own directory — rejected: real character folders are self-contained and moved as a unit; CWD-relative resolution would break as soon as the loader is invoked from anywhere else.

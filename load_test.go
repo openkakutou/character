@@ -1,0 +1,139 @@
+package character
+
+import (
+	"bytes"
+	"os"
+	"path/filepath"
+	"testing"
+
+	"github.com/openkakutou/character/sff"
+)
+
+// writeFixtureCharacter creates a .def, .air, and .sff file inside a fresh
+// temp directory, referencing each other exactly as a real character folder
+// would, and returns the .def file's path.
+func writeFixtureCharacter(t *testing.T) string {
+	t.Helper()
+
+	dir := t.TempDir()
+
+	defContent := `[Info]
+name = Test Character
+author = Test Author
+
+[Files]
+sprite = char.sff
+anim = char.air
+`
+	if err := os.WriteFile(filepath.Join(dir, "char.def"), []byte(defContent), 0o644); err != nil {
+		t.Fatalf("test setup: writing .def fixture: %v", err)
+	}
+
+	airContent := `[Begin Action 200]
+0,0, 0,0, 5
+0,1, 10,10, 5
+`
+	if err := os.WriteFile(filepath.Join(dir, "char.air"), []byte(airContent), 0o644); err != nil {
+		t.Fatalf("test setup: writing .air fixture: %v", err)
+	}
+
+	sprites := []sff.V1WriteSprite{
+		{Group: 0, Image: 0, AxisX: 32, AxisY: 128, PixelData: mustEncodePCXFixture(t, 4, 2)},
+		{Group: 0, Image: 1, AxisX: 33, AxisY: 130, PixelData: mustEncodePCXFixture(t, 6, 3)},
+	}
+	var sffBuf bytes.Buffer
+	if err := sff.SerializeV1(&sffBuf, [4]byte{1, 0, 0, 1}, false, sprites); err != nil {
+		t.Fatalf("test setup: SerializeV1 failed: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "char.sff"), sffBuf.Bytes(), 0o644); err != nil {
+		t.Fatalf("test setup: writing .sff fixture: %v", err)
+	}
+
+	return filepath.Join(dir, "char.def")
+}
+
+// mustEncodePCXFixture builds valid PCX-encoded pixel data of the given
+// dimensions for use as fixture sprite data.
+func mustEncodePCXFixture(t *testing.T, width, height int) []byte {
+	t.Helper()
+	pixels := make([]byte, width*height)
+	for i := range pixels {
+		pixels[i] = byte(i)
+	}
+	data, err := sff.EncodePCX(&sff.PCXImage{Width: width, Height: height, Pixels: pixels})
+	if err != nil {
+		t.Fatalf("test setup: EncodePCX failed: %v", err)
+	}
+	return data
+}
+
+func TestLoad_ValidDefFile_ProducesFullyPopulatedCharacter(t *testing.T) {
+	defPath := writeFixtureCharacter(t)
+
+	c, err := Load(defPath)
+	if err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+
+	if c.Name != "Test Character" {
+		t.Errorf("expected Name %q, got %q", "Test Character", c.Name)
+	}
+
+	if len(c.Animations) != 1 {
+		t.Fatalf("expected 1 animation, got %d", len(c.Animations))
+	}
+	if c.Animations[0].Number != 200 {
+		t.Errorf("expected action 200, got %d", c.Animations[0].Number)
+	}
+	if len(c.Animations[0].Frames) != 2 {
+		t.Fatalf("expected 2 frames, got %d", len(c.Animations[0].Frames))
+	}
+
+	if len(c.Sprites) != 1 || len(c.Sprites[0].Sprites) != 2 {
+		t.Fatalf("expected 1 sprite group with 2 sprites, got %+v", c.Sprites)
+	}
+	if w := c.Sprites[0].Sprites[0].Width; w != 4 {
+		t.Errorf("expected sprite (0,0) width 4, got %d", w)
+	}
+
+	// The loaded animations/sprites must actually resolve against each
+	// other through the existing ResolveSprite path.
+	for _, frame := range c.Animations[0].Frames {
+		if _, err := c.ResolveSprite(frame); err != nil {
+			t.Errorf("frame (group %d, image %d): unexpected ResolveSprite error: %v", frame.Group, frame.Image, err)
+		}
+	}
+}
+
+func TestLoad_DefReferencesMissingAnimationFile_ReturnsDescriptiveErrorNotPanic(t *testing.T) {
+	defPath := writeFixtureCharacter(t)
+	dir := filepath.Dir(defPath)
+	if err := os.Remove(filepath.Join(dir, "char.air")); err != nil {
+		t.Fatalf("test setup: removing .air fixture: %v", err)
+	}
+
+	_, err := Load(defPath)
+	if err == nil {
+		t.Fatal("expected an error when the referenced .air file is missing, got nil")
+	}
+}
+
+func TestLoad_DefReferencesMissingSpriteFile_ReturnsDescriptiveErrorNotPanic(t *testing.T) {
+	defPath := writeFixtureCharacter(t)
+	dir := filepath.Dir(defPath)
+	if err := os.Remove(filepath.Join(dir, "char.sff")); err != nil {
+		t.Fatalf("test setup: removing .sff fixture: %v", err)
+	}
+
+	_, err := Load(defPath)
+	if err == nil {
+		t.Fatal("expected an error when the referenced .sff file is missing, got nil")
+	}
+}
+
+func TestLoad_DefFileItselfMissing_ReturnsDescriptiveErrorNotPanic(t *testing.T) {
+	_, err := Load(filepath.Join(t.TempDir(), "does-not-exist.def"))
+	if err == nil {
+		t.Fatal("expected an error when the .def file itself does not exist, got nil")
+	}
+}

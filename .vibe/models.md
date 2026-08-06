@@ -30,13 +30,15 @@ Defined in: `def/document.go`
 ## Character
 | Field | Type | Notes |
 |---|---|---|
-| Name | string | Placeholder — no `def` sub-package parses it into this field yet |
+| Name | string | Populated from `CharacterInfo.Name` when built via `Load` |
 | Animations | []air.Animation | Exposed through `air`'s read-path type only |
 | Sprites | []sff.SpriteGroup | Exposed through `sff`'s read-path type only |
 
 Method: `(*Character) ResolveSprite(frame air.Frame) (sff.Sprite, error)` — resolves `frame`'s `(Group, Image)` reference against `Sprites`, by delegating to `air.NewSpriteResolver(c.Sprites)`; returns the same descriptive error `SpriteResolver.Resolve` does when no match exists, including when `Sprites` is empty (e.g. a zero-value `Character`). Combat logic (`cns` sub-package) is not wired in yet.
 
-Defined in: `character.go`
+Package function: `Load(path string) (*Character, error)` — the top-level entry point: opens the `.def` file at `path`, parses it with `def.Parse`, resolves its `.air`/`.sff` references against `path`'s own directory, reads them with `air.Parse`/`sff.Load`, and returns the assembled `Character`. A missing or unreadable `.def`/`.air`/`.sff` file returns a descriptive error rather than panicking.
+
+Defined in: `character.go`, `load.go`
 
 ## Animation
 | Field | Type | Notes |

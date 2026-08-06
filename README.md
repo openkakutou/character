@@ -22,11 +22,12 @@ This project is in early-stage development. Shipped so far:
 - Reading MUGEN/Ikemen GO character definition (`.def`) files into that data model: name, author, and every referenced file (sprite, animation, sound, commands, combat logic, additional states, palettes); sections the library doesn't recognize are skipped instead of aborting the read, and a malformed line is caught with a clear, line-numbered error instead of crashing
 - Writing character definitions back out to valid `.def` text, ready to be read by MUGEN/Ikemen GO or read back in by this library
 - Loading a `.def` file and saving it back out unchanged reproduces the original file exactly, including comments, section ordering, and any sections the library doesn't otherwise recognize — so re-saving a file you haven't edited never creates a noisy diff
+- Loading a full character in one step from its `.def` file — its name, animations, and sprites (either `.sff` version) are automatically read from the files it references and assembled into a ready-to-use `Character`; a missing or unreadable referenced file is caught with a clear error instead of crashing
 
 Planned:
 
 - Decoding the remaining, less common `.sff` v2 compressed pixel formats (RLE-based)
-- Wiring parsed `.def` character definitions into the single, pure-data `Character` representation, and reading the remaining `.cns` combat logic format
+- Reading the remaining `.cns` combat logic format
 - Preserving comments and ordering when the saved `.def`/`.air` file actually differs from the original (today this is guaranteed only when nothing changed)
 - No rendering dependency, so the library can compile to WebAssembly for web-based tooling
 <!-- vibe:end:features -->
@@ -536,7 +537,37 @@ func main() {
 }
 ```
 
-Wiring a parsed `CharacterInfo` into the root `Character` struct, `.cns` files, and decoding/encoding the remaining `.sff` v2 compressed pixel formats (RLE-based), are not implemented yet — this API surface will grow as those pieces are added.
+Load a full character directly from its `.def` file with `character.Load` — this reads the `.def`, resolves and reads its referenced `.air`/`.sff` files, and hands you back a ready-to-use `Character`:
+
+```go
+package main
+
+import (
+	"fmt"
+
+	"github.com/openkakutou/character"
+)
+
+func main() {
+	c, err := character.Load("kfm.def")
+	if err != nil {
+		// e.g. the .def file, or a file it references, is missing or unreadable.
+		panic(err)
+	}
+
+	fmt.Printf("%s: %d animations, %d sprite groups\n", c.Name, len(c.Animations), len(c.Sprites))
+
+	for _, frame := range c.Animations[0].Frames {
+		sprite, err := c.ResolveSprite(frame)
+		if err != nil {
+			panic(err)
+		}
+		fmt.Printf("frame shows sprite (%d,%d), %dx%d pixels\n", sprite.Group, sprite.Image, sprite.Width, sprite.Height)
+	}
+}
+```
+
+`.cns` files, and decoding/encoding the remaining `.sff` v2 compressed pixel formats (RLE-based), are not implemented yet — this API surface will grow as those pieces are added.
 <!-- vibe:end:usage -->
 
 <!-- vibe:begin:docs-index -->
