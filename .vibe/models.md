@@ -41,6 +41,15 @@ Write-path type: `ParseDocument`/`Document.Serialize` round-trip an unmodified `
 
 Defined in: `air/document.go`
 
+## SpriteResolver
+| Field | Type | Notes |
+|---|---|---|
+| sprites | map[spriteKey]sff.Sprite | Unexported; indexes the sprite groups passed to `NewSpriteResolver` by (Group, Image) |
+
+Built by `NewSpriteResolver(groups []sff.SpriteGroup) *SpriteResolver`; queried via `(*SpriteResolver) Resolve(frame Frame) (sff.Sprite, error)`, which returns a descriptive error rather than a zero `Sprite` for a frame referencing a (Group, Image) pair not present in the indexed groups.
+
+Defined in: `air/resolve.go`
+
 ## ClsnBox
 | Field | Type | Notes |
 |---|---|---|

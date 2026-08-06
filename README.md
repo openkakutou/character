@@ -16,6 +16,7 @@ This project is in early-stage development. Shipped so far:
 - Reading the header and sprite/palette index tables of the newer, Ikemen-compatible (v2) `.sff` sprite sheet format, locating every sprite's image data and every palette bank's color data, including sprites/palette banks that reuse another one's data; malformed or truncated sprite sheets are caught with a descriptive error instead of crashing
 - Decoding `.sff` v2 sprite image data — both uncompressed and PNG-encoded (indexed and true-color) — into a plain pixel buffer; an unrecognized or not-yet-supported encoding is caught with a descriptive error instead of crashing
 - Saving sprites back out to a valid `.sff` v2 sprite sheet file, including uncompressed and PNG-encoded pixel data, sprite-linking, and palette bank data (with palette-linking); saved files load back correctly with no image data lost and every palette bank reference intact
+- Matching each animation frame to its actual sprite image from a loaded sprite sheet (either `.sff` version, no version-specific handling needed); a frame pointing to a sprite that doesn't exist is caught with a clear error instead of silently showing nothing
 
 Planned:
 
@@ -365,6 +366,39 @@ func main() {
 	}
 	if err := sff.SerializeV2(f, [4]byte{0, 1, 0, 2}, sprites, nil); err != nil {
 		panic(err)
+	}
+}
+```
+
+Match an animation's frames to their actual sprites with `air.NewSpriteResolver`, built from the sprite groups you loaded via `sff` — it works the same whether those sprites came from a `.sff` v1 or v2 file:
+
+```go
+package main
+
+import (
+	"fmt"
+
+	"github.com/openkakutou/character/air"
+	"github.com/openkakutou/character/sff"
+)
+
+func main() {
+	animations := []air.Animation{
+		{Number: 0, Frames: []air.Frame{{Group: 0, Image: 0, Time: 5}}},
+	}
+	spriteGroups := []sff.SpriteGroup{
+		{Index: 0, Sprites: []sff.Sprite{{Group: 0, Image: 0, Width: 64, Height: 128}}},
+	}
+
+	resolver := air.NewSpriteResolver(spriteGroups)
+
+	for _, frame := range animations[0].Frames {
+		sprite, err := resolver.Resolve(frame)
+		if err != nil {
+			// e.g. the frame references a sprite that isn't in spriteGroups.
+			panic(err)
+		}
+		fmt.Printf("frame shows sprite (%d,%d), %dx%d pixels\n", sprite.Group, sprite.Image, sprite.Width, sprite.Height)
 	}
 }
 ```

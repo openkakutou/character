@@ -20,7 +20,7 @@ graph TD
     root -.->|will assemble| def
     root -.->|will assemble| sff
     root -.->|will assemble| cns
-    air -->|frames reference sprite groups defined in| sff
+    air -->|SpriteResolver resolves frame references against| sff
 ```
 
 ## Modules
@@ -28,7 +28,7 @@ graph TD
 | Package | Responsibility | Status |
 |---|---|---|
 | `character` (root) | Assembles the sub-packages into a single `Character{}` struct | Skeleton only (`Name` placeholder field) |
-| `character/air` | MUGEN/Ikemen GO animation (`.air`) files: the `Animation`/`Frame`/`ClsnBox` data model, a parser that reads `.air` text into that model, a serializer that writes it back out, and a `Document` type for comment-preserving round trips | Data model + read path implemented; `Serialize` produces valid, re-readable output (not a byte-exact round-trip of an original file's formatting); `Document`/`ParseDocument` round-trip unmodified files byte-for-byte, comments included |
+| `character/air` | MUGEN/Ikemen GO animation (`.air`) files: the `Animation`/`Frame`/`ClsnBox` data model, a parser that reads `.air` text into that model, a serializer that writes it back out, a `Document` type for comment-preserving round trips, and a `SpriteResolver` that resolves a `Frame`'s sprite reference against sprites loaded via `character/sff` | Data model + read path implemented; `Serialize` produces valid, re-readable output (not a byte-exact round-trip of an original file's formatting); `Document`/`ParseDocument` round-trip unmodified files byte-for-byte, comments included; `SpriteResolver` resolves every `Frame` reference to its `sff.Sprite`, or a descriptive error for a missing one, regardless of `.sff` version |
 | `character/def` | Character definition (`.def`) files — the entry point referencing the other formats | Not yet implemented |
 | `character/sff` | Sprite (`.sff`, binary) files: the `Sprite`/`SpriteGroup` data model, a v1 header/sprite-index-table reader (`ParseV1`) and pixel decoder (`DecodePCX`), their write-path counterparts (`SerializeV1`, `EncodePCX`), a v2 header/sprite-and-palette-table reader (`ParseV2`) with its own pixel decoder (`DecodeV2Sprite`), and the v2 write-path counterparts (`SerializeV2`, `EncodeV2Sprite`) | Data model implemented (version-agnostic, no v1/v2-specific fields); v1 read+write cycle implemented (`ParseV1`/`DecodePCX`, `SerializeV1`/`EncodePCX`); v2 header/table reading implemented (`ParseV2`); v2 pixel decoding implemented for raw and PNG-encoded sprites (`DecodeV2Sprite`); v2 write path implemented for the same raw/PNG scope (`SerializeV2`/`EncodeV2Sprite`), completing the v2 read+write cycle for those formats — RLE-based v2 formats (decode and encode) not yet implemented |
 | `character/cns` | Combat logic / state machine (`.cns`, text) files | Not yet implemented |
@@ -57,6 +57,17 @@ sub-concerns apart, even before they become separate files:
 Because Go only compiles what's imported, a consumer that imports only the
 read-oriented parts of a package never pulls in write-only logic — this
 gives engine-side isolation without a separate repository.
+
+## Cross-format resolution: air depends on sff
+
+`.air` and `.sff` are interdependent formats, not independent ones: a
+`Frame`'s `Group`/`Image` fields are meaningless without a loaded sprite
+collection to resolve them against. `character/air` owns this resolution
+(`SpriteResolver`, built from `[]sff.SpriteGroup`), so `air` imports `sff` —
+matching the dependency this diagram already showed. `sff` itself stays free
+of any dependency on `air`, so a consumer that only needs sprite data never
+pulls in animation types. See
+[`.vibe/decisions/008-air-sprite-resolution-lives-in-air-package.md`](../.vibe/decisions/008-air-sprite-resolution-lives-in-air-package.md).
 
 ## A parsing design decision worth knowing
 

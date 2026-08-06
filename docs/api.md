@@ -192,6 +192,47 @@ if err := doc.Serialize(out); err != nil {
 }
 ```
 
+### Resolving frame sprite references
+
+```go
+type SpriteResolver struct {
+    // unexported: sprites indexed by (Group, Image)
+}
+
+func NewSpriteResolver(groups []sff.SpriteGroup) *SpriteResolver
+func (r *SpriteResolver) Resolve(frame Frame) (sff.Sprite, error)
+```
+
+A `Frame`'s `Group`/`Image` fields only identify which sprite it shows — the
+actual `sff.Sprite` lives in a separately loaded `[]sff.SpriteGroup`.
+`NewSpriteResolver` indexes those groups by `(Group, Image)` once, so
+`Resolve` can look up any `Frame`'s sprite without rescanning the whole
+collection on every call.
+
+`Resolve` returns a descriptive error, not a zero `sff.Sprite`, when no
+sprite with a matching `(Group, Image)` exists in the resolver — a frame
+referencing a missing sprite fails explicitly instead of silently rendering
+blank. Because `sff.Sprite`/`sff.SpriteGroup` are the same version-agnostic
+shape whether they came from `sff.ParseV1`+`sff.DecodePCX` or
+`sff.ParseV2`+`sff.DecodeV2Sprite`, `SpriteResolver` needs no
+version-specific branching. See
+[`.vibe/decisions/008-air-sprite-resolution-lives-in-air-package.md`](../.vibe/decisions/008-air-sprite-resolution-lives-in-air-package.md).
+
+### Example
+
+```go
+resolver := air.NewSpriteResolver(spriteGroups)
+
+for _, frame := range animation.Frames {
+    sprite, err := resolver.Resolve(frame)
+    if err != nil {
+        log.Fatal(err) // frame references a sprite not present in spriteGroups
+    }
+    fmt.Printf("frame shows sprite (%d,%d), %dx%d pixels\n",
+        sprite.Group, sprite.Image, sprite.Width, sprite.Height)
+}
+```
+
 ## `character/sff` — sprite (`.sff`) files
 
 ### Data model
