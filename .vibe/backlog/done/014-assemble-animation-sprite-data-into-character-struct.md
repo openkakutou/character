@@ -1,5 +1,5 @@
 ---
-status: todo
+status: done
 depends_on: [013]
 ---
 # Assemble Animation and Sprite Data Into Character Struct
