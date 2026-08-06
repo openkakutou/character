@@ -10,3 +10,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Defined the animation and frame data model (`Animation`, `Frame`, `ClsnBox`) that will represent MUGEN/Ikemen GO character animations once `.air` file reading is implemented
+- `.air` animation files can now be read into animation data: actions, frame sequences, collision boxes, and loop points are all parsed from the file's text format

@@ -4,12 +4,13 @@
 
 ## Modules
 - [`modules/root.md`](modules/root.md) — entry point; will assemble sub-packages into a single `Character` struct
-- [`modules/air.md`](modules/air.md) — pure-data model for `.air` animations (`Animation`, `Frame`, `ClsnBox`); no parsing yet
+- [`modules/air.md`](modules/air.md) — `.air` animation read path: pure-data model (`Animation`, `Frame`, `ClsnBox`) plus a `Parse` function reading `.air` text into it
 
 ## Observed patterns
-- Root package (`character`) is meant to stay a thin assembly layer over format-specific sub-packages (`def/`, `sff/`, `air/`, `cns/`) — `air/` now holds its first data model, `def/`, `sff/`, `cns/` still don't exist.
+- Root package (`character`) is meant to stay a thin assembly layer over format-specific sub-packages (`def/`, `sff/`, `air/`, `cns/`) — `air/` now has a data model and a read-path parser, `def/`, `sff/`, `cns/` still don't exist.
 - Tests are co-located with source as `*_test.go`, one behavior per test function, named `Test<Type>_<Condition>_<Expectation>`.
-- Read-path data types (e.g. `air.Animation`/`air.Frame`) store already-resolved values (e.g. per-frame collision boxes) rather than the file format's own authoring shortcuts (e.g. default/override) — parsing concerns stay out of the pure-data model, per an explicit ADR.
+- Read-path data types (e.g. `air.Animation`/`air.Frame`) store already-resolved values (e.g. per-frame collision boxes) rather than the file format's own authoring shortcuts (e.g. default/override) — parsing concerns stay out of the pure-data model, per an explicit ADR; `air.Parse` performs that resolution while reading.
+- Parsing error handling is deliberately split into its own backlog item after the happy-path parser — `air.Parse` today still surfaces reader/I/O failures as errors rather than panicking, but doesn't yet have a dedicated contract for malformed `.air` content.
 
 ## Other context files
 - [`models.md`](models.md) — data models
