@@ -12,4 +12,4 @@ Extend `DecodeV2Sprite` (`sff/v2_decoder.go`) with a `V2FormatRLE8` case, produc
 - [ ] `V2FormatRLE8` is removed from the "unsupported format" error path/tests it currently falls under
 
 ## Notes
-Reference: `decodeRLE8.mjs` in `ikemen-launcher/sff-extractor`. `RLE5` stays explicitly out of scope (unimplemented upstream too).
+Reference: `decodeRLE8.mjs` in `ikemen-launcher/sff-extractor`. Cross-validated against `Rle8Decode` in the real engine, `ikemen-engine/Ikemen-GO` (`src/image.go`) — same algorithm, already in Go, useful as a second source if anything is ambiguous when porting. `RLE5` is handled separately (item 030): `sff-extractor` has no implementation for it, but `Ikemen-GO` does (`Rle5Decode`, same file).

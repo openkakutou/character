@@ -28,3 +28,4 @@
 - [`models.md`](models.md) — data models
 - [`glossary.md`](glossary.md) — ubiquitous language
 - [`decisions/`](decisions/) — architectural decision records
+- [`fixture-sources.md`](fixture-sources.md) — reference projects and real-file corpora used to source/validate `.sff` test fixtures (including a local, machine-specific real-character corpus never referenced from Go code)

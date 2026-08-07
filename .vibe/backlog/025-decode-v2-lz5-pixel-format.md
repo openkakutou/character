@@ -12,4 +12,4 @@ Extend `DecodeV2Sprite` (`sff/v2_decoder.go`) with a `V2FormatLZ5` case, produci
 - [ ] `V2FormatLZ5` is removed from the "unsupported format" error path/tests it currently falls under
 
 ## Notes
-Reference: `decodeLZ5.mjs` in `ikemen-launcher/sff-extractor`.
+Reference: `decodeLZ5.mjs` in `ikemen-launcher/sff-extractor`. Cross-validated against `Lz5Decode` in the real engine, `ikemen-engine/Ikemen-GO` (`src/image.go`) — same algorithm, already in Go, useful as a second source if anything is ambiguous when porting.
