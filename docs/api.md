@@ -1039,7 +1039,7 @@ buffer. `format`, `width`, `height`, and `colorDepth` come from that same
 `V2SpriteEntry`: unlike PCX, `V2FormatRaw` data doesn't self-describe its
 own dimensions, so the caller supplies them.
 
-Three families of `V2Format*` codes are supported:
+Four families of `V2Format*` codes are supported:
 - `V2FormatRaw` — literal, uncompressed 8-bit indexed pixel data (one byte
   per pixel, row-major). Requires `colorDepth == 8` and `len(data) ==
   width*height`.
@@ -1055,6 +1055,24 @@ Three families of `V2Format*` codes are supported:
   prefix, a run truncated before its value byte, a run that would overrun
   the declared image size, or a stream that runs out before filling it)
   returns a descriptive error instead of panicking.
+- `V2FormatLZ5` — dictionary-compressed 8-bit indexed pixel data, ported
+  from `ikemen-launcher/sff-extractor`'s `decodeLZ5.mjs` (cross-checked
+  against `Lz5Decode` in `ikemen-engine/Ikemen-GO`). Like `V2FormatRLE8`,
+  `data` starts with a 4-byte declared decompressed length (skipped, not
+  validated). The control stream that follows is driven by control bytes
+  whose 8 bits (read low bit first) each select either a literal run
+  (repeat one palette index) or a back-reference copy (repeat a slice of
+  already-decoded output at some earlier distance) — see the doc comment on
+  `decodeV2LZ5` in `sff/v2_decoder.go` for the exact bit layout. Yields
+  indexed data (`BytesPerPixel == 1`). `colorDepth` is *not* validated for
+  this format: real LZ5 sprites are declared with `ColorDepth == 5` (a
+  reduced color count), not 8, yet still decode to one index byte per
+  pixel regardless. Malformed input (too short to hold the length prefix, a
+  stream that runs out mid-operation, or a run that would overrun the
+  declared image size) returns a descriptive error instead of panicking or
+  reading out of bounds — this is a deliberate departure from the reference
+  decoders, which silently clamp/truncate on malformed input instead; see
+  [`.vibe/decisions/015-v2-lz5-decode-error-handling-diverges-from-reference.md`](../.vibe/decisions/015-v2-lz5-decode-error-handling-diverges-from-reference.md).
 - `V2FormatPNG8` / `V2FormatPNG24` / `V2FormatPNG32` — decoded via the
   standard library's `image/png`. PNG8 yields indexed data
   (`BytesPerPixel == 1`, palette index bytes, same as `V2FormatRaw` and
@@ -1062,12 +1080,12 @@ Three families of `V2Format*` codes are supported:
   data (`BytesPerPixel == 3`). PNG32 yields RGBA data (`BytesPerPixel == 4`,
   straight/non-premultiplied alpha).
 
-`V2FormatRLE5` and `V2FormatLZ5` are real on-disk format codes `ParseV2` can
-report in `V2SpriteEntry.Format`, but are not decoded by this function yet
-— like any other unrecognized format value, they return a descriptive error
-rather than being silently misinterpreted. A PNG whose own embedded
-dimensions disagree with `width`/`height`, or PNG data that fails to decode
-at all, also returns a descriptive error. See
+`V2FormatRLE5` is a real on-disk format code `ParseV2` can report in
+`V2SpriteEntry.Format`, but is not decoded by this function yet — like any
+other unrecognized format value, it returns a descriptive error rather than
+being silently misinterpreted. A PNG whose own embedded dimensions disagree
+with `width`/`height`, or PNG data that fails to decode at all, also
+returns a descriptive error. See
 [`.vibe/decisions/006-sff-v2-pixel-decode-shape-and-scope.md`](../.vibe/decisions/006-sff-v2-pixel-decode-shape-and-scope.md).
 
 ### Example

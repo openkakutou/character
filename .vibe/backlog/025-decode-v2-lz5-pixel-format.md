@@ -1,5 +1,5 @@
 ---
-status: todo
+status: in_progress
 ---
 # Decode v2 LZ5 Pixel Format
 

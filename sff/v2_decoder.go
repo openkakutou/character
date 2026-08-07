@@ -36,11 +36,11 @@ type V2Image struct {
 // declared dimensions and color depth, since not every encoding
 // self-describes them the way PCX/PNG headers do.
 //
-// Only V2FormatRaw (uncompressed indexed data), V2FormatRLE8, and the PNG
-// formats (V2FormatPNG8/24/32, decoded via the standard library) are
-// supported. Any other format code — including the real but unimplemented
-// compressed formats V2FormatRLE5/LZ5 — returns a descriptive error rather
-// than panicking or silently misinterpreting the data; see
+// Only V2FormatRaw (uncompressed indexed data), V2FormatRLE8, V2FormatLZ5,
+// and the PNG formats (V2FormatPNG8/24/32, decoded via the standard
+// library) are supported. Any other format code — including the real but
+// unimplemented compressed format V2FormatRLE5 — returns a descriptive
+// error rather than panicking or silently misinterpreting the data; see
 // .vibe/decisions/006-sff-v2-pixel-decode-shape-and-scope.md.
 func DecodeV2Sprite(format, width, height, colorDepth int, data []byte) (*V2Image, error) {
 	switch format {
@@ -48,6 +48,8 @@ func DecodeV2Sprite(format, width, height, colorDepth int, data []byte) (*V2Imag
 		return decodeV2Raw(width, height, colorDepth, data)
 	case V2FormatRLE8:
 		return decodeV2RLE8(width, height, colorDepth, data)
+	case V2FormatLZ5:
+		return decodeV2LZ5(width, height, colorDepth, data)
 	case V2FormatPNG8, V2FormatPNG24, V2FormatPNG32:
 		return decodeV2PNG(format, width, height, data)
 	default:
@@ -131,6 +133,159 @@ func decodeV2RLE8(width, height, colorDepth int, data []byte) (*V2Image, error) 
 		for k := 0; k < run; k++ {
 			pixels[pos] = b
 			pos++
+		}
+	}
+
+	return &V2Image{Width: width, Height: height, BytesPerPixel: 1, Pixels: pixels}, nil
+}
+
+// decodeV2LZ5 decodes V2FormatLZ5 pixel data: a dictionary-based
+// compressed stream of palette-index bytes, ported from decodeLZ5.mjs
+// (sff-extractor) and cross-checked against Ikemen-GO's Lz5Decode — both
+// implement the same algorithm. Like RLE8, it starts with a 4-byte
+// little-endian declared decompressed length, skipped without validation
+// (decodeV2RLE8's doc comment explains why), followed by the actual
+// compressed stream.
+//
+// The stream is driven by control bytes: each control byte's 8 bits (read
+// low bit first) each select one operation, either a literal run or a
+// back-reference copy.
+//
+//   - Literal run: the operation byte's top 3 bits select the run length
+//     (1-7) and its bottom 5 bits the repeated palette index — unless the
+//     top 3 bits are all zero, in which case the run length instead comes
+//     from the next byte (+8, for longer runs) and the operation byte
+//     itself, unmasked, is the repeated index.
+//   - Back-reference copy: the operation byte's bottom 6 bits give a
+//     distance/length pair packed against 1-2 more bytes — unless those 6
+//     bits are all zero, in which case a wider distance is built from the
+//     operation byte and one more byte instead. Either way, the resulting
+//     distance and length describe a copy from already-decoded output
+//     earlier in the same buffer (allowing overlapping copies, the same
+//     "repeat what was just written" trick RLE-family formats use for
+//     runs).
+//
+// Unlike the reference decoders, which tolerate running out of input by
+// clamping their read cursor to the last valid byte (silently reusing
+// stale data) and let an over-long run stop writing once the output
+// buffer is full without reporting it, this port treats both as a
+// descriptive error instead — matching decodeV2RLE8's own error-handling
+// contract for the same "malformed compressed data" class of problem; see
+// .vibe/decisions/015-v2-lz5-decode-error-handling-diverges-from-reference.md.
+//
+// Unlike decodeV2Raw/decodeV2RLE8, colorDepth is not validated here: real
+// LZ5 sprites (checked against a corpus of real characters) are declared
+// with ColorDepth 5, not 8 — the field records the sprite's actual color
+// count, not the pixel data's on-disk byte width, which for LZ5 is always
+// one index byte per pixel regardless of declared depth. This also
+// matches decodeLZ5.mjs, whose signature has no color-depth parameter at
+// all.
+func decodeV2LZ5(width, height, colorDepth int, data []byte) (*V2Image, error) {
+	if width <= 0 || height <= 0 {
+		return nil, fmt.Errorf("sff: v2 sprite: invalid dimensions %dx%d for LZ5 format", width, height)
+	}
+	if len(data) < 4 {
+		return nil, fmt.Errorf("sff: v2 sprite: LZ5 pixel data too short (%d bytes, need at least 4 for the length prefix)", len(data))
+	}
+
+	want := width * height
+	stream := data[4:]
+	pixels := make([]byte, want)
+
+	pos := 0
+	next := func() (byte, error) {
+		if pos >= len(stream) {
+			return 0, fmt.Errorf("sff: v2 sprite: LZ5 data ends before filling declared %dx%d size", width, height)
+		}
+		b := stream[pos]
+		pos++
+		return b, nil
+	}
+
+	var ct byte
+	ctBits := 0
+	var rb byte
+	rbBits := 0
+
+	j := 0
+	for j < want {
+		if ctBits == 0 {
+			b, err := next()
+			if err != nil {
+				return nil, err
+			}
+			ct = b
+			ctBits = 8
+		}
+		backRef := ct&(1<<uint(8-ctBits)) != 0
+		ctBits--
+
+		d, err := next()
+		if err != nil {
+			return nil, err
+		}
+
+		if backRef {
+			var dist, run int
+			if d&0x3f == 0 {
+				d2, err := next()
+				if err != nil {
+					return nil, fmt.Errorf("sff: v2 sprite: LZ5 data truncated mid back-reference (distance byte): %w", err)
+				}
+				dist = (int(d)<<2 | int(d2)) + 1
+				nb, err := next()
+				if err != nil {
+					return nil, fmt.Errorf("sff: v2 sprite: LZ5 data truncated mid back-reference (length byte): %w", err)
+				}
+				run = int(nb) + 2
+			} else {
+				rb |= (d & 0xc0) >> uint(rbBits)
+				rbBits += 2
+				run = int(d & 0x3f)
+				if rbBits < 8 {
+					d2, err := next()
+					if err != nil {
+						return nil, fmt.Errorf("sff: v2 sprite: LZ5 data truncated mid back-reference (distance byte): %w", err)
+					}
+					dist = int(d2) + 1
+				} else {
+					dist = int(rb) + 1
+					rb, rbBits = 0, 0
+				}
+			}
+			run++ // do-while semantics in the reference: decrement then check, so it always copies once more than the raw count.
+
+			if dist <= 0 || dist > j {
+				return nil, fmt.Errorf("sff: v2 sprite: LZ5 back-reference distance %d invalid at output position %d", dist, j)
+			}
+			if j+run > want {
+				return nil, fmt.Errorf("sff: v2 sprite: LZ5 back-reference run of %d pixels at position %d overruns declared %dx%d image size", run, j, width, height)
+			}
+			for k := 0; k < run; k++ {
+				pixels[j] = pixels[j-dist]
+				j++
+			}
+		} else {
+			var run int
+			lit := d
+			if d&0xe0 == 0 {
+				nb, err := next()
+				if err != nil {
+					return nil, fmt.Errorf("sff: v2 sprite: LZ5 data truncated mid literal run (count byte): %w", err)
+				}
+				run = int(nb) + 8
+			} else {
+				run = int(d >> 5)
+				lit = d & 0x1f
+			}
+
+			if j+run > want {
+				return nil, fmt.Errorf("sff: v2 sprite: LZ5 literal run of %d pixels at position %d overruns declared %dx%d image size", run, j, width, height)
+			}
+			for k := 0; k < run; k++ {
+				pixels[j] = lit
+				j++
+			}
 		}
 	}
 

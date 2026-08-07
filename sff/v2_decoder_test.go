@@ -180,18 +180,6 @@ func TestDecodeV2Sprite_ReturnsErrorOnUnrecognizedFormat(t *testing.T) {
 	}
 }
 
-func TestDecodeV2Sprite_ReturnsErrorOnUnimplementedCompressedFormat(t *testing.T) {
-	// LZ5 is a real .sff v2 format code (see ParseV2's V2Format* constants)
-	// but is not decoded yet (see backlog item 025); it must still fail
-	// descriptively rather than being silently misinterpreted as raw data.
-	data := []byte{1, 2, 3, 4, 5, 6}
-
-	_, err := DecodeV2Sprite(V2FormatLZ5, 3, 2, 8, data)
-	if err == nil {
-		t.Fatal("expected an error for the unimplemented LZ5 format, got nil")
-	}
-}
-
 func TestDecodeV2Sprite_ReturnsErrorOnCorruptPNGData(t *testing.T) {
 	data := []byte{0x89, 'P', 'N', 'G', 0, 0, 0, 0, 'g', 'a', 'r', 'b', 'a', 'g', 'e'}
 
@@ -355,6 +343,149 @@ func TestDecodeV2Sprite_ReturnsErrorOnRLE8InvalidDimensions(t *testing.T) {
 	data := buildRLE8(0, nil)
 
 	_, err := DecodeV2Sprite(V2FormatRLE8, 0, 0, 8, data)
+	if err == nil {
+		t.Fatal("expected an error for zero declared dimensions, got nil")
+	}
+}
+
+// buildLZ5 prepends the 4-byte little-endian declared-decompressed-length
+// prefix real .sff v2 LZ5 pixel data starts with (mirroring buildRLE8) to a
+// hand-built control stream.
+func buildLZ5(prefixLength uint32, stream []byte) []byte {
+	data := make([]byte, 4+len(stream))
+	data[0] = byte(prefixLength)
+	data[1] = byte(prefixLength >> 8)
+	data[2] = byte(prefixLength >> 16)
+	data[3] = byte(prefixLength >> 24)
+	copy(data[4:], stream)
+	return data
+}
+
+func TestDecodeV2Sprite_DecodesLZ5LiteralAndPackedBackReferencePattern(t *testing.T) {
+	// Control byte 0x04 (0b00000100): op1/op2 are literal (bit clear), op3 is
+	// a back-reference (bit set).
+	//   op1: d=0x25 (0b001_00101) -> top 3 bits give run=1, low 5 bits give
+	//        literal value 5. Writes [5].
+	//   op2: d=0x29 (0b001_01001) -> run=1, literal value 9. Writes [9].
+	//   op3: d=0x03 -> low 6 bits (3) are non-zero, so this is the "packed"
+	//        back-reference form: run = d&0x3f = 3 (copies run+1 = 4 times),
+	//        and since this is the first packed op this decode, the
+	//        distance comes directly from the next byte: dist = 1+1 = 2.
+	//        Copies pixels[j-2] four times starting at j=2, alternating the
+	//        two already-written values.
+	stream := []byte{0x04, 0x25, 0x29, 0x03, 0x01}
+	data := buildLZ5(6, stream)
+	want := []byte{5, 9, 5, 9, 5, 9}
+
+	img, err := DecodeV2Sprite(V2FormatLZ5, 6, 1, 8, data)
+	if err != nil {
+		t.Fatalf("DecodeV2Sprite returned error: %v", err)
+	}
+	if img.Width != 6 || img.Height != 1 {
+		t.Fatalf("got Width=%d Height=%d, want Width=6 Height=1", img.Width, img.Height)
+	}
+	if img.BytesPerPixel != 1 {
+		t.Fatalf("got BytesPerPixel=%d, want 1", img.BytesPerPixel)
+	}
+	if !bytesEqual(img.Pixels, want) {
+		t.Fatalf("got Pixels=%v, want %v", img.Pixels, want)
+	}
+}
+
+func TestDecodeV2Sprite_DecodesLZ5ExtendedLiteralRun(t *testing.T) {
+	// Control byte 0x00: op1 is literal. d=0x03 has its top 3 bits clear,
+	// selecting the extended-count form: the run length comes from the next
+	// byte (+8), and the literal value is d itself (3). A single op fills
+	// all 10 declared pixels.
+	stream := []byte{0x00, 0x03, 0x02}
+	data := buildLZ5(10, stream)
+	want := []byte{3, 3, 3, 3, 3, 3, 3, 3, 3, 3}
+
+	img, err := DecodeV2Sprite(V2FormatLZ5, 10, 1, 8, data)
+	if err != nil {
+		t.Fatalf("DecodeV2Sprite returned error: %v", err)
+	}
+	if !bytesEqual(img.Pixels, want) {
+		t.Fatalf("got Pixels=%v, want %v", img.Pixels, want)
+	}
+}
+
+func TestDecodeV2Sprite_DecodesLZ5LongDistanceBackReference(t *testing.T) {
+	// Control byte 0x04: op1/op2 literal (as in the packed-back-reference
+	// test above), writing [5, 9]. op3's d=0x00 has low 6 bits all zero,
+	// selecting the long-distance back-reference form: distance is built
+	// from two bytes (d and the next byte) instead of one, here
+	// (0<<2|1)+1 = 2, and the run length from a further byte (0+2, copied
+	// run+1 = 3 times) — copying the 2-pixel [5, 9] pattern once more.
+	stream := []byte{0x04, 0x25, 0x29, 0x00, 0x01, 0x00}
+	data := buildLZ5(5, stream)
+	want := []byte{5, 9, 5, 9, 5}
+
+	img, err := DecodeV2Sprite(V2FormatLZ5, 5, 1, 8, data)
+	if err != nil {
+		t.Fatalf("DecodeV2Sprite returned error: %v", err)
+	}
+	if !bytesEqual(img.Pixels, want) {
+		t.Fatalf("got Pixels=%v, want %v", img.Pixels, want)
+	}
+}
+
+func TestDecodeV2Sprite_ReturnsErrorOnLZ5DataShorterThanLengthPrefix(t *testing.T) {
+	data := []byte{1, 2, 3}
+
+	_, err := DecodeV2Sprite(V2FormatLZ5, 3, 2, 8, data)
+	if err == nil {
+		t.Fatal("expected an error for LZ5 data shorter than the length prefix, got nil")
+	}
+}
+
+func TestDecodeV2Sprite_ReturnsErrorOnLZ5TruncatedMidOperation(t *testing.T) {
+	// Control byte selects a back-reference for op1 (bit 0 set), but the
+	// stream ends right after the op's own byte, before the distance byte
+	// the packed back-reference form needs.
+	stream := []byte{0x01, 0x03}
+	data := buildLZ5(4, stream)
+
+	_, err := DecodeV2Sprite(V2FormatLZ5, 4, 1, 8, data)
+	if err == nil {
+		t.Fatal("expected an error for LZ5 data truncated mid-operation, got nil")
+	}
+}
+
+func TestDecodeV2Sprite_ReturnsErrorOnLZ5RunOverrunningImageBounds(t *testing.T) {
+	// Same stream as the extended-literal-run test (which fills 10 pixels)
+	// but declared against a 5-pixel image.
+	stream := []byte{0x00, 0x03, 0x02}
+	data := buildLZ5(5, stream)
+
+	_, err := DecodeV2Sprite(V2FormatLZ5, 5, 1, 8, data)
+	if err == nil {
+		t.Fatal("expected an error for a literal run overrunning the declared image size, got nil")
+	}
+}
+
+func TestDecodeV2Sprite_DecodesLZ5RegardlessOfDeclaredColorDepth(t *testing.T) {
+	// Real LZ5 sprites are declared with ColorDepth 5 (a reduced color
+	// count), not 8, yet still decode into a plain one-byte-per-pixel index
+	// buffer — the declared depth must not gate decoding the way it does
+	// for raw/RLE8 pixel data.
+	stream := []byte{0x00, 0x03, 0x02}
+	data := buildLZ5(10, stream)
+	want := []byte{3, 3, 3, 3, 3, 3, 3, 3, 3, 3}
+
+	img, err := DecodeV2Sprite(V2FormatLZ5, 10, 1, 5, data)
+	if err != nil {
+		t.Fatalf("DecodeV2Sprite returned error: %v", err)
+	}
+	if !bytesEqual(img.Pixels, want) {
+		t.Fatalf("got Pixels=%v, want %v", img.Pixels, want)
+	}
+}
+
+func TestDecodeV2Sprite_ReturnsErrorOnLZ5InvalidDimensions(t *testing.T) {
+	data := buildLZ5(0, nil)
+
+	_, err := DecodeV2Sprite(V2FormatLZ5, 0, 0, 8, data)
 	if err == nil {
 		t.Fatal("expected an error for zero declared dimensions, got nil")
 	}
