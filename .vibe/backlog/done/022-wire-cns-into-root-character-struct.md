@@ -1,5 +1,5 @@
 ---
-status: todo
+status: done
 depends_on: [018, 021]
 ---
 # Wire .cns Into Root Character Struct
