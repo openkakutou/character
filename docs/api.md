@@ -38,9 +38,9 @@ unreadable `.def`, `.air`, or `.sff` file returns a descriptive error
 naming which file and step failed, rather than panicking. See
 [`.vibe/decisions/010-def-loader-assembles-character-from-referenced-files.md`](../.vibe/decisions/010-def-loader-assembles-character-from-referenced-files.md).
 
-`.cns` fields (combat logic) are not wired in yet: `cns.Parse` exists (see
-`character/cns` below) but `Character`/`Load` don't reference it (tracked by
-backlog items 021–022).
+`.cns` fields (combat logic) are not wired in yet: `cns.Parse`/`cns.Serialize`
+exist (see `character/cns` below) but `Character`/`Load` don't reference them
+(tracked by backlog item 022).
 
 ### Example
 
@@ -531,6 +531,56 @@ rather than panicking or silently producing incorrect data, when:
 An empty input is not an error: `Parse` returns an empty `[]StateDef` and a
 `nil` error.
 
+### Writing
+
+```go
+func Serialize(w io.Writer, states []StateDef) error
+```
+
+Writes `states` to `w` as MUGEN/Ikemen GO `.cns` text: one `[Statedef N]`
+block per `StateDef` in order, each followed by its `[State N]` controller
+blocks in order.
+
+This produces valid, readable `.cns` text that `Parse` reads back into an
+equivalent `[]StateDef`, but it does not attempt a byte-exact round-trip of
+an original file's formatting, comments, or unrecognized sections — it
+always writes fresh output (see `Document`, below, for that case). Every
+recognized `Statedef` header field is always written, even at its zero
+value, since a `StateDef` cannot distinguish "not present in the original
+file" from "explicitly set to the zero value". A `Controller`'s `Triggers`
+are written as `trigger1`, `trigger2`, ... in slice order; `Parameters` (an
+unordered map) are written sorted by key for deterministic output. A
+`[State N]` block's `N` is always its enclosing `StateDef`'s `Number` —
+`Parse` discards this number entirely, so any value reparses identically.
+`Serialize` returns an error rather than panicking if the underlying writer
+fails.
+
+### Comment-preserving round trip
+
+```go
+type Document struct {
+    StateDefs []StateDef
+    // unexported: the original source bytes
+}
+
+func ParseDocument(r io.Reader) (*Document, error)
+func (d *Document) Serialize(w io.Writer) error
+```
+
+`ParseDocument` decodes `.cns` text the same way `Parse` does (into
+`Document.StateDefs`) while also retaining the exact source bytes it read.
+`Document.Serialize` writes those retained bytes back out verbatim, so a
+`ParseDocument` → `Serialize` round trip on **unmodified** content reproduces
+the original file byte-for-byte — comments, block ordering, and
+unrecognized sections included.
+
+Mutating `Document.StateDefs` has no effect on `Serialize`'s output: this
+type guarantees a faithful round trip for the "load, don't touch, save"
+case only, mirroring `air.Document`/`def.Document`. Regenerating output from
+an edited `StateDefs` while still preserving unrelated comments/sections/
+ordering around the edit is not implemented yet — see
+[`.vibe/decisions/003-air-round-trip-via-separate-document-type.md`](../.vibe/decisions/003-air-round-trip-via-separate-document-type.md).
+
 ### Example
 
 ```go
@@ -550,8 +600,47 @@ for _, s := range states {
 }
 ```
 
-Writing `.cns` data back out, and wiring `cns.Parse` into `character.Load`,
-are not implemented yet (tracked by backlog items 021–022).
+Writing states back out:
+
+```go
+f, err := os.Create("kfm.cns")
+if err != nil {
+    log.Fatal(err)
+}
+defer f.Close()
+
+if err := cns.Serialize(f, states); err != nil {
+    log.Fatal(err)
+}
+```
+
+Loading a file and saving it back out unchanged, preserving comments, block
+ordering, and unrecognized sections:
+
+```go
+f, err := os.Open("kfm.cns")
+if err != nil {
+    log.Fatal(err)
+}
+doc, err := cns.ParseDocument(f)
+f.Close()
+if err != nil {
+    log.Fatal(err)
+}
+
+out, err := os.Create("kfm-copy.cns")
+if err != nil {
+    log.Fatal(err)
+}
+defer out.Close()
+
+if err := doc.Serialize(out); err != nil {
+    log.Fatal(err)
+}
+```
+
+Wiring `cns` into `character.Load` is not implemented yet (tracked by
+backlog item 022).
 
 ## `character/sff` — sprite (`.sff`) files
 

@@ -269,7 +269,7 @@ Defined in: `sff/v2_serializer.go`
 | SprPriority | int | Sprite drawing (layering) priority for this state |
 | Controllers | []Controller | State controllers that run while this state is active, in file order |
 
-Populated by `Parse(r io.Reader) ([]StateDef, error)`, which reads `[Statedef N]`/`[State N]` `.cns` text into this shape, skipping unrecognized sections. No serializer exists yet (backlog items 021–022). See `.vibe/decisions/011-cns-controller-parameters-are-untyped-key-value-data.md` and `.vibe/decisions/012-cns-parse-header-detection-strategy.md`.
+Populated by `Parse(r io.Reader) ([]StateDef, error)`, which reads `[Statedef N]`/`[State N]` `.cns` text into this shape, skipping unrecognized sections. Written back out by `Serialize(w io.Writer, states []StateDef) error` (a semantic round trip through `Parse`, not byte-exact preservation of an original file's formatting/comments — see `Document (cns)` below for that case). Not yet wired into the root `Character` struct (backlog item 022). See `.vibe/decisions/011-cns-controller-parameters-are-untyped-key-value-data.md` and `.vibe/decisions/012-cns-parse-header-detection-strategy.md`.
 
 Defined in: `cns/statedef.go`, `cns/parser.go`
 
@@ -283,6 +283,16 @@ Defined in: `cns/statedef.go`, `cns/parser.go`
 A controller's effect (e.g. which state a "ChangeState" controller transitions to) is just another `Parameters` entry, not a dedicated field.
 
 Defined in: `cns/statedef.go`, `cns/parser.go`
+
+## Document (cns)
+| Field | Type | Notes |
+|---|---|---|
+| StateDefs | []StateDef | Decoded the same way `Parse`'s return value is, for convenient structured access |
+| source | []byte | Unexported; the exact bytes `ParseDocument` read, replayed verbatim by `Serialize` |
+
+Write-path type: `ParseDocument`/`Document.Serialize` round-trip an unmodified `.cns` file byte-for-byte, including comments, block ordering, and unrecognized sections. Mutating `StateDefs` does not change what `Serialize` writes. Mirrors `air`'s and `def`'s own `Document` (see above).
+
+Defined in: `cns/document.go`
 
 ## StateType / MoveType / PhysicsType
 String-based enums matching `.cns [Statedef N]` header tokens.

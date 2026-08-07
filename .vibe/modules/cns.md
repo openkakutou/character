@@ -1,13 +1,15 @@
 # Module: cns
 
-**Role:** MUGEN/Ikemen GO combat logic (`.cns`) files — a character's states and the state controllers that run within them. Has the pure-data model (`StateDef`, `Controller`) and the `StateType`/`MoveType`/`PhysicsType` enums for a Statedef header, plus a read-path text parser (`Parse`). No serializer or wiring into the root `Character` struct exists yet (backlog items 021–022).
+**Role:** MUGEN/Ikemen GO combat logic (`.cns`) files — a character's states and the state controllers that run within them. Provides the pure-data model (`StateDef`, `Controller`), the `StateType`/`MoveType`/`PhysicsType` enums for a Statedef header, a read-path text parser (`Parse`), a `Serialize` write path, and a `Document`/`ParseDocument` pair for byte-exact round trips of unmodified files — completing the `cns` read+write cycle. Wiring `StateDef` into the root `Character` struct is not implemented yet (backlog item 022).
 
-**Files:** `cns/statedef.go`, `cns/parser.go`
+**Files:** `cns/statedef.go`, `cns/parser.go`, `cns/serializer.go`, `cns/document.go`
 
 **Exports:**
 - `StateDef` (struct: `Number`, `Type`, `MoveType`, `Physics`, `Anim`, `Ctrl`, `PowerAdd`, `Juggle`, `FaceP2`, `HitDefPersist`, `MoveHitPersist`, `HitCountPersist`, `SprPriority`, `Controllers []Controller`) — a `.cns [Statedef N]` block's header parameters plus its state controllers, in file order
 - `Controller` (struct: `Type string`, `Triggers []string`, `Parameters map[string]string`) — a `.cns [State N]` block, stored as unevaluated data rather than resolved or type-checked; a nil/empty `Triggers` means the controller runs unconditionally, not "never runs" (see `.vibe/decisions/011-cns-controller-parameters-are-untyped-key-value-data.md`)
 - `StateType`, `MoveType`, `PhysicsType` (string-based enums matching `.cns` header tokens, e.g. `StateTypeStanding = "S"`)
 - `Parse(r io.Reader) ([]StateDef, error)` — reads `.cns` text into `StateDef`s, in file order; a `trigger`-prefixed key appends to a controller's `Triggers`, `type` sets `Controller.Type`, every other key becomes a lowercase-normalized `Parameters` entry; bracket sections other than `[Statedef N]`/`[State N]` are skipped without validation, but a header that looks like an attempted Statedef/State header yet fails to parse returns a line-numbered error, as does a `[State N]` block with no enclosing Statedef (see `.vibe/decisions/012-cns-parse-header-detection-strategy.md`)
+- `Serialize(w io.Writer, states []StateDef) error` — writes `StateDef`s back out as `.cns` text (`[Statedef N]`/`[State N]` blocks); a semantic round trip through `Parse`, not byte-exact preservation of an original file's formatting/comments — every recognized header field is always written (even at its zero value), a `Controller`'s `Triggers` are renumbered `trigger1`, `trigger2`, ... in slice order, and its `Parameters` map is written sorted by key
+- `Document`/`ParseDocument(r io.Reader) (*Document, error)` — format-preserving write-path counterpart to `Parse`/`Serialize`: `ParseDocument` decodes `StateDefs` the same way `Parse` does while retaining the exact source bytes; `(*Document).Serialize(w io.Writer) error` replays those bytes verbatim, reproducing an unmodified original file's comments, block ordering, and unrecognized sections exactly (see `.vibe/decisions/003-air-round-trip-via-separate-document-type.md`, whose split this mirrors). Mutating `StateDefs` has no effect on `Serialize`'s output — it does not yet regenerate text around edits.
 
 **Depends on:** nothing

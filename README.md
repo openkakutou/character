@@ -24,12 +24,14 @@ This project is in early-stage development. Shipped so far:
 - Loading a `.def` file and saving it back out unchanged reproduces the original file exactly, including comments, section ordering, and any sections the library doesn't otherwise recognize — so re-saving a file you haven't edited never creates a noisy diff
 - Loading a full character in one step from its `.def` file — its name, animations, and sprites (either `.sff` version) are automatically read from the files it references and assembled into a ready-to-use `Character`; a missing or unreadable referenced file is caught with a clear error instead of crashing
 - Reading MUGEN/Ikemen GO combat logic (`.cns`) files into structured state data — every state and the behaviors it runs, with their trigger conditions and parameters kept as raw data rather than evaluated; sections the library doesn't recognize are skipped instead of aborting the read, and a malformed state or behavior header is caught with a clear, line-numbered error instead of crashing
+- Writing combat logic data back out to valid `.cns` text, ready to be read by MUGEN/Ikemen GO or read back in by this library
+- Loading a `.cns` file and saving it back out unchanged reproduces the original file exactly, including comments, block ordering, and any sections the library doesn't otherwise recognize — so re-saving a file you haven't edited never creates a noisy diff
 
 Planned:
 
 - Decoding the remaining, less common `.sff` v2 compressed pixel formats (RLE-based)
-- Writing `.cns` combat logic data back out to text, and including it when a character is loaded from a `.def` file
-- Preserving comments and ordering when the saved `.def`/`.air` file actually differs from the original (today this is guaranteed only when nothing changed)
+- Including combat logic when a character is loaded from a `.def` file
+- Preserving comments and ordering when the saved `.def`/`.air`/`.cns` file actually differs from the original (today this is guaranteed only when nothing changed)
 - No rendering dependency, so the library can compile to WebAssembly for web-based tooling
 <!-- vibe:end:features -->
 
@@ -598,7 +600,76 @@ func main() {
 }
 ```
 
-Writing `.cns` data back out, wiring it into `Character`, and decoding/encoding the remaining `.sff` v2 compressed pixel formats (RLE-based), are not implemented yet — this API surface will grow as those pieces are added.
+Write states back out to `.cns` text with `cns.Serialize`:
+
+```go
+package main
+
+import (
+	"os"
+
+	"github.com/openkakutou/character/cns"
+)
+
+func main() {
+	states := []cns.StateDef{
+		{
+			Number:   0,
+			Type:     cns.StateTypeStanding,
+			MoveType: cns.MoveTypeIdle,
+			Physics:  cns.PhysicsStanding,
+			Ctrl:     true,
+		},
+	}
+
+	f, err := os.Create("kfm.cns")
+	if err != nil {
+		panic(err)
+	}
+	defer f.Close()
+
+	if err := cns.Serialize(f, states); err != nil {
+		panic(err)
+	}
+}
+```
+
+If you just want to load a `.cns` file and save it back out unchanged (no data edits), use `cns.ParseDocument`/`Document.Serialize` instead of `Parse`/`Serialize` — it keeps the file's comments, block ordering, and unrecognized sections intact:
+
+```go
+package main
+
+import (
+	"os"
+
+	"github.com/openkakutou/character/cns"
+)
+
+func main() {
+	f, err := os.Open("kfm.cns")
+	if err != nil {
+		panic(err)
+	}
+	doc, err := cns.ParseDocument(f)
+	f.Close()
+	if err != nil {
+		panic(err)
+	}
+
+	out, err := os.Create("kfm-copy.cns")
+	if err != nil {
+		panic(err)
+	}
+	defer out.Close()
+
+	// Reproduces kfm.cns exactly, including its comments.
+	if err := doc.Serialize(out); err != nil {
+		panic(err)
+	}
+}
+```
+
+Wiring `.cns` into `Character`, and decoding/encoding the remaining `.sff` v2 compressed pixel formats (RLE-based), are not implemented yet — this API surface will grow as those pieces are added.
 <!-- vibe:end:usage -->
 
 <!-- vibe:begin:docs-index -->
