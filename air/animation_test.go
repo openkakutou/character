@@ -112,6 +112,38 @@ func TestAnimation_WithFrames_PreservesAssignedFieldValues(t *testing.T) {
 	}
 }
 
+func TestFrame_IsBlank_TrueWhenGroupAndImageAreBothMinusOne(t *testing.T) {
+	f := Frame{Group: -1, Image: -1, X: 0, Y: 0, Time: 5}
+
+	if !f.IsBlank() {
+		t.Errorf("expected IsBlank true for the -1,-1 sentinel, got false")
+	}
+}
+
+func TestFrame_IsBlank_TrueWhenOnlyOneFieldIsMinusOne(t *testing.T) {
+	cases := []struct {
+		name  string
+		frame Frame
+	}{
+		{"group only", Frame{Group: -1, Image: 0}},
+		{"image only", Frame{Group: 0, Image: -1}},
+	}
+
+	for _, c := range cases {
+		if !c.frame.IsBlank() {
+			t.Errorf("%s: expected IsBlank true, got false", c.name)
+		}
+	}
+}
+
+func TestFrame_IsBlank_FalseForOrdinarySpriteReference(t *testing.T) {
+	f := Frame{Group: 0, Image: 0}
+
+	if f.IsBlank() {
+		t.Errorf("expected IsBlank false for an ordinary (0, 0) reference, got true")
+	}
+}
+
 func TestFlip_Constants_MatchAirFormatTokens(t *testing.T) {
 	cases := []struct {
 		name string

@@ -7,6 +7,7 @@ This project is in early-stage development. Shipped so far:
 
 - Reading MUGEN/Ikemen GO animation (`.air`) files into structured animation data — actions, frame sequences, collision boxes, and loop points
 - Malformed or unusual `.air` input (bad headers, missing/negative values, comment lines, empty files) is caught with a clear, line-numbered error instead of crashing or producing wrong data
+- Frames using the `-1,-1` "no sprite shown" convention widely found in real MUGEN/Ikemen GO characters are read successfully instead of being rejected, and resolve to no sprite instead of a failed lookup
 - Writing animation data back out to valid `.air` text, ready to be read by MUGEN/Ikemen GO or read back in by this library
 - Loading a `.air` file and saving it back out unchanged reproduces the original file exactly, comments included — so re-saving a file you haven't edited never creates a noisy diff
 - Defined the sprite and sprite group data model that will represent a character's sprites once `.sff` file reading is implemented

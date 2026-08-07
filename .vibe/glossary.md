@@ -10,8 +10,13 @@ An ordered sequence of Frames (a `.air` file's `[Begin Action N]` block) plus th
 _Sources: `air/animation.go`_
 
 ## Frame
-A single displayed image within an Animation: which sprite to show, where to show it, how long to hold it, how to mirror/blend it, and the collision boxes active while it is displayed.
+A single displayed image within an Animation: which sprite to show, where to show it, how long to hold it, how to mirror/blend it, and the collision boxes active while it is displayed. A Frame may instead be a Blank frame, in which case it deliberately shows no sprite at all.
 _Sources: `air/animation.go`_
+
+## Blank frame
+A Frame using the `.air` format's `-1` sentinel (most commonly `-1,-1`) in place of a real sprite group/image reference, meaning "show no sprite on this frame". A legitimate, engine-recognized authoring convention widely used by real characters — not a malformed frame — distinct from a Frame whose sprite reference is simply absent from the loaded sprites, which is a genuine error.
+**Do not confuse with:** Frame, which normally references a real Sprite; a Blank frame explicitly does not.
+_Sources: `air/animation.go`, `air/parser.go`, `air/resolve.go`, `.vibe/decisions/013-blank-frame-sentinel-representation.md`_
 
 ## Collision box
 An axis-aligned box attached to a Frame that defines a region used for hit detection: an attack box (offense, "Clsn1") or a vulnerability box (can be hit, "Clsn2"). Represented per frame as the boxes actually active on that frame, already resolved from any file-level default.

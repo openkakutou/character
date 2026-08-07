@@ -31,10 +31,13 @@ var actionHeaderPattern = regexp.MustCompile(`(?i)^\[\s*begin\s+action\s+(-?\d+)
 // Clsn1Default/Clsn2Default declarations, indexed Clsn[i] box lines, and the
 // Loopstart marker. Comment lines (';', whole-line or trailing) are ignored.
 // An empty input returns an empty, non-nil-error result rather than an
-// error. Malformed input — an unrecognized action header, a frame line with
-// missing or non-numeric fields, or a negative group/image index — returns a
-// descriptive error naming the offending line rather than panicking or
-// silently producing incorrect data, as does a reader that fails outright.
+// error. A frame line's group or image field may be -1, the ".air"
+// convention for "no sprite shown on this frame" (see Frame.IsBlank).
+// Malformed input — an unrecognized action header, a frame line with
+// missing or non-numeric fields, or a group/image index more negative than
+// the -1 sentinel — returns a descriptive error naming the offending line
+// rather than panicking or silently producing incorrect data, as does a
+// reader that fails outright.
 func Parse(r io.Reader) ([]Animation, error) {
 	scanner := bufio.NewScanner(r)
 
@@ -190,15 +193,15 @@ func parseFrameLine(line string) (Frame, error) {
 	if err != nil {
 		return Frame{}, fmt.Errorf("malformed frame line %q: invalid group: %w", line, err)
 	}
-	if group < 0 {
-		return Frame{}, fmt.Errorf("malformed frame line %q: group index must not be negative, got %d", line, group)
+	if group < -1 {
+		return Frame{}, fmt.Errorf("malformed frame line %q: group index must not be negative (except the -1 \"no sprite\" sentinel), got %d", line, group)
 	}
 	image, err := strconv.Atoi(strings.TrimSpace(fields[1]))
 	if err != nil {
 		return Frame{}, fmt.Errorf("malformed frame line %q: invalid image: %w", line, err)
 	}
-	if image < 0 {
-		return Frame{}, fmt.Errorf("malformed frame line %q: image index must not be negative, got %d", line, image)
+	if image < -1 {
+		return Frame{}, fmt.Errorf("malformed frame line %q: image index must not be negative (except the -1 \"no sprite\" sentinel), got %d", line, image)
 	}
 	x, err := strconv.Atoi(strings.TrimSpace(fields[2]))
 	if err != nil {

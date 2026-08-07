@@ -321,27 +321,75 @@ func TestParse_FrameLineMissingFields_ReturnsError(t *testing.T) {
 	}
 }
 
-func TestParse_NegativeGroupIndex_ReturnsDescriptiveError(t *testing.T) {
-	src := "[Begin Action 0]\n-1,0, 0,0, 5\n"
+func TestParse_GroupIndexBelowSentinel_ReturnsDescriptiveError(t *testing.T) {
+	src := "[Begin Action 0]\n-2,0, 0,0, 5\n"
 
 	_, err := Parse(strings.NewReader(src))
 	if err == nil {
-		t.Fatal("expected an error for a negative group index, got nil")
+		t.Fatal("expected an error for a group index more negative than the -1 sentinel, got nil")
 	}
 	if !strings.Contains(err.Error(), "group") {
 		t.Errorf("expected the error to mention the group index, got: %v", err)
 	}
 }
 
-func TestParse_NegativeImageIndex_ReturnsDescriptiveError(t *testing.T) {
-	src := "[Begin Action 0]\n0,-1, 0,0, 5\n"
+func TestParse_ImageIndexBelowSentinel_ReturnsDescriptiveError(t *testing.T) {
+	src := "[Begin Action 0]\n0,-2, 0,0, 5\n"
 
 	_, err := Parse(strings.NewReader(src))
 	if err == nil {
-		t.Fatal("expected an error for a negative image index, got nil")
+		t.Fatal("expected an error for an image index more negative than the -1 sentinel, got nil")
 	}
 	if !strings.Contains(err.Error(), "image") {
 		t.Errorf("expected the error to mention the image index, got: %v", err)
+	}
+}
+
+func TestParse_BlankFrameSentinel_BothFieldsMinusOne_ParsedSuccessfully(t *testing.T) {
+	src := "[Begin Action 0]\n-1,-1, 0,0, 5\n"
+
+	animations, err := Parse(strings.NewReader(src))
+	if err != nil {
+		t.Fatalf("unexpected error parsing the -1,-1 sentinel: %v", err)
+	}
+	if len(animations[0].Frames) != 1 {
+		t.Fatalf("expected 1 frame, got %d", len(animations[0].Frames))
+	}
+	f := animations[0].Frames[0]
+	if f.Group != -1 || f.Image != -1 {
+		t.Errorf("expected Group -1 and Image -1, got Group %d Image %d", f.Group, f.Image)
+	}
+	if !f.IsBlank() {
+		t.Errorf("expected the parsed frame to report IsBlank true")
+	}
+	if f.X != 0 || f.Y != 0 || f.Time != 5 {
+		t.Errorf("expected the rest of the frame to still be parsed, got %+v", f)
+	}
+}
+
+func TestParse_BlankFrameSentinel_OnlyGroupMinusOne_ParsedSuccessfully(t *testing.T) {
+	src := "[Begin Action 0]\n-1,3, 0,0, 5\n"
+
+	animations, err := Parse(strings.NewReader(src))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	f := animations[0].Frames[0]
+	if f.Group != -1 || f.Image != 3 {
+		t.Errorf("expected Group -1 and Image 3, got Group %d Image %d", f.Group, f.Image)
+	}
+}
+
+func TestParse_BlankFrameSentinel_OnlyImageMinusOne_ParsedSuccessfully(t *testing.T) {
+	src := "[Begin Action 0]\n3,-1, 0,0, 5\n"
+
+	animations, err := Parse(strings.NewReader(src))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	f := animations[0].Frames[0]
+	if f.Group != 3 || f.Image != -1 {
+		t.Errorf("expected Group 3 and Image -1, got Group %d Image %d", f.Group, f.Image)
 	}
 }
 

@@ -113,3 +113,15 @@ func TestCharacter_ResolveSprite_ReturnsErrorOnZeroValueCharacter(t *testing.T) 
 		t.Fatal("expected an error resolving a sprite on a Character with no sprites loaded, got nil")
 	}
 }
+
+func TestCharacter_ResolveSprite_ReturnsZeroSpriteNoErrorForBlankFrame(t *testing.T) {
+	c := realFixtureCharacter(t)
+
+	got, err := c.ResolveSprite(air.Frame{Group: -1, Image: -1})
+	if err != nil {
+		t.Fatalf("expected no error resolving a blank (-1,-1) frame, got: %v", err)
+	}
+	if got != (sff.Sprite{}) {
+		t.Errorf("expected a zero-value Sprite for a blank frame, got %+v", got)
+	}
+}

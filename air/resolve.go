@@ -45,7 +45,14 @@ func NewSpriteResolver(groups []sff.SpriteGroup) *SpriteResolver {
 // It returns a descriptive error, rather than a zero Sprite, when no sprite
 // with a matching (Group, Image) exists in the resolver — a missing
 // reference must fail explicitly rather than silently rendering blank.
+//
+// A blank frame (frame.IsBlank(), the ".air" -1 "no sprite" sentinel) is not
+// a missing reference: Resolve recognizes it directly and returns a zero
+// Sprite with a nil error, without looking it up.
 func (r *SpriteResolver) Resolve(frame Frame) (sff.Sprite, error) {
+	if frame.IsBlank() {
+		return sff.Sprite{}, nil
+	}
 	sprite, ok := r.sprites[spriteKey{group: frame.Group, image: frame.Image}]
 	if !ok {
 		return sff.Sprite{}, fmt.Errorf("air: frame references sprite (group %d, image %d), which was not found in the loaded sprite groups", frame.Group, frame.Image)

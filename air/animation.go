@@ -46,6 +46,11 @@ type ClsnBox struct {
 // show (Group, Image), where to show it (X, Y), how long to hold it (Time),
 // how to mirror and blend it, and the collision boxes active while it is
 // displayed.
+//
+// Group and Image are normally non-negative sprite indices, but MUGEN/Ikemen
+// GO ".air" files also use -1 on either field — most commonly -1,-1 — as a
+// sentinel meaning "show no sprite on this frame". Such a frame is not
+// malformed; see IsBlank.
 type Frame struct {
 	Group int
 	Image int
@@ -56,6 +61,14 @@ type Frame struct {
 	Blend BlendMode
 	Clsn1 []ClsnBox
 	Clsn2 []ClsnBox
+}
+
+// IsBlank reports whether frame uses the ".air" "no sprite shown" sentinel:
+// a Group or Image of -1. A blank frame intentionally has no sprite to
+// resolve, distinct from a frame whose sprite reference is simply missing
+// from the loaded sprite collection.
+func (f Frame) IsBlank() bool {
+	return f.Group < 0 || f.Image < 0
 }
 
 // Animation is a MUGEN/Ikemen "[Begin Action N]" block: an ordered sequence

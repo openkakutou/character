@@ -97,6 +97,33 @@ func TestSpriteResolver_Resolve_ReturnsErrorWhenNoSpriteGroupsLoaded(t *testing.
 	}
 }
 
+func TestSpriteResolver_Resolve_ReturnsZeroSpriteAndNoErrorForBlankFrame(t *testing.T) {
+	resolver := NewSpriteResolver(sampleSpriteGroups())
+
+	got, err := resolver.Resolve(Frame{Group: -1, Image: -1, X: 10, Y: 20, Time: 3})
+	if err != nil {
+		t.Fatalf("expected no error resolving a blank frame, got: %v", err)
+	}
+	if got != (sff.Sprite{}) {
+		t.Errorf("expected a zero-value Sprite for a blank frame, got %+v", got)
+	}
+}
+
+func TestSpriteResolver_Resolve_TreatsPartialSentinelAsBlankToo(t *testing.T) {
+	resolver := NewSpriteResolver(sampleSpriteGroups())
+
+	// Group 0 legitimately has an Image 0 sprite, but Group -1 is the blank
+	// sentinel: the whole frame must be treated as blank, not partially
+	// resolved against group 0's data.
+	got, err := resolver.Resolve(Frame{Group: -1, Image: 0})
+	if err != nil {
+		t.Fatalf("expected no error resolving a partially-sentinel frame, got: %v", err)
+	}
+	if got != (sff.Sprite{}) {
+		t.Errorf("expected a zero-value Sprite, got %+v", got)
+	}
+}
+
 func TestSpriteResolver_Resolve_WorksTheSameRegardlessOfSFFVersionOrigin(t *testing.T) {
 	// sff.Sprite/sff.SpriteGroup are already version-agnostic (populated
 	// identically by ParseV1+DecodePCX and ParseV2+DecodeV2Sprite), so the
