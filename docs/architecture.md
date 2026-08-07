@@ -13,7 +13,7 @@ graph TD
     root["character (root package)<br/>Character struct<br/>+ ResolveSprite(frame)<br/>+ Load(defPath)"]
     air["character/air<br/>Animation, Frame, ClsnBox<br/>+ Parse/Serialize(.air text)"]
     def["character/def<br/>CharacterInfo (data model)<br/>+ Parse/Serialize(.def text)"]
-    sff["character/sff<br/>Sprite, SpriteGroup<br/>+ ParseV1/DecodePCX (.sff v1 read)<br/>+ SerializeV1/EncodePCX (.sff v1 write)<br/>+ ParseV2/DecodeV2Sprite (.sff v2 read)<br/>+ SerializeV2/EncodeV2Sprite (.sff v2 write)<br/>+ Load (full-file read, either version)"]
+    sff["character/sff<br/>Sprite, SpriteGroup<br/>+ ParseV1/DecodePCX (.sff v1 read)<br/>+ SerializeV1/EncodePCX (.sff v1 write)<br/>+ ParseV2/DecodeV2Sprite (.sff v2 read)<br/>+ SerializeV2/EncodeV2Sprite (.sff v2 write)<br/>+ Load (full-file read, either version)<br/>+ ResolvePixels/Palette (index-to-RGBA resolution)"]
     cns["character/cns<br/>StateDef, Controller (data model)<br/>+ Parse/Serialize(.cns text)<br/>+ Document (comment-preserving round trip)"]
 
     root -->|assembles| air
@@ -30,7 +30,7 @@ graph TD
 | `character` (root) | Assembles the sub-packages into a single `Character{}` struct, resolves an animation frame to its actual sprite (`ResolveSprite`), and loads a full `Character` directly from a `.def` file path (`Load`) | `Animations []air.Animation`, `Sprites []sff.SpriteGroup`, and `StateDefs []cns.StateDef` all wired in, via a `.def`-driven top-level loader — completing the full read surface across all four formats |
 | `character/air` | MUGEN/Ikemen GO animation (`.air`) files: the `Animation`/`Frame`/`ClsnBox` data model, a parser that reads `.air` text into that model, a serializer that writes it back out, a `Document` type for comment-preserving round trips, and a `SpriteResolver` that resolves a `Frame`'s sprite reference against sprites loaded via `character/sff` | Data model + read path implemented; `Serialize` produces valid, re-readable output (not a byte-exact round-trip of an original file's formatting); `Document`/`ParseDocument` round-trip unmodified files byte-for-byte, comments included; `SpriteResolver` resolves every `Frame` reference to its `sff.Sprite`, or a descriptive error for a missing one, regardless of `.sff` version |
 | `character/def` | Character definition (`.def`) files — the entry point referencing the other formats: the `CharacterInfo` data model, a text parser (`Parse`), a serializer (`Serialize`), and a `Document` type for comment-preserving round trips | Data model and read+write cycle implemented (`CharacterInfo`; `Parse` reads `[Info]`/`[Files]` text into it, skipping unrecognized sections; `Serialize` writes it back out to valid, re-readable text; `Document`/`ParseDocument` round-trip unmodified files byte-for-byte, comments and unrecognized sections included); wired into the root `Character` struct via `character.Load` |
-| `character/sff` | Sprite (`.sff`, binary) files: the `Sprite`/`SpriteGroup` data model, a version-agnostic full-file loader (`Load`), a v1 header/sprite-index-table reader (`ParseV1`) and pixel decoder (`DecodePCX`), their write-path counterparts (`SerializeV1`, `EncodePCX`), a v2 header/sprite-and-palette-table reader (`ParseV2`) with its own pixel decoder (`DecodeV2Sprite`), and the v2 write-path counterparts (`SerializeV2`, `EncodeV2Sprite`) | Data model implemented (version-agnostic, no v1/v2-specific fields); v1 read+write cycle implemented (`ParseV1`/`DecodePCX`, `SerializeV1`/`EncodePCX`); v2 header/table reading implemented (`ParseV2`); v2 pixel decoding implemented for raw and PNG-encoded sprites (`DecodeV2Sprite`); v2 write path implemented for the same raw/PNG scope (`SerializeV2`/`EncodeV2Sprite`), completing the v2 read+write cycle for those formats; `Load` assembles a full `.sff` file (auto-detecting v1/v2) into `[]SpriteGroup` — RLE-based v2 formats (decode and encode) not yet implemented |
+| `character/sff` | Sprite (`.sff`, binary) files: the `Sprite`/`SpriteGroup` data model, a version-agnostic full-file loader (`Load`), a v1 header/sprite-index-table reader (`ParseV1`) and pixel decoder (`DecodePCX`), their write-path counterparts (`SerializeV1`, `EncodePCX`), a v2 header/sprite-and-palette-table reader (`ParseV2`) with its own pixel decoder (`DecodeV2Sprite`), the v2 write-path counterparts (`SerializeV2`, `EncodeV2Sprite`), and a palette resolution helper (`ResolvePixels`/`Palette`, plus version-specific `DecodeV1Palette`/`ResolveV1Palette` and `DecodeV2Palette`/`ResolveV2Palette`) turning a decoded index buffer into final on-screen colors | Data model implemented (version-agnostic, no v1/v2-specific fields); v1 read+write cycle implemented (`ParseV1`/`DecodePCX`, `SerializeV1`/`EncodePCX`); v2 header/table reading implemented (`ParseV2`); v2 pixel decoding implemented for raw and PNG-encoded sprites (`DecodeV2Sprite`); v2 write path implemented for the same raw/PNG scope (`SerializeV2`/`EncodeV2Sprite`), completing the v2 read+write cycle for those formats; `Load` assembles a full `.sff` file (auto-detecting v1/v2) into `[]SpriteGroup`; palette index-to-RGBA resolution implemented for both versions, including v1's embedded palette and v2's palette bank linking — RLE-based v2 pixel formats (decode and encode) not yet implemented |
 | `character/cns` | Combat logic / state machine (`.cns`, text) files: the `StateDef`/`Controller` data model, a text parser (`Parse`) that reads `[Statedef N]`/`[State N]` blocks into it, keeping trigger conditions and parameters as unevaluated data, a serializer (`Serialize`) that writes it back out, and a `Document` type for comment-preserving round trips | Data model and read+write cycle implemented; unrecognized sections are skipped by `Parse` rather than aborting the read, matching `def.Parse`'s tolerance; `Document`/`ParseDocument` round-trip unmodified files byte-for-byte, comments and unrelated sections included; wired into the root `Character` struct via `character.Load` |
 
 ## Read/write separation
@@ -137,9 +137,10 @@ has no equivalent of.
 
 `sff.DecodePCX` follows the same pattern: it returns a `PCXImage` (pixel
 buffer + dimensions), not a populated `Sprite`, since it decodes only the
-raw palette-index pixel data — resolving those indices into a `Sprite`'s
-`Width`/`Height` and actual colors against a palette is left to a later
-assembly step.
+raw palette-index pixel data. `Width`/`Height` resolution into `Sprite` is
+`Load`'s job (above); resolving those same indices into actual on-screen
+colors against a palette is its own further opt-in step — see
+`sff.ResolvePixels`, below.
 
 `sff.DecodeV2Sprite` returns its own `V2Image`, not `PCXImage`: unlike v1's
 always-8-bit-indexed PCX data, v2 sprites can be indexed (raw, PNG8) *or*
@@ -172,6 +173,17 @@ the real but unimplemented RLE-based formats as a descriptive error on
 write too, for the same reason item 011 gave for not guessing at their
 decode side. See
 [`.vibe/decisions/007-sff-v2-serialize-shape-and-scope.md`](../.vibe/decisions/007-sff-v2-serialize-shape-and-scope.md).
+
+`sff.ResolvePixels`/`Palette` follow the same "separate opt-in type" pattern
+one step further: turning a `PCXImage`/`V2Image` index buffer into actual
+colors needs a resolved 256-entry `Palette`, which is never added as a field
+on those pure-data types. Getting that `Palette` is version-specific
+(`DecodeV1Palette`/`ResolveV1Palette` for v1's embedded-after-pixel-data RGB
+block, `DecodeV2Palette`/`ResolveV2Palette` for v2's already-RGBA,
+independently linkable palette banks), but `ResolvePixels` itself, and the
+alpha-forcing rule it takes (`AlphaRule`), are shared across both versions.
+See
+[`.vibe/decisions/014-palette-resolution-api-shape.md`](../.vibe/decisions/014-palette-resolution-api-shape.md).
 
 ## No rendering dependency
 

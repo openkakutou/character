@@ -27,6 +27,7 @@ This project is in early-stage development. Shipped so far:
 - Reading MUGEN/Ikemen GO combat logic (`.cns`) files into structured state data — every state and the behaviors it runs, with their trigger conditions and parameters kept as raw data rather than evaluated; sections the library doesn't recognize are skipped instead of aborting the read, and a malformed state or behavior header is caught with a clear, line-numbered error instead of crashing
 - Writing combat logic data back out to valid `.cns` text, ready to be read by MUGEN/Ikemen GO or read back in by this library
 - Loading a `.cns` file and saving it back out unchanged reproduces the original file exactly, including comments, block ordering, and any sections the library doesn't otherwise recognize — so re-saving a file you haven't edited never creates a noisy diff
+- Resolving a decoded sprite's pixel data into its actual on-screen colors using the sprite's palette — including reading a `.sff` v1 sprite's own embedded palette and following `.sff` v2 palette bank sharing/linking — with the correct transparency rule applied depending on how the sprite was originally encoded
 
 Planned:
 
@@ -235,6 +236,52 @@ func main() {
 	}
 
 	fmt.Printf("sprite (%d,%d) is %dx%d pixels\n", entry.Group, entry.Image, img.Width, img.Height)
+}
+```
+
+Resolve a decoded sprite's actual on-screen colors from its palette with `sff.ResolvePixels` — this works the same for `.sff` v1 (`sff.ResolveV1Palette`) and v2 (`sff.ResolveV2Palette`) sprites, only the palette lookup differs:
+
+```go
+package main
+
+import (
+	"fmt"
+	"os"
+
+	"github.com/openkakutou/character/sff"
+)
+
+func main() {
+	f, err := os.Open("kfm.sff")
+	if err != nil {
+		panic(err)
+	}
+	defer f.Close()
+
+	table, err := sff.ParseV1(f)
+	if err != nil {
+		panic(err)
+	}
+
+	entry := table.Sprites[0]
+	data := make([]byte, entry.Length)
+	if _, err := f.ReadAt(data, entry.Offset); err != nil {
+		panic(err)
+	}
+
+	img, err := sff.DecodePCX(data)
+	if err != nil {
+		panic(err)
+	}
+
+	palette, err := sff.ResolveV1Palette(table, f, 0)
+	if err != nil {
+		panic(err)
+	}
+
+	// PCX-decoded sprites use the "index 0 is always transparent" rule.
+	pixels := sff.ResolvePixels(img.Pixels, palette, sff.AlphaForceTransparentAtIndexZero)
+	fmt.Printf("pixel (0,0) color: %v\n", pixels[0])
 }
 ```
 

@@ -40,6 +40,11 @@ A sprite whose pixel data is not stored separately in the `.sff` file: it reuses
 **Do not confuse with:** Sprite, which always has its own metadata entry even when it links to another sprite's pixel data.
 _Sources: `sff/v1.go`, `sff/v2.go`_
 
+## Palette
+The resolved set of 256 colors a Sprite's pixel indices are drawn with — the final on-screen color for each possible index byte. Getting a Sprite's Palette differs by `.sff` version: v1 embeds each non-shared sprite's own palette bytes directly in the file, right after its pixel data; v2 organizes colors into Palette banks, referenced by a Sprite's Palette index. Resolving a decoded Sprite's raw pixel indices against its Palette also applies one of two rules for how transparent index 0 is, depending on how the sprite was originally encoded.
+**Do not confuse with:** Palette bank, which is v2's specific, linkable on-disk storage unit for a Palette's colors — v1 has no equivalent, storing a palette directly per sprite instead.
+_Sources: `sff/palette.go`, `.vibe/decisions/014-palette-resolution-api-shape.md`_
+
 ## Palette bank
 A named (group, number) collection of colors a `.sff` v2 sprite can be drawn with, stored in the file's own palette table separately from the sprite table. Like a Linked sprite, a palette bank can link to (reuse) another bank's already-stored color data instead of storing its own, identified by an index. A Sprite's Palette reference identifies which palette bank it uses.
 **Do not confuse with:** Sprite, which is drawn using a palette bank's colors but is not itself one.

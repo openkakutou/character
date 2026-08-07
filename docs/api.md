@@ -1075,6 +1075,79 @@ if err != nil {
 fmt.Printf("sprite (%d,%d) is %dx%d pixels, %d bytes per pixel\n", entry.Group, entry.Image, img.Width, img.Height, img.BytesPerPixel)
 ```
 
+### Resolving palette colors
+
+```go
+type Palette [256]color.RGBA
+
+type AlphaRule int
+
+const (
+    AlphaForceTransparentAtIndexZero AlphaRule = iota // PCX (v1), PNG8 (v2)
+    AlphaLiteral                                      // RLE8, LZ5 (v2)
+)
+
+func ResolvePixels(indices []byte, palette Palette, rule AlphaRule) []color.RGBA
+
+func DecodeV1Palette(data []byte) (Palette, error)
+func ResolveV1Palette(table *V1SpriteTable, r io.ReaderAt, i int) (Palette, error)
+
+func DecodeV2Palette(data []byte) (Palette, error)
+func ResolveV2Palette(table *V2SpriteTable, r io.ReaderAt, index int) (Palette, error)
+```
+
+`ResolvePixels` turns a decoded index buffer (`PCXImage.Pixels` or
+`V2Image.Pixels` with `BytesPerPixel: 1`) into final on-screen colors, given
+a resolved `Palette`. It applies one of two alpha rules depending on how the
+sprite was encoded, not a single universal rule: PCX- and PNG8-decoded
+sprites force palette index 0 to fully transparent regardless of the
+palette's own stored value there (`AlphaForceTransparentAtIndexZero`), while
+RLE8/LZ5-decoded sprites use the palette's own stored alpha unmodified, even
+at index 0 (`AlphaLiteral`).
+
+Getting a `Palette` differs by `.sff` version, since each stores its color
+data differently:
+- **v1** embeds each non-shared sprite's own 256-color RGB palette (3
+  bytes/color, always opaque) immediately after its pixel data — at
+  `Offset+Length`, a byte range `DecodePCX` itself never reads.
+  `ResolveV1Palette` walks backward from sprite index `i` to the nearest
+  sprite (including `i`) whose `SharedPalette` is `false`, reads that
+  sprite's embedded block via `r`, and decodes it with `DecodeV1Palette`.
+- **v2** stores each palette bank's color data already as RGBA
+  (`DecodeV2Palette` just reads it as-is). `ResolveV2Palette` reads the bank
+  at `index` directly if it has its own data (`Length > 0`), or follows its
+  `LinkedIndex` chain to the bank it reuses colors from otherwise — the same
+  linked-sharing shape v2 already uses for sprite pixel data. A link chain
+  that is out of range or cycles back on itself returns a descriptive error
+  instead of looping or panicking.
+
+Kept as an explicit opt-in helper separate from `PCXImage`/`V2Image`/`Sprite`
+— those pure-data read-path types carry no palette-resolution logic. See
+[`.vibe/decisions/014-palette-resolution-api-shape.md`](../.vibe/decisions/014-palette-resolution-api-shape.md).
+
+### Example
+
+```go
+entry := table.Sprites[0]
+data := make([]byte, entry.Length)
+if _, err := f.ReadAt(data, entry.Offset); err != nil {
+    log.Fatal(err)
+}
+
+img, err := sff.DecodePCX(data)
+if err != nil {
+    log.Fatal(err)
+}
+
+palette, err := sff.ResolveV1Palette(table, f, 0)
+if err != nil {
+    log.Fatal(err)
+}
+
+pixels := sff.ResolvePixels(img.Pixels, palette, sff.AlphaForceTransparentAtIndexZero)
+fmt.Printf("pixel (0,0) color: %v\n", pixels[0])
+```
+
 ### Writing v2 files
 
 ```go

@@ -317,3 +317,17 @@ Defined in: `cns/statedef.go`
 Write-only counterpart to `V2PaletteEntry`, passed to `SerializeV2`.
 
 Defined in: `sff/v2_serializer.go`
+
+## Palette
+`[256]color.RGBA` — a resolved color table, indexed by a decoded sprite's palette index bytes (`PCXImage.Pixels` / `V2Image.Pixels` with `BytesPerPixel: 1`). Kept separate from `PCXImage`/`V2Image`/`Sprite`; produced by `DecodeV1Palette`/`ResolveV1Palette` or `DecodeV2Palette`/`ResolveV2Palette`, consumed by `ResolvePixels`.
+
+Defined in: `sff/palette.go`
+
+## AlphaRule
+`int`-based enum selecting how `ResolvePixels` determines a resolved pixel's alpha at palette index 0.
+| Value | Notes |
+|---|---|
+| AlphaForceTransparentAtIndexZero | Forces index 0 to `(0,0,0,0)` regardless of the palette's own stored value; used for PCX (v1) and PNG8 (v2) decoded pixel data |
+| AlphaLiteral | Uses the palette's own stored alpha unmodified, including at index 0; used for RLE8/LZ5 (v2) decoded pixel data |
+
+Defined in: `sff/palette.go`

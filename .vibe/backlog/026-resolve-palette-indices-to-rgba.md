@@ -1,5 +1,5 @@
 ---
-status: todo
+status: in_progress
 ---
 # Resolve Palette Index Buffers To RGBA
 
