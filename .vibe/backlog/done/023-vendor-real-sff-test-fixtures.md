@@ -1,5 +1,5 @@
 ---
-status: todo
+status: done
 ---
 # Vendor Real .sff/.act/.png Fixtures From sff-extractor
 
