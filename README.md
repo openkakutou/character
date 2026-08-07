@@ -15,7 +15,7 @@ This project is in early-stage development. Shipped so far:
 - Decoding the compressed pixel data of `.sff` v1 sprites into a plain pixel buffer with its width and height; corrupted or cut-off sprite image data is caught with a descriptive error instead of crashing
 - Saving sprites back out to a valid `.sff` v1 sprite sheet file, including their pixel data, sprite-linking (sprites that reuse another sprite's image data), and palette-sharing settings; saved files load back correctly with no image data lost
 - Reading the header and sprite/palette index tables of the newer, Ikemen-compatible (v2) `.sff` sprite sheet format, locating every sprite's image data and every palette bank's color data, including sprites/palette banks that reuse another one's data; malformed or truncated sprite sheets are caught with a descriptive error instead of crashing
-- Decoding `.sff` v2 sprite image data — both uncompressed and PNG-encoded (indexed and true-color) — into a plain pixel buffer; an unrecognized or not-yet-supported encoding is caught with a descriptive error instead of crashing
+- Decoding `.sff` v2 sprite image data — uncompressed, run-length-compressed ("RLE8"), and PNG-encoded (indexed and true-color) — into a plain pixel buffer; an unrecognized or not-yet-supported encoding is caught with a descriptive error instead of crashing
 - Saving sprites back out to a valid `.sff` v2 sprite sheet file, including uncompressed and PNG-encoded pixel data, sprite-linking, and palette bank data (with palette-linking); saved files load back correctly with no image data lost and every palette bank reference intact
 - Matching each animation frame to its actual sprite image from a loaded sprite sheet (either `.sff` version, no version-specific handling needed); a frame pointing to a sprite that doesn't exist is caught with a clear error instead of silently showing nothing
 - Assembling a character's animations and sprites into a single `Character`, so you can look up the actual sprite shown by any animation frame directly from it
@@ -31,7 +31,7 @@ This project is in early-stage development. Shipped so far:
 
 Planned:
 
-- Decoding the remaining, less common `.sff` v2 compressed pixel formats (RLE-based)
+- Decoding the remaining, less common `.sff` v2 compressed pixel formats (LZ5 and RLE5)
 - Preserving comments and ordering when the saved `.def`/`.air`/`.cns` file actually differs from the original (today this is guaranteed only when nothing changed)
 - No rendering dependency, so the library can compile to WebAssembly for web-based tooling
 <!-- vibe:end:features -->

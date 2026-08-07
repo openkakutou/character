@@ -30,7 +30,7 @@ graph TD
 | `character` (root) | Assembles the sub-packages into a single `Character{}` struct, resolves an animation frame to its actual sprite (`ResolveSprite`), and loads a full `Character` directly from a `.def` file path (`Load`) | `Animations []air.Animation`, `Sprites []sff.SpriteGroup`, and `StateDefs []cns.StateDef` all wired in, via a `.def`-driven top-level loader — completing the full read surface across all four formats |
 | `character/air` | MUGEN/Ikemen GO animation (`.air`) files: the `Animation`/`Frame`/`ClsnBox` data model, a parser that reads `.air` text into that model, a serializer that writes it back out, a `Document` type for comment-preserving round trips, and a `SpriteResolver` that resolves a `Frame`'s sprite reference against sprites loaded via `character/sff` | Data model + read path implemented; `Serialize` produces valid, re-readable output (not a byte-exact round-trip of an original file's formatting); `Document`/`ParseDocument` round-trip unmodified files byte-for-byte, comments included; `SpriteResolver` resolves every `Frame` reference to its `sff.Sprite`, or a descriptive error for a missing one, regardless of `.sff` version |
 | `character/def` | Character definition (`.def`) files — the entry point referencing the other formats: the `CharacterInfo` data model, a text parser (`Parse`), a serializer (`Serialize`), and a `Document` type for comment-preserving round trips | Data model and read+write cycle implemented (`CharacterInfo`; `Parse` reads `[Info]`/`[Files]` text into it, skipping unrecognized sections; `Serialize` writes it back out to valid, re-readable text; `Document`/`ParseDocument` round-trip unmodified files byte-for-byte, comments and unrecognized sections included); wired into the root `Character` struct via `character.Load` |
-| `character/sff` | Sprite (`.sff`, binary) files: the `Sprite`/`SpriteGroup` data model, a version-agnostic full-file loader (`Load`), a v1 header/sprite-index-table reader (`ParseV1`) and pixel decoder (`DecodePCX`), their write-path counterparts (`SerializeV1`, `EncodePCX`), a v2 header/sprite-and-palette-table reader (`ParseV2`) with its own pixel decoder (`DecodeV2Sprite`), the v2 write-path counterparts (`SerializeV2`, `EncodeV2Sprite`), and a palette resolution helper (`ResolvePixels`/`Palette`, plus version-specific `DecodeV1Palette`/`ResolveV1Palette` and `DecodeV2Palette`/`ResolveV2Palette`) turning a decoded index buffer into final on-screen colors | Data model implemented (version-agnostic, no v1/v2-specific fields); v1 read+write cycle implemented (`ParseV1`/`DecodePCX`, `SerializeV1`/`EncodePCX`); v2 header/table reading implemented (`ParseV2`); v2 pixel decoding implemented for raw and PNG-encoded sprites (`DecodeV2Sprite`); v2 write path implemented for the same raw/PNG scope (`SerializeV2`/`EncodeV2Sprite`), completing the v2 read+write cycle for those formats; `Load` assembles a full `.sff` file (auto-detecting v1/v2) into `[]SpriteGroup`; palette index-to-RGBA resolution implemented for both versions, including v1's embedded palette and v2's palette bank linking — RLE-based v2 pixel formats (decode and encode) not yet implemented |
+| `character/sff` | Sprite (`.sff`, binary) files: the `Sprite`/`SpriteGroup` data model, a version-agnostic full-file loader (`Load`), a v1 header/sprite-index-table reader (`ParseV1`) and pixel decoder (`DecodePCX`), their write-path counterparts (`SerializeV1`, `EncodePCX`), a v2 header/sprite-and-palette-table reader (`ParseV2`) with its own pixel decoder (`DecodeV2Sprite`), the v2 write-path counterparts (`SerializeV2`, `EncodeV2Sprite`), and a palette resolution helper (`ResolvePixels`/`Palette`, plus version-specific `DecodeV1Palette`/`ResolveV1Palette` and `DecodeV2Palette`/`ResolveV2Palette`) turning a decoded index buffer into final on-screen colors | Data model implemented (version-agnostic, no v1/v2-specific fields); v1 read+write cycle implemented (`ParseV1`/`DecodePCX`, `SerializeV1`/`EncodePCX`); v2 header/table reading implemented (`ParseV2`); v2 pixel decoding implemented for raw, RLE8-compressed, and PNG-encoded sprites (`DecodeV2Sprite`); v2 write path implemented for the raw/PNG scope only (`SerializeV2`/`EncodeV2Sprite`), completing the v2 read+write cycle for those formats; `Load` assembles a full `.sff` file (auto-detecting v1/v2) into `[]SpriteGroup`; palette index-to-RGBA resolution implemented for both versions, including v1's embedded palette and v2's palette bank linking — LZ5/RLE5 v2 pixel decoding, and RLE8/LZ5/RLE5 v2 pixel encoding, not yet implemented |
 | `character/cns` | Combat logic / state machine (`.cns`, text) files: the `StateDef`/`Controller` data model, a text parser (`Parse`) that reads `[Statedef N]`/`[State N]` blocks into it, keeping trigger conditions and parameters as unevaluated data, a serializer (`Serialize`) that writes it back out, and a `Document` type for comment-preserving round trips | Data model and read+write cycle implemented; unrecognized sections are skipped by `Parse` rather than aborting the read, matching `def.Parse`'s tolerance; `Document`/`ParseDocument` round-trip unmodified files byte-for-byte, comments and unrelated sections included; wired into the root `Character` struct via `character.Load` |
 
 ## Read/write separation
@@ -146,9 +146,10 @@ colors against a palette is its own further opt-in step — see
 always-8-bit-indexed PCX data, v2 sprites can be indexed (raw, PNG8) *or*
 direct-color (PNG24, PNG32, no palette involved at all), so `V2Image` tracks
 how many bytes each pixel occupies rather than assuming one index byte per
-pixel. Only raw and PNG-encoded sprites are decoded today; the real but
-less common RLE-based v2 formats return a descriptive "unsupported format"
-error rather than being guessed at. See
+pixel. Raw, run-length-compressed ("RLE8"), and PNG-encoded sprites are
+decoded today; the remaining, less common RLE-based v2 formats (LZ5, RLE5)
+return a descriptive "unsupported format" error rather than being guessed
+at. See
 [`.vibe/decisions/006-sff-v2-pixel-decode-shape-and-scope.md`](../.vibe/decisions/006-sff-v2-pixel-decode-shape-and-scope.md).
 
 On the write side, `sff.SerializeV1` mirrors this with its own write-only
@@ -168,10 +169,12 @@ they always write sprite and palette data into the file's single literal
 data section, since `V2SpriteEntry` — the type a caller would round-trip
 through this write path — has no field recording which of the format's two
 data sections a sprite's bytes originally came from; and `EncodeV2Sprite`
-only encodes the same raw/PNG format scope `DecodeV2Sprite` decodes, leaving
-the real but unimplemented RLE-based formats as a descriptive error on
-write too, for the same reason item 011 gave for not guessing at their
-decode side. See
+only encodes the raw/PNG format scope `DecodeV2Sprite` originally decoded
+(item 011) — it has not grown alongside `DecodeV2Sprite`'s later RLE8
+decode support (item 024), so RLE8, like the still fully unimplemented
+LZ5/RLE5 formats, remains a descriptive error on the write side, for the
+same reason item 011 gave for not guessing at any of their decode sides.
+See
 [`.vibe/decisions/007-sff-v2-serialize-shape-and-scope.md`](../.vibe/decisions/007-sff-v2-serialize-shape-and-scope.md).
 
 `sff.ResolvePixels`/`Palette` follow the same "separate opt-in type" pattern

@@ -181,14 +181,14 @@ func TestDecodeV2Sprite_ReturnsErrorOnUnrecognizedFormat(t *testing.T) {
 }
 
 func TestDecodeV2Sprite_ReturnsErrorOnUnimplementedCompressedFormat(t *testing.T) {
-	// RLE8 is a real .sff v2 format code (see ParseV2's V2Format*
-	// constants) but is not decoded by this item; it must still fail
+	// LZ5 is a real .sff v2 format code (see ParseV2's V2Format* constants)
+	// but is not decoded yet (see backlog item 025); it must still fail
 	// descriptively rather than being silently misinterpreted as raw data.
 	data := []byte{1, 2, 3, 4, 5, 6}
 
-	_, err := DecodeV2Sprite(V2FormatRLE8, 3, 2, 8, data)
+	_, err := DecodeV2Sprite(V2FormatLZ5, 3, 2, 8, data)
 	if err == nil {
-		t.Fatal("expected an error for the unimplemented RLE8 format, got nil")
+		t.Fatal("expected an error for the unimplemented LZ5 format, got nil")
 	}
 }
 
@@ -209,5 +209,153 @@ func TestDecodeV2Sprite_ReturnsErrorOnPNGDimensionMismatch(t *testing.T) {
 	_, err := DecodeV2Sprite(V2FormatPNG8, 2, 2, 8, data)
 	if err == nil {
 		t.Fatal("expected an error for a PNG whose dimensions disagree with the declared sprite size, got nil")
+	}
+}
+
+// buildRLE8 prepends the 4-byte little-endian declared-decompressed-length
+// prefix real .sff v2 RLE8 pixel data starts with (see decodeRLE8's doc
+// comment) to a hand-built control stream, mirroring how a sprite's raw
+// pixel data is actually laid out on disk.
+func buildRLE8(prefixLength uint32, stream []byte) []byte {
+	data := make([]byte, 4+len(stream))
+	data[0] = byte(prefixLength)
+	data[1] = byte(prefixLength >> 8)
+	data[2] = byte(prefixLength >> 16)
+	data[3] = byte(prefixLength >> 24)
+	copy(data[4:], stream)
+	return data
+}
+
+func TestDecodeV2Sprite_DecodesRLE8LiteralBytes(t *testing.T) {
+	// Every byte here has its top two bits clear, so none of them is
+	// mistaken for a run-length marker (0b01xxxxxx): a pure literal stream,
+	// one byte per pixel.
+	indices := []byte{10, 20, 30, 40}
+	data := buildRLE8(4, indices)
+
+	img, err := DecodeV2Sprite(V2FormatRLE8, 4, 1, 8, data)
+	if err != nil {
+		t.Fatalf("DecodeV2Sprite returned error: %v", err)
+	}
+	if img.Width != 4 || img.Height != 1 {
+		t.Fatalf("got Width=%d Height=%d, want Width=4 Height=1", img.Width, img.Height)
+	}
+	if img.BytesPerPixel != 1 {
+		t.Fatalf("got BytesPerPixel=%d, want 1", img.BytesPerPixel)
+	}
+	if !bytesEqual(img.Pixels, indices) {
+		t.Fatalf("got Pixels=%v, want %v", img.Pixels, indices)
+	}
+}
+
+func TestDecodeV2Sprite_DecodesRLE8RunLengthEncodedData(t *testing.T) {
+	// A 3-pixel run of index 5 (marker 0x40|3, value 5), followed by three
+	// literal pixels (200, 210, 220 — all >= 0xC0, so none collides with the
+	// 0b01xxxxxx marker pattern).
+	stream := []byte{0x43, 5, 200, 210, 220}
+	data := buildRLE8(6, stream)
+	want := []byte{5, 5, 5, 200, 210, 220}
+
+	img, err := DecodeV2Sprite(V2FormatRLE8, 6, 1, 8, data)
+	if err != nil {
+		t.Fatalf("DecodeV2Sprite returned error: %v", err)
+	}
+	if !bytesEqual(img.Pixels, want) {
+		t.Fatalf("got Pixels=%v, want %v", img.Pixels, want)
+	}
+}
+
+func TestDecodeV2Sprite_DecodesRLE8SingleRunFillingEntireImage(t *testing.T) {
+	// A single run marker (0x40|5, value 7) covers the whole declared image.
+	stream := []byte{0x45, 7}
+	data := buildRLE8(5, stream)
+	want := []byte{7, 7, 7, 7, 7}
+
+	img, err := DecodeV2Sprite(V2FormatRLE8, 5, 1, 8, data)
+	if err != nil {
+		t.Fatalf("DecodeV2Sprite returned error: %v", err)
+	}
+	if !bytesEqual(img.Pixels, want) {
+		t.Fatalf("got Pixels=%v, want %v", img.Pixels, want)
+	}
+}
+
+func TestDecodeV2Sprite_DecodesSinglePixelRLE8Sprite(t *testing.T) {
+	// 1x1 boundary case: one literal byte.
+	data := buildRLE8(1, []byte{9})
+
+	img, err := DecodeV2Sprite(V2FormatRLE8, 1, 1, 8, data)
+	if err != nil {
+		t.Fatalf("DecodeV2Sprite returned error: %v", err)
+	}
+	if img.Width != 1 || img.Height != 1 {
+		t.Fatalf("got Width=%d Height=%d, want Width=1 Height=1", img.Width, img.Height)
+	}
+	if !bytesEqual(img.Pixels, []byte{9}) {
+		t.Fatalf("got Pixels=%v, want [9]", img.Pixels)
+	}
+}
+
+func TestDecodeV2Sprite_ReturnsErrorOnRLE8DataShorterThanLengthPrefix(t *testing.T) {
+	// Real RLE8 data always starts with a 4-byte declared-length prefix;
+	// anything shorter than that can't even hold the prefix.
+	data := []byte{1, 2, 3}
+
+	_, err := DecodeV2Sprite(V2FormatRLE8, 3, 2, 8, data)
+	if err == nil {
+		t.Fatal("expected an error for RLE8 data shorter than the length prefix, got nil")
+	}
+}
+
+func TestDecodeV2Sprite_ReturnsErrorOnRLE8RunOverrunningImageBounds(t *testing.T) {
+	// Declares a 2x1 image (2 pixels) but the control stream's run marker
+	// asks for 5 repeats of a single value.
+	stream := []byte{0x45, 7}
+	data := buildRLE8(2, stream)
+
+	_, err := DecodeV2Sprite(V2FormatRLE8, 2, 1, 8, data)
+	if err == nil {
+		t.Fatal("expected an error for a run overrunning the declared image size, got nil")
+	}
+}
+
+func TestDecodeV2Sprite_ReturnsErrorOnRLE8TruncatedMidRun(t *testing.T) {
+	// A run-length marker byte with no following value byte.
+	stream := []byte{0x41}
+	data := buildRLE8(3, stream)
+
+	_, err := DecodeV2Sprite(V2FormatRLE8, 3, 1, 8, data)
+	if err == nil {
+		t.Fatal("expected an error for a run marker truncated before its value byte, got nil")
+	}
+}
+
+func TestDecodeV2Sprite_ReturnsErrorOnRLE8InsufficientPixelData(t *testing.T) {
+	// Declares a 3-pixel image but the control stream only ever produces 1
+	// pixel before running out of input.
+	stream := []byte{10}
+	data := buildRLE8(3, stream)
+
+	_, err := DecodeV2Sprite(V2FormatRLE8, 3, 1, 8, data)
+	if err == nil {
+		t.Fatal("expected an error for RLE8 data that ends before filling the declared image size, got nil")
+	}
+}
+
+func TestDecodeV2Sprite_ReturnsErrorOnRLE8UnsupportedColorDepth(t *testing.T) {
+	data := buildRLE8(4, []byte{1, 2, 3, 4})
+
+	_, err := DecodeV2Sprite(V2FormatRLE8, 4, 1, 4, data)
+	if err == nil {
+		t.Fatal("expected an error for an unsupported RLE8 color depth, got nil")
+	}
+}
+
+func TestDecodeV2Sprite_ReturnsErrorOnRLE8InvalidDimensions(t *testing.T) {
+	data := buildRLE8(0, nil)
+
+	_, err := DecodeV2Sprite(V2FormatRLE8, 0, 0, 8, data)
+	if err == nil {
+		t.Fatal("expected an error for zero declared dimensions, got nil")
 	}
 }

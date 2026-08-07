@@ -1039,10 +1039,22 @@ buffer. `format`, `width`, `height`, and `colorDepth` come from that same
 `V2SpriteEntry`: unlike PCX, `V2FormatRaw` data doesn't self-describe its
 own dimensions, so the caller supplies them.
 
-Two families of `V2Format*` codes are supported:
+Three families of `V2Format*` codes are supported:
 - `V2FormatRaw` — literal, uncompressed 8-bit indexed pixel data (one byte
   per pixel, row-major). Requires `colorDepth == 8` and `len(data) ==
   width*height`.
+- `V2FormatRLE8` — run-length-compressed 8-bit indexed pixel data. On disk,
+  `data` starts with a 4-byte declared decompressed length (skipped, not
+  validated — real files aren't always reliable about its value) followed
+  by a control stream: a byte whose top two bits are `0b01` (mask `0xc0`,
+  value `0x40`) is a run marker, its low 6 bits giving a repeat count for
+  the byte that follows it; any other byte is a single literal palette
+  index. Decoding stops once `width*height` pixels have been produced;
+  yields indexed data (`BytesPerPixel == 1`), same as `V2FormatRaw`.
+  Requires `colorDepth == 8`. Malformed input (too short to hold the length
+  prefix, a run truncated before its value byte, a run that would overrun
+  the declared image size, or a stream that runs out before filling it)
+  returns a descriptive error instead of panicking.
 - `V2FormatPNG8` / `V2FormatPNG24` / `V2FormatPNG32` — decoded via the
   standard library's `image/png`. PNG8 yields indexed data
   (`BytesPerPixel == 1`, palette index bytes, same as `V2FormatRaw` and
@@ -1050,12 +1062,12 @@ Two families of `V2Format*` codes are supported:
   data (`BytesPerPixel == 3`). PNG32 yields RGBA data (`BytesPerPixel == 4`,
   straight/non-premultiplied alpha).
 
-`V2FormatRLE8`, `V2FormatRLE5`, and `V2FormatLZ5` are real on-disk format
-codes `ParseV2` can report in `V2SpriteEntry.Format`, but are not decoded by
-this function yet — like any other unrecognized format value, they return a
-descriptive error rather than being silently misinterpreted. A PNG whose own
-embedded dimensions disagree with `width`/`height`, or PNG data that fails
-to decode at all, also returns a descriptive error. See
+`V2FormatRLE5` and `V2FormatLZ5` are real on-disk format codes `ParseV2` can
+report in `V2SpriteEntry.Format`, but are not decoded by this function yet
+— like any other unrecognized format value, they return a descriptive error
+rather than being silently misinterpreted. A PNG whose own embedded
+dimensions disagree with `width`/`height`, or PNG data that fails to decode
+at all, also returns a descriptive error. See
 [`.vibe/decisions/006-sff-v2-pixel-decode-shape-and-scope.md`](../.vibe/decisions/006-sff-v2-pixel-decode-shape-and-scope.md).
 
 ### Example
