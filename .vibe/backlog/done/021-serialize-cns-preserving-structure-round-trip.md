@@ -1,5 +1,5 @@
 ---
-status: todo
+status: done
 depends_on: [020]
 ---
 # Serialize .cns Preserving Structure With Round-Trip Suite
