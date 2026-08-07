@@ -8,21 +8,22 @@ package character
 
 import (
 	"github.com/openkakutou/character/air"
+	"github.com/openkakutou/character/cns"
 	"github.com/openkakutou/character/sff"
 )
 
 // Character is the in-memory representation of a MUGEN/Ikemen GO character,
-// combining its definition, sprites, animations, and combat logic once the
-// corresponding sub-packages are implemented.
+// combining its definition, sprites, animations, and combat logic.
 //
-// Animations and Sprites are exposed through the air/sff read-path types
-// only (air.Animation, sff.SpriteGroup) — never a write-only,
-// format-preservation type — per CLAUDE.md's read/write separation
-// constraint.
+// Animations, Sprites, and StateDefs are exposed through the air/sff/cns
+// read-path types only (air.Animation, sff.SpriteGroup, cns.StateDef) —
+// never a write-only, format-preservation type — per CLAUDE.md's read/write
+// separation constraint.
 type Character struct {
 	Name       string
 	Animations []air.Animation
 	Sprites    []sff.SpriteGroup
+	StateDefs  []cns.StateDef
 }
 
 // ResolveSprite returns the Sprite that frame's (Group, Image) reference

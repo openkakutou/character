@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/openkakutou/character/cns"
 	"github.com/openkakutou/character/sff"
 )
 
@@ -24,9 +25,26 @@ author = Test Author
 [Files]
 sprite = char.sff
 anim = char.air
+cns = char.cns
 `
 	if err := os.WriteFile(filepath.Join(dir, "char.def"), []byte(defContent), 0o644); err != nil {
 		t.Fatalf("test setup: writing .def fixture: %v", err)
+	}
+
+	cnsContent := `[Statedef 200, Attack]
+type = S
+movetype = A
+physics = S
+anim = 200
+ctrl = 0
+
+[State 200, ChangeState]
+type = ChangeState
+trigger1 = Time = 0
+value = 0
+`
+	if err := os.WriteFile(filepath.Join(dir, "char.cns"), []byte(cnsContent), 0o644); err != nil {
+		t.Fatalf("test setup: writing .cns fixture: %v", err)
 	}
 
 	airContent := `[Begin Action 200]
@@ -103,6 +121,23 @@ func TestLoad_ValidDefFile_ProducesFullyPopulatedCharacter(t *testing.T) {
 			t.Errorf("frame (group %d, image %d): unexpected ResolveSprite error: %v", frame.Group, frame.Image, err)
 		}
 	}
+
+	if len(c.StateDefs) != 1 {
+		t.Fatalf("expected 1 state def, got %d", len(c.StateDefs))
+	}
+	state := c.StateDefs[0]
+	if state.Number != 200 {
+		t.Errorf("expected state number 200, got %d", state.Number)
+	}
+	if state.MoveType != cns.MoveTypeAttack {
+		t.Errorf("expected move type %q, got %q", cns.MoveTypeAttack, state.MoveType)
+	}
+	if len(state.Controllers) != 1 {
+		t.Fatalf("expected 1 controller, got %d", len(state.Controllers))
+	}
+	if state.Controllers[0].Type != "ChangeState" {
+		t.Errorf("expected controller type %q, got %q", "ChangeState", state.Controllers[0].Type)
+	}
 }
 
 func TestLoad_DefReferencesMissingAnimationFile_ReturnsDescriptiveErrorNotPanic(t *testing.T) {
@@ -128,6 +163,19 @@ func TestLoad_DefReferencesMissingSpriteFile_ReturnsDescriptiveErrorNotPanic(t *
 	_, err := Load(defPath)
 	if err == nil {
 		t.Fatal("expected an error when the referenced .sff file is missing, got nil")
+	}
+}
+
+func TestLoad_DefReferencesMissingCnsFile_ReturnsDescriptiveErrorNotPanic(t *testing.T) {
+	defPath := writeFixtureCharacter(t)
+	dir := filepath.Dir(defPath)
+	if err := os.Remove(filepath.Join(dir, "char.cns")); err != nil {
+		t.Fatalf("test setup: removing .cns fixture: %v", err)
+	}
+
+	_, err := Load(defPath)
+	if err == nil {
+		t.Fatal("expected an error when the referenced .cns file is missing, got nil")
 	}
 }
 

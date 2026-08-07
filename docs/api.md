@@ -12,6 +12,7 @@ type Character struct {
     Name       string
     Animations []air.Animation
     Sprites    []sff.SpriteGroup
+    StateDefs  []cns.StateDef
 }
 
 func (c *Character) ResolveSprite(frame air.Frame) (sff.Sprite, error)
@@ -20,27 +21,24 @@ func Load(path string) (*Character, error)
 ```
 
 `Character` is the assembled unit a library consumer (editor, engine) works
-with: `Animations`/`Sprites` are exposed through the `air`/`sff` read-path
-types only — never a write-only, format-preservation type. `ResolveSprite`
-looks up the actual `sff.Sprite` a `Frame` (typically one of
-`c.Animations[i].Frames`) shows, by delegating to
+with: `Animations`/`Sprites`/`StateDefs` are exposed through the
+`air`/`sff`/`cns` read-path types only — never a write-only,
+format-preservation type. `ResolveSprite` looks up the actual `sff.Sprite` a
+`Frame` (typically one of `c.Animations[i].Frames`) shows, by delegating to
 `air.NewSpriteResolver(c.Sprites)`; it returns the same kind of descriptive
 error `SpriteResolver.Resolve` does when no sprite in `c.Sprites` matches
 the frame's `(Group, Image)` — including on a zero-value `Character`, whose
 `Sprites` is empty.
 
 `Load` is the library's top-level entry point: given a `.def` file path, it
-parses the file (via `def.Parse`), resolves the `.air`/`.sff` paths it
-references relative to the `.def` file's own directory, reads both (via
-`air.Parse` and a new `sff.Load` that auto-detects the sprite sheet's
-on-disk version), and returns a fully assembled `Character`. A missing or
-unreadable `.def`, `.air`, or `.sff` file returns a descriptive error
-naming which file and step failed, rather than panicking. See
+parses the file (via `def.Parse`), resolves the `.air`/`.sff`/`.cns` paths
+it references relative to the `.def` file's own directory, reads all three
+(via `air.Parse`, a `sff.Load` that auto-detects the sprite sheet's on-disk
+version, and `cns.Parse`), and returns a fully assembled `Character`. A
+missing or unreadable `.def`, `.air`, `.sff`, or `.cns` file returns a
+descriptive error naming which file and step failed, rather than panicking.
+See
 [`.vibe/decisions/010-def-loader-assembles-character-from-referenced-files.md`](../.vibe/decisions/010-def-loader-assembles-character-from-referenced-files.md).
-
-`.cns` fields (combat logic) are not wired in yet: `cns.Parse`/`cns.Serialize`
-exist (see `character/cns` below) but `Character`/`Load` don't reference them
-(tracked by backlog item 022).
 
 ### Example
 
@@ -58,15 +56,18 @@ for _, frame := range c.Animations[0].Frames {
     fmt.Printf("frame shows sprite (%d,%d), %dx%d pixels\n",
         sprite.Group, sprite.Image, sprite.Width, sprite.Height)
 }
+
+fmt.Printf("%d states\n", len(c.StateDefs))
 ```
 
-Assembling a `Character` from animations/sprites already loaded in memory
-still works the same way, without going through `Load`:
+Assembling a `Character` from animations/sprites/states already loaded in
+memory still works the same way, without going through `Load`:
 
 ```go
 c := character.Character{
     Animations: animations, // from air.Parse
     Sprites:    spriteGroups, // from sff.Load, or ParseV1/ParseV2 + decode
+    StateDefs:  stateDefs, // from cns.Parse
 }
 ```
 

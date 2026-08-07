@@ -22,7 +22,7 @@ This project is in early-stage development. Shipped so far:
 - Reading MUGEN/Ikemen GO character definition (`.def`) files into that data model: name, author, and every referenced file (sprite, animation, sound, commands, combat logic, additional states, palettes); sections the library doesn't recognize are skipped instead of aborting the read, and a malformed line is caught with a clear, line-numbered error instead of crashing
 - Writing character definitions back out to valid `.def` text, ready to be read by MUGEN/Ikemen GO or read back in by this library
 - Loading a `.def` file and saving it back out unchanged reproduces the original file exactly, including comments, section ordering, and any sections the library doesn't otherwise recognize — so re-saving a file you haven't edited never creates a noisy diff
-- Loading a full character in one step from its `.def` file — its name, animations, and sprites (either `.sff` version) are automatically read from the files it references and assembled into a ready-to-use `Character`; a missing or unreadable referenced file is caught with a clear error instead of crashing
+- Loading a full character in one step from its `.def` file — its name, animations, sprites (either `.sff` version), and combat logic are automatically read from the files it references and assembled into a ready-to-use `Character`; a missing or unreadable referenced file is caught with a clear error instead of crashing
 - Reading MUGEN/Ikemen GO combat logic (`.cns`) files into structured state data — every state and the behaviors it runs, with their trigger conditions and parameters kept as raw data rather than evaluated; sections the library doesn't recognize are skipped instead of aborting the read, and a malformed state or behavior header is caught with a clear, line-numbered error instead of crashing
 - Writing combat logic data back out to valid `.cns` text, ready to be read by MUGEN/Ikemen GO or read back in by this library
 - Loading a `.cns` file and saving it back out unchanged reproduces the original file exactly, including comments, block ordering, and any sections the library doesn't otherwise recognize — so re-saving a file you haven't edited never creates a noisy diff
@@ -30,7 +30,6 @@ This project is in early-stage development. Shipped so far:
 Planned:
 
 - Decoding the remaining, less common `.sff` v2 compressed pixel formats (RLE-based)
-- Including combat logic when a character is loaded from a `.def` file
 - Preserving comments and ordering when the saved `.def`/`.air`/`.cns` file actually differs from the original (today this is guaranteed only when nothing changed)
 - No rendering dependency, so the library can compile to WebAssembly for web-based tooling
 <!-- vibe:end:features -->
@@ -540,7 +539,7 @@ func main() {
 }
 ```
 
-Load a full character directly from its `.def` file with `character.Load` — this reads the `.def`, resolves and reads its referenced `.air`/`.sff` files, and hands you back a ready-to-use `Character`:
+Load a full character directly from its `.def` file with `character.Load` — this reads the `.def`, resolves and reads its referenced `.air`/`.sff`/`.cns` files, and hands you back a ready-to-use `Character`:
 
 ```go
 package main
@@ -558,7 +557,7 @@ func main() {
 		panic(err)
 	}
 
-	fmt.Printf("%s: %d animations, %d sprite groups\n", c.Name, len(c.Animations), len(c.Sprites))
+	fmt.Printf("%s: %d animations, %d sprite groups, %d states\n", c.Name, len(c.Animations), len(c.Sprites), len(c.StateDefs))
 
 	for _, frame := range c.Animations[0].Frames {
 		sprite, err := c.ResolveSprite(frame)
