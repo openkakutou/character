@@ -1,5 +1,5 @@
 ---
-status: todo
+status: done
 depends_on: [023, 026, 027]
 ---
 # Fixture-Driven v1 Sprite Test Suite
