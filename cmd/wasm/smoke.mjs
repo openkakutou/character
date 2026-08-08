@@ -75,6 +75,56 @@ assert(typeof argCountResult.error === "string" && argCountResult.error.length >
 const afterErrorResult = globalThis.OpenKakutouCharacter.load(defBytes, airBytes, sffBytes, cnsBytes);
 assert(afterErrorResult.error === null, "module still works after a prior error");
 
+// --- resolveSprites: batched sprite pixel resolution (item 034) ---
+// v1-basic.sff carries exactly one real sprite, at (group 0, image 0).
+
+// --- nominal batch: one real sprite, one nonexistent (group, image) ---
+const spritesResult = globalThis.OpenKakutouCharacter.resolveSprites(sffBytes, [[0, 0], [999, 999]], null);
+assert(Array.isArray(spritesResult) && spritesResult.length === 2, "resolveSprites returns one result per request");
+
+const [found, notFound] = spritesResult;
+assert(found.error === null, `resolveSprites: real sprite reports no error (got: ${found.error})`);
+assert(found.pixels instanceof Uint8Array, "resolveSprites: real sprite returns a pixel buffer");
+assert(found.pixels.length === found.width * found.height * 4, "resolveSprites: pixel buffer length is width*height*4 (RGBA)");
+assert(found.width > 0 && found.height > 0, `resolveSprites: real sprite has positive dimensions (got: ${found.width}x${found.height})`);
+
+assert(notFound.pixels === null, "resolveSprites: nonexistent sprite returns null pixels");
+assert(notFound.width === 0 && notFound.height === 0, "resolveSprites: nonexistent sprite reports 0x0 dimensions");
+assert(typeof notFound.error === "string" && notFound.error.startsWith("sprite not found: "), `resolveSprites: nonexistent sprite error is distinguishable (got: ${notFound.error})`);
+
+// --- external palette override recolors the sprite ---
+const actBytes = toUint8Array("sff/testdata/files/cyclops-v1-palette1.act");
+const overriddenResult = globalThis.OpenKakutouCharacter.resolveSprites(sffBytes, [[0, 0]], actBytes);
+assert(overriddenResult[0].error === null, `resolveSprites: override reports no error (got: ${overriddenResult[0].error})`);
+const differs = overriddenResult[0].pixels.some((b, i) => b !== found.pixels[i]);
+assert(differs, "resolveSprites: external palette override changes the resolved colors");
+
+// --- undefined and null overrideBytes are equivalent to "no override" ---
+const undefinedOverrideResult = globalThis.OpenKakutouCharacter.resolveSprites(sffBytes, [[0, 0]], undefined);
+const nullOverrideResult = globalThis.OpenKakutouCharacter.resolveSprites(sffBytes, [[0, 0]], null);
+assert(
+	undefinedOverrideResult[0].pixels.every((b, i) => b === nullOverrideResult[0].pixels[i]),
+	"resolveSprites: undefined and null overrideBytes produce identical output",
+);
+assert(
+	nullOverrideResult[0].pixels.every((b, i) => b === found.pixels[i]),
+	"resolveSprites: no override matches the sprite's own palette",
+);
+
+// --- an explicitly empty overrideBytes is an error, not a silent fallback ---
+const emptyOverrideResult = globalThis.OpenKakutouCharacter.resolveSprites(sffBytes, [[0, 0]], new Uint8Array(0));
+assert(emptyOverrideResult[0].pixels === null, "resolveSprites: empty overrideBytes returns null pixels");
+assert(typeof emptyOverrideResult[0].error === "string" && emptyOverrideResult[0].error.length > 0, "resolveSprites: empty overrideBytes reports an error");
+
+// --- malformed sffBytes: no throw, every request in the batch reports an error ---
+const malformedBatchResult = globalThis.OpenKakutouCharacter.resolveSprites(new TextEncoder().encode("garbage"), [[0, 0]], null);
+assert(malformedBatchResult[0].pixels === null, "resolveSprites: malformed sffBytes returns null pixels");
+assert(typeof malformedBatchResult[0].error === "string" && malformedBatchResult[0].error.length > 0, "resolveSprites: malformed sffBytes reports an error");
+
+// The module must still respond correctly after resolveSprites errors too.
+const afterResolveErrorResult = globalThis.OpenKakutouCharacter.load(defBytes, airBytes, sffBytes, cnsBytes);
+assert(afterResolveErrorResult.error === null, "module still works after a prior resolveSprites error");
+
 if (process.exitCode) {
 	console.error("\nsmoke test FAILED");
 } else {

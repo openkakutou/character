@@ -124,9 +124,20 @@ type V2SpriteTable struct {
 // that sprite's encoded pixel data. The second return value is false if no
 // sprite with that (group, image) exists in the table.
 func (t *V2SpriteTable) Offset(group, image int) (int64, bool) {
-	for _, s := range t.Sprites {
+	i, ok := t.Index(group, image)
+	if !ok {
+		return 0, false
+	}
+	return t.Sprites[i].Offset, true
+}
+
+// Index resolves the (group, image) pair to its position within
+// t.Sprites. The second return value is false if no sprite with that
+// (group, image) exists in the table.
+func (t *V2SpriteTable) Index(group, image int) (int, bool) {
+	for i, s := range t.Sprites {
 		if s.Group == group && s.Image == image {
-			return s.Offset, true
+			return i, true
 		}
 	}
 	return 0, false

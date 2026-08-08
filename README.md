@@ -32,6 +32,7 @@ This project is in early-stage development. Shipped so far:
 - Resolving a `.sff` v1 sprite's actual decoded pixel data through the same public interface as its palette, validated against real, unmodified MUGEN/Ikemen character files rather than only hand-built test data — this caught and fixed two decoding inaccuracies affecting some real sprites: a sprite whose stored "linked sprite" reference points at itself or a later sprite now correctly falls back to its own image, and a sprite's own color palette is now located correctly for every real file layout, not just the common case; a sprite with a corrupted or nonsensical declared size falls back to a blank placeholder image instead of risking a crash
 
 - A character (name, animations, sprites, combat logic) can now be loaded directly in a web browser via a WebAssembly build — no local Go installation needed; tagging a new release automatically publishes a downloadable module ready for a web app to load
+- A sprite's actual image can now be resolved directly in the browser via that same WebAssembly build — not just its dimensions and metadata — including recoloring it with an external palette file; multiple sprites can be resolved in a single call so browsing a whole sprite sheet doesn't require one round trip per sprite
 
 Planned:
 

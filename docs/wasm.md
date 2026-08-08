@@ -49,8 +49,7 @@ globalThis.OpenKakutouCharacter.load(defBytes, airBytes, sffBytes, cnsBytes)
 See
 [`.vibe/decisions/019-wasm-entrypoint-byte-buffer-loading-and-json-contract.md`](../.vibe/decisions/019-wasm-entrypoint-byte-buffer-loading-and-json-contract.md)
 for why the API is shaped this way (byte buffers over paths, one JSON blob
-over per-resource calls, sprite pixel/palette color data deliberately out of
-scope for now — `Sprite` metadata only).
+over per-resource calls).
 
 ### Example
 
@@ -60,6 +59,65 @@ if (result.error) {
   throw new Error(result.error);
 }
 const character = JSON.parse(result.character);
+```
+
+## Resolving sprite pixels
+
+`load`'s JSON only carries sprite *metadata* (dimensions, axis, palette
+index) — never decoded pixel/color data. A second global resolves a
+sprite's actual on-screen image:
+
+```js
+globalThis.OpenKakutouCharacter.resolveSprites(sffBytes, requests, overrideBytes)
+```
+
+- **Arguments**:
+  - `sffBytes` — a `Uint8Array` of a `.sff` file's raw bytes, transferred
+    once for the whole call, not once per sprite — batch several requests
+    together (e.g. every sprite in a sheet) rather than calling this once
+    per sprite, which would re-transfer the whole file each time.
+  - `requests` — an array of `[group, image]` number pairs, one per sprite
+    to resolve.
+  - `overrideBytes` — optional. `undefined` or `null` means "use each
+    sprite's own palette". Any other value, including an empty
+    `Uint8Array`, is decoded as an external `.act` palette file and applied
+    to every sprite in the batch in place of its own; an invalid value
+    (wrong size, etc.) is reported as an error for every request, never a
+    silent fallback to each sprite's own palette.
+- **Return value**: an array with one result object per request, in the
+  same order, shaped `{ pixels, width, height, error }` — exactly one of
+  `pixels`/`error` is non-`null` (`width`/`height` are `0` on error, not
+  `undefined`):
+  - `pixels` — a flat, row-major `Uint8Array` with straight (non-
+    premultiplied) alpha, `width * height * 4` bytes (RGBA per pixel) —
+    directly usable as `new ImageData(pixels, width, height)`.
+  - `error` — a descriptive message. A request naming a sprite that
+    doesn't exist is prefixed `"sprite not found: "`, distinguishable from
+    every other failure (malformed `sffBytes`, corrupt pixel/palette data,
+    an implausibly large declared sprite size) — useful when probing
+    candidate sprites, e.g. while browsing a sheet.
+- Like `load`, this never throws — an internal panic is recovered and, since
+  the panic could occur before results are built, may report as a bare
+  `null` return rather than a well-formed per-request array; a prior error
+  does not leave the module in a broken state.
+
+See
+[`.vibe/decisions/020-wasm-sprite-pixel-resolution-batched-stateless-contract.md`](../.vibe/decisions/020-wasm-sprite-pixel-resolution-batched-stateless-contract.md)
+for why the API is shaped this way (batched over per-sprite, still
+stateless, flat RGBA over PNG-encoded bytes).
+
+### Example
+
+```js
+const results = globalThis.OpenKakutouCharacter.resolveSprites(sffBytes, [[0, 0], [0, 1]], null);
+for (const { pixels, width, height, error } of results) {
+  if (error) {
+    console.warn(error);
+    continue;
+  }
+  const imageData = new ImageData(new Uint8ClampedArray(pixels.buffer), width, height);
+  canvasContext.putImageData(imageData, 0, 0);
+}
 ```
 
 ## Verifying a build

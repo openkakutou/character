@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- A sprite's actual image can now be resolved directly in a web browser via the WASM module — not just its dimensions and metadata as before — including recoloring it with an external palette file; multiple sprites can be resolved in a single call so a whole sprite sheet doesn't require one round trip per sprite
+
+### Fixed
+
+- `.sff` v2 sprites using the PNG-encoded pixel formats (PNG8/24/32) can now be decoded at all: their pixel data was never actually valid PNG bytes as read, because a 4-byte length header real files store ahead of the PNG data (already correctly skipped for the RLE8/LZ5 formats) was never skipped for the PNG formats
+- `.sff` v2 sprites using the 32-bit PNG pixel format (PNG32) now resolve their correct colors when partially transparent: their color data is alpha-premultiplied on disk, like the 24-bit format already was, but was previously read as if it were not, distorting colors wherever a pixel wasn't fully opaque or fully transparent
+
 ## [0.1.0] - 2026-08-08
 
 ### Added

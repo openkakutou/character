@@ -1101,11 +1101,16 @@ Four families of `V2Format*` codes are supported:
   decoders, which silently clamp/truncate on malformed input instead; see
   [`.vibe/decisions/015-v2-lz5-decode-error-handling-diverges-from-reference.md`](../.vibe/decisions/015-v2-lz5-decode-error-handling-diverges-from-reference.md).
 - `V2FormatPNG8` / `V2FormatPNG24` / `V2FormatPNG32` — decoded via the
-  standard library's `image/png`. PNG8 yields indexed data
+  standard library's `image/png`. Like `V2FormatRLE8`/`V2FormatLZ5`, `data`
+  starts with the same 4-byte declared-length prefix (skipped, not
+  validated) ahead of the actual PNG bytes. PNG8 yields indexed data
   (`BytesPerPixel == 1`, palette index bytes, same as `V2FormatRaw` and
   `PCXImage.Pixels` — no RGB/palette resolution performed). PNG24 yields RGB
-  data (`BytesPerPixel == 3`). PNG32 yields RGBA data (`BytesPerPixel == 4`,
-  straight/non-premultiplied alpha).
+  data (`BytesPerPixel == 3`, always opaque). PNG32 yields RGBA data
+  (`BytesPerPixel == 4`, **alpha-premultiplied** — a PNG file itself always
+  stores straight alpha, but real `.sff` v2 PNG32 sprite data is
+  premultiplied, like PNG24 already is trivially at full opacity; confirmed
+  against real, unmodified files).
 
 `V2FormatRLE5` is a real on-disk format code `ParseV2` can report in
 `V2SpriteEntry.Format`, but is not decoded by this function yet — like any
@@ -1264,6 +1269,48 @@ if err != nil {
 pixels := sff.ResolvePixels(img.Pixels, recolored, sff.AlphaForceTransparentAtIndexZero)
 ```
 
+### Resolving a sprite's pixels directly
+
+```go
+const SpritePixelDimensionLimit = 4096
+
+func ResolveSpritePixels(r io.ReaderAt, group, image int, override *Palette) ([]color.RGBA, int, int, error)
+```
+
+A one-call convenience over everything above: given a `.sff` file (v1 or
+v2, auto-detected the same way `Load` is), resolves the sprite at
+`(group, image)` straight to its final on-screen colors — decoding its
+pixel data, resolving its palette (or using `override` in its place, if
+non-nil), and applying that palette — instead of a caller doing each step
+(`ParseV1`/`ParseV2`, locate the sprite, `ResolveV1Pixels`/`DecodeV2Sprite`,
+`ResolveV1Palette`/`ResolveV2Palette`, `ResolvePixels`) by hand. `override`
+is ignored for a v2 direct-color sprite (`V2FormatPNG24`/`V2FormatPNG32`),
+which has no palette of its own to replace.
+
+Added for `cmd/wasm`'s `resolveSprites` (see
+[docs/wasm.md](wasm.md#resolving-sprite-pixels)), but it's a plain Go
+function usable independently of WASM too.
+
+No sprite matching `(group, image)` returns an error prefixed
+`"sprite not found: "`, distinguishable from every other failure (a caller
+iterating candidate sprites can tell "doesn't exist" from "something is
+broken" without parsing the rest of the message). A declared sprite size
+beyond `SpritePixelDimensionLimit` (4096) per axis returns an error instead
+of attempting to allocate a pixel buffer sized from untrusted data — this
+function, unlike the rest of the package, is reachable directly from
+untrusted caller-supplied bytes via the WASM boundary. A v2 sprite that
+shares (rather than owns) its pixel data is not yet supported and also
+returns a descriptive error — see
+[`.vibe/decisions/020-wasm-sprite-pixel-resolution-batched-stateless-contract.md`](../.vibe/decisions/020-wasm-sprite-pixel-resolution-batched-stateless-contract.md).
+
+```go
+pixels, width, height, err := sff.ResolveSpritePixels(f, 0, 0, nil)
+if err != nil {
+    log.Fatal(err)
+}
+fmt.Printf("sprite is %dx%d, pixel (0,0) color: %v\n", width, height, pixels[0])
+```
+
 ### Writing v2 files
 
 ```go
@@ -1276,12 +1323,19 @@ into the on-disk byte layout for `format`. Supports the same two families
 and `V2FormatPNG8`/`V2FormatPNG24`/`V2FormatPNG32` (via the standard
 library's `image/png`, requiring `BytesPerPixel` 1/3/4 respectively) — and
 returns a descriptive error for any other format code, including the real
-but unimplemented `V2FormatRLE8`/`V2FormatRLE5`/`V2FormatLZ5`. PNG8 encodes
-through a synthetic palette (its actual colors are never round-tripped —
+but unimplemented `V2FormatRLE8`/`V2FormatRLE5`/`V2FormatLZ5`. All three PNG
+formats' output is prefixed with the same 4-byte declared-length header
+`DecodeV2Sprite` skips on read, matching real files. PNG8 encodes through a
+synthetic palette (its actual colors are never round-tripped —
 `DecodeV2Sprite` only reads index bytes back); PNG24 encodes through an
 opaque `image.RGBA` (alpha fixed at 255, so RGB values survive unchanged);
-PNG32 encodes through `image.NRGBA` (straight, non-premultiplied alpha),
-mirroring `DecodeV2Sprite`'s own use of `color.RGBAModel`/`color.NRGBAModel`.
+PNG32 treats its input as alpha-premultiplied (matching `DecodeV2Sprite`'s
+own output) and un-premultiplies each pixel via `color.NRGBAModel` before
+writing it into the PNG, which always stores straight alpha — the exact
+inverse of `DecodeV2Sprite`'s `color.RGBAModel` premultiplication step. This
+un-premultiply/premultiply round trip is not byte-exact (8-bit integer
+rounding can drift by ±1 per channel), unlike every other format's exact
+round trip.
 See
 [`.vibe/decisions/007-sff-v2-serialize-shape-and-scope.md`](../.vibe/decisions/007-sff-v2-serialize-shape-and-scope.md).
 

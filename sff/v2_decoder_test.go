@@ -9,7 +9,8 @@ import (
 )
 
 // buildPNG8 encodes a paletted (8-bit indexed) PNG from a row-major index
-// buffer, mirroring how a .sff v2 PNG8 sprite's pixel data is stored.
+// buffer, with the 4-byte length prefix real .sff v2 PNG8 sprite pixel data
+// is stored with on disk.
 func buildPNG8(t *testing.T, width, height int, indices []byte) []byte {
 	t.Helper()
 
@@ -29,11 +30,12 @@ func buildPNG8(t *testing.T, width, height int, indices []byte) []byte {
 	if err := png.Encode(&buf, img); err != nil {
 		t.Fatalf("encoding test PNG8 fixture: %v", err)
 	}
-	return buf.Bytes()
+	return withV2LengthPrefix(uint32(len(indices)), buf.Bytes())
 }
 
 // buildPNG24 encodes an RGB (no alpha) PNG from a row-major RGB byte
-// buffer, mirroring how a .sff v2 PNG24 sprite's pixel data is stored.
+// buffer, with the 4-byte length prefix real .sff v2 PNG24 sprite pixel
+// data is stored with on disk.
 func buildPNG24(t *testing.T, width, height int, rgb []byte) []byte {
 	t.Helper()
 
@@ -49,11 +51,12 @@ func buildPNG24(t *testing.T, width, height int, rgb []byte) []byte {
 	if err := png.Encode(&buf, img); err != nil {
 		t.Fatalf("encoding test PNG24 fixture: %v", err)
 	}
-	return buf.Bytes()
+	return withV2LengthPrefix(uint32(len(rgb)), buf.Bytes())
 }
 
-// buildPNG32 encodes an RGBA PNG from a row-major RGBA byte buffer,
-// mirroring how a .sff v2 PNG32 sprite's pixel data is stored.
+// buildPNG32 encodes an RGBA PNG from a row-major RGBA byte buffer, with
+// the 4-byte length prefix real .sff v2 PNG32 sprite pixel data is stored
+// with on disk.
 func buildPNG32(t *testing.T, width, height int, rgba []byte) []byte {
 	t.Helper()
 
@@ -69,7 +72,7 @@ func buildPNG32(t *testing.T, width, height int, rgba []byte) []byte {
 	if err := png.Encode(&buf, img); err != nil {
 		t.Fatalf("encoding test PNG32 fixture: %v", err)
 	}
-	return buf.Bytes()
+	return withV2LengthPrefix(uint32(len(rgba)), buf.Bytes())
 }
 
 func TestDecodeV2Sprite_DecodesRawIndexedData(t *testing.T) {
@@ -129,7 +132,15 @@ func TestDecodeV2Sprite_DecodesPNG24ColorData(t *testing.T) {
 }
 
 func TestDecodeV2Sprite_DecodesPNG32ColorDataWithAlpha(t *testing.T) {
-	// 2x1 image: pixel 0 opaque green, pixel 1 half-transparent white.
+	// 2x1 image: pixel 0 opaque green (alpha premultiplication is a no-op
+	// at full alpha), pixel 1 half-transparent white (RGB scaled down by
+	// alpha) — confirmed against a real, unmodified .sff v2 file that
+	// V2FormatPNG32 pixel data is alpha-premultiplied, like V2FormatPNG24.
+	// buildPNG32 still encodes its input as a straight-alpha source PNG (a
+	// PNG file itself always stores straight alpha, per the PNG format
+	// spec), so the expected premultiplied output is derived here via the
+	// same color.RGBAModel conversion DecodeV2Sprite itself uses, rather
+	// than hand-computed bytes that could hide a rounding mistake.
 	rgba := []byte{0, 255, 0, 255, 255, 255, 255, 128}
 	data := buildPNG32(t, 2, 1, rgba)
 
@@ -140,8 +151,14 @@ func TestDecodeV2Sprite_DecodesPNG32ColorDataWithAlpha(t *testing.T) {
 	if img.BytesPerPixel != 4 {
 		t.Fatalf("got BytesPerPixel=%d, want 4", img.BytesPerPixel)
 	}
-	if !bytesEqual(img.Pixels, rgba) {
-		t.Fatalf("got Pixels=%v, want %v", img.Pixels, rgba)
+	want := make([]byte, len(rgba))
+	for i := 0; i < len(rgba)/4; i++ {
+		src := color.NRGBA{R: rgba[i*4], G: rgba[i*4+1], B: rgba[i*4+2], A: rgba[i*4+3]}
+		c := color.RGBAModel.Convert(src).(color.RGBA)
+		want[i*4], want[i*4+1], want[i*4+2], want[i*4+3] = c.R, c.G, c.B, c.A
+	}
+	if !bytesEqual(img.Pixels, want) {
+		t.Fatalf("got Pixels=%v, want %v (premultiplied)", img.Pixels, want)
 	}
 }
 
@@ -181,11 +198,20 @@ func TestDecodeV2Sprite_ReturnsErrorOnUnrecognizedFormat(t *testing.T) {
 }
 
 func TestDecodeV2Sprite_ReturnsErrorOnCorruptPNGData(t *testing.T) {
-	data := []byte{0x89, 'P', 'N', 'G', 0, 0, 0, 0, 'g', 'a', 'r', 'b', 'a', 'g', 'e'}
+	data := withV2LengthPrefix(0, []byte{0x89, 'P', 'N', 'G', 0, 0, 0, 0, 'g', 'a', 'r', 'b', 'a', 'g', 'e'})
 
 	_, err := DecodeV2Sprite(V2FormatPNG8, 4, 2, 8, data)
 	if err == nil {
 		t.Fatal("expected an error for corrupt PNG data, got nil")
+	}
+}
+
+func TestDecodeV2Sprite_ReturnsErrorOnPNGDataShorterThanLengthPrefix(t *testing.T) {
+	data := []byte{1, 2, 3}
+
+	_, err := DecodeV2Sprite(V2FormatPNG8, 4, 2, 8, data)
+	if err == nil {
+		t.Fatal("expected an error for PNG pixel data shorter than the 4-byte length prefix, got nil")
 	}
 }
 
@@ -205,13 +231,7 @@ func TestDecodeV2Sprite_ReturnsErrorOnPNGDimensionMismatch(t *testing.T) {
 // comment) to a hand-built control stream, mirroring how a sprite's raw
 // pixel data is actually laid out on disk.
 func buildRLE8(prefixLength uint32, stream []byte) []byte {
-	data := make([]byte, 4+len(stream))
-	data[0] = byte(prefixLength)
-	data[1] = byte(prefixLength >> 8)
-	data[2] = byte(prefixLength >> 16)
-	data[3] = byte(prefixLength >> 24)
-	copy(data[4:], stream)
-	return data
+	return withV2LengthPrefix(prefixLength, stream)
 }
 
 func TestDecodeV2Sprite_DecodesRLE8LiteralBytes(t *testing.T) {

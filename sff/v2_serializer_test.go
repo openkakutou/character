@@ -21,7 +21,7 @@ func TestSerializeV2_MultiSpriteRoundTrip_ReparsesToEquivalentMetadataAndPixels(
 	rawImg := &V2Image{Width: 3, Height: 2, BytesPerPixel: 1, Pixels: []byte{1, 2, 3, 4, 5, 6}}
 	png8Img := &V2Image{Width: 2, Height: 2, BytesPerPixel: 1, Pixels: []byte{9, 8, 7, 6}}
 	png24Img := &V2Image{Width: 2, Height: 1, BytesPerPixel: 3, Pixels: []byte{255, 0, 0, 0, 255, 0}}
-	png32Img := &V2Image{Width: 1, Height: 1, BytesPerPixel: 4, Pixels: []byte{10, 20, 30, 128}}
+	png32Img := &V2Image{Width: 1, Height: 1, BytesPerPixel: 4, Pixels: []byte{10, 20, 30, 128}} // alpha-premultiplied (R/G/B <= A)
 
 	sprites := []V2WriteSprite{
 		{
@@ -85,7 +85,15 @@ func TestSerializeV2_MultiSpriteRoundTrip_ReparsesToEquivalentMetadataAndPixels(
 		if entry.Format != wantFormats[i] {
 			t.Errorf("sprite %d: expected format %d, got %d", i, wantFormats[i], entry.Format)
 		}
-		if !bytesEqual(decoded.Pixels, want.Pixels) {
+		// PNG32 pixels are alpha-premultiplied; round-tripping them through
+		// a straight-alpha PNG is inherently lossy by up to ±1 per channel
+		// (see TestEncodeV2Sprite_PNG32Format_RoundTripsThroughDecodeV2SpriteWithAlpha).
+		// Every other format's round trip stays byte-exact.
+		tolerance := 0
+		if wantFormats[i] == V2FormatPNG32 {
+			tolerance = 1
+		}
+		if !bytesApproxEqual(decoded.Pixels, want.Pixels, tolerance) {
 			t.Errorf("sprite %d: expected pixels %v, got %v", i, want.Pixels, decoded.Pixels)
 		}
 	}

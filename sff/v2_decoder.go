@@ -294,9 +294,16 @@ func decodeV2LZ5(width, height, colorDepth int, data []byte) (*V2Image, error) {
 
 // decodeV2PNG decodes a PNG-encoded sprite (V2FormatPNG8/24/32) using the
 // standard library's PNG decoder, then extracts a row-major byte buffer
-// matching format's expected shape.
+// matching format's expected shape. Like decodeV2RLE8/decodeV2LZ5, on disk
+// it starts with a 4-byte little-endian declared length before the actual
+// PNG bytes, which this decoder skips without validating — confirmed
+// against real, unmodified .sff v2 files (see testdata/README.md), where
+// this prefix precedes the PNG magic bytes for every PNG-format sprite.
 func decodeV2PNG(format, width, height int, data []byte) (*V2Image, error) {
-	img, err := png.Decode(bytes.NewReader(data))
+	if len(data) < 4 {
+		return nil, fmt.Errorf("sff: v2 sprite: PNG pixel data too short (%d bytes, need at least 4 for the length prefix)", len(data))
+	}
+	img, err := png.Decode(bytes.NewReader(data[4:]))
 	if err != nil {
 		return nil, fmt.Errorf("sff: v2 sprite: decoding PNG pixel data: %w", err)
 	}
@@ -333,10 +340,18 @@ func decodeV2PNG(format, width, height int, data []byte) (*V2Image, error) {
 		return &V2Image{Width: width, Height: height, BytesPerPixel: 3, Pixels: pixels}, nil
 
 	case V2FormatPNG32:
+		// Alpha-premultiplied, like V2FormatPNG24's color.RGBAModel
+		// conversion just above — confirmed against a real, unmodified
+		// .sff v2 file: a non-premultiplied (color.NRGBAModel) conversion
+		// preserves each pixel's original RGB even where alpha is low or
+		// zero, but the real file's own semi-transparent pixels decode
+		// correctly only once RGB is scaled down by alpha the same way
+		// color.RGBAModel already does for every other color.Color value
+		// in this package.
 		pixels := make([]byte, width*height*4)
 		for y := 0; y < height; y++ {
 			for x := 0; x < width; x++ {
-				c := color.NRGBAModel.Convert(img.At(bounds.Min.X+x, bounds.Min.Y+y)).(color.NRGBA)
+				c := color.RGBAModel.Convert(img.At(bounds.Min.X+x, bounds.Min.Y+y)).(color.RGBA)
 				i := (y*width + x) * 4
 				pixels[i] = c.R
 				pixels[i+1] = c.G

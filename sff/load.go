@@ -66,20 +66,31 @@ const signaturePeekSize = 16
 // bank index, so each V2SpriteEntry maps directly to a Sprite without
 // decoding any pixel data.
 func Load(r io.ReaderAt) ([]SpriteGroup, error) {
-	peek := make([]byte, signaturePeekSize)
-	if _, err := r.ReadAt(peek, 0); err != nil {
-		return nil, fmt.Errorf("sff: reading file header: %w", err)
+	isV2, err := detectVersion(r)
+	if err != nil {
+		return nil, err
 	}
-	if sig := string(peek[0:12]); sig != v1Signature {
-		return nil, fmt.Errorf("sff: not a .sff file: unexpected signature %q", sig)
-	}
-
-	// Matches ParseV2's own check: verhi (the version's high byte) is
-	// stored at this offset and is 2 only for a v2 file.
-	if peek[15] == 2 {
+	if isV2 {
 		return loadV2(r)
 	}
 	return loadV1(r)
+}
+
+// detectVersion peeks at a .sff file's own signature and version bytes to
+// tell v1 and v2 files apart, the same way Load and ResolveSpritePixels
+// both need to before picking which version-specific parser to use.
+func detectVersion(r io.ReaderAt) (isV2 bool, err error) {
+	peek := make([]byte, signaturePeekSize)
+	if _, err := r.ReadAt(peek, 0); err != nil {
+		return false, fmt.Errorf("sff: reading file header: %w", err)
+	}
+	if sig := string(peek[0:12]); sig != v1Signature {
+		return false, fmt.Errorf("sff: not a .sff file: unexpected signature %q", sig)
+	}
+
+	// verhi (the version's high byte) is stored at this offset and is 2
+	// only for a v2 file — matches ParseV2's own check.
+	return peek[15] == 2, nil
 }
 
 // loadV1 assembles a v1 .sff file's sprite table into SpriteGroups,

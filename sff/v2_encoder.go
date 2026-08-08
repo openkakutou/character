@@ -65,6 +65,21 @@ var identityPalette = func() color.Palette {
 	return p
 }()
 
+// withV2LengthPrefix prepends the 4-byte little-endian declared-length
+// prefix real .sff v2 PNG (and RLE8/LZ5) pixel data starts with on disk —
+// see decodeV2PNG's doc comment — ahead of already-encoded bytes. n is the
+// declared decompressed pixel count, matching what real files store there
+// (decodeV2PNG itself never validates this value, only skips it).
+func withV2LengthPrefix(n uint32, encoded []byte) []byte {
+	data := make([]byte, 4+len(encoded))
+	data[0] = byte(n)
+	data[1] = byte(n >> 8)
+	data[2] = byte(n >> 16)
+	data[3] = byte(n >> 24)
+	copy(data[4:], encoded)
+	return data
+}
+
 // encodeV2PNG8 encodes an indexed (8-bit palette) pixel buffer as a PNG8
 // image, the inverse of decodeV2PNG's V2FormatPNG8 branch.
 func encodeV2PNG8(img *V2Image) ([]byte, error) {
@@ -85,7 +100,7 @@ func encodeV2PNG8(img *V2Image) ([]byte, error) {
 	if err := png.Encode(&buf, dst); err != nil {
 		return nil, fmt.Errorf("sff: v2 sprite: encoding PNG8 pixel data: %w", err)
 	}
-	return buf.Bytes(), nil
+	return withV2LengthPrefix(uint32(want), buf.Bytes()), nil
 }
 
 // encodeV2PNG24 encodes an RGB pixel buffer as a PNG, the inverse of
@@ -112,11 +127,15 @@ func encodeV2PNG24(img *V2Image) ([]byte, error) {
 	if err := png.Encode(&buf, dst); err != nil {
 		return nil, fmt.Errorf("sff: v2 sprite: encoding PNG24 pixel data: %w", err)
 	}
-	return buf.Bytes(), nil
+	return withV2LengthPrefix(uint32(img.Width*img.Height), buf.Bytes()), nil
 }
 
-// encodeV2PNG32 encodes an RGBA (straight alpha) pixel buffer as a PNG, the
-// inverse of decodeV2PNG's V2FormatPNG32 branch.
+// encodeV2PNG32 encodes an alpha-premultiplied RGBA pixel buffer (matching
+// decodeV2PNG's V2FormatPNG32 output shape) as a PNG, the inverse of
+// decodeV2PNG's V2FormatPNG32 branch. A PNG file itself always stores
+// straight alpha (per the PNG format spec), so each pixel is un-
+// premultiplied via color.NRGBAModel before writing — the exact inverse of
+// decode's own color.RGBAModel.Convert premultiplication step.
 func encodeV2PNG32(img *V2Image) ([]byte, error) {
 	if img.BytesPerPixel != 4 {
 		return nil, fmt.Errorf("sff: v2 sprite: PNG32 format requires BytesPerPixel 4 (RGBA), got %d", img.BytesPerPixel)
@@ -130,7 +149,9 @@ func encodeV2PNG32(img *V2Image) ([]byte, error) {
 	for y := 0; y < img.Height; y++ {
 		for x := 0; x < img.Width; x++ {
 			i := (y*img.Width + x) * 4
-			dst.SetNRGBA(x, y, color.NRGBA{R: img.Pixels[i], G: img.Pixels[i+1], B: img.Pixels[i+2], A: img.Pixels[i+3]})
+			premultiplied := color.RGBA{R: img.Pixels[i], G: img.Pixels[i+1], B: img.Pixels[i+2], A: img.Pixels[i+3]}
+			straight := color.NRGBAModel.Convert(premultiplied).(color.NRGBA)
+			dst.SetNRGBA(x, y, straight)
 		}
 	}
 
@@ -138,5 +159,5 @@ func encodeV2PNG32(img *V2Image) ([]byte, error) {
 	if err := png.Encode(&buf, dst); err != nil {
 		return nil, fmt.Errorf("sff: v2 sprite: encoding PNG32 pixel data: %w", err)
 	}
-	return buf.Bytes(), nil
+	return withV2LengthPrefix(uint32(img.Width*img.Height), buf.Bytes()), nil
 }
