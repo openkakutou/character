@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-08-08
+
 ### Added
 
 - Defined the animation and frame data model (`Animation`, `Frame`, `ClsnBox`) that will represent MUGEN/Ikemen GO character animations once `.air` file reading is implemented
@@ -38,3 +40,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A character's colors can now be recolored using an external `.act` palette file instead of a sprite's own — resolving a sprite's colors accepts an optional override palette, and a `.act` file's colors are read correctly regardless of its reversed on-disk color order; a wrong-sized `.act` file reports a descriptive error instead of crashing
 - `.sff` v1 sprites can now have their actual decoded pixel data resolved through the same public API as their palette, so a caller can get a sprite's real image, not just its dimensions; validated against real, unmodified MUGEN/Ikemen character files rather than only hand-built test data, which surfaced and fixed two long-standing decoding inaccuracies for real files — a sprite whose stored "linked sprite" reference points at itself or a later sprite now correctly falls back to its own image instead of misreading unrelated data, and a sprite's own color palette is now located correctly for every real file layout, not just the common case; a sprite with a corrupted or nonsensical declared size now falls back to a blank placeholder image instead of risking a crash
 - A character (name, animations, sprites, combat logic) can now be loaded directly in a web browser, no local Go installation required: tagging a new release automatically publishes a downloadable WebAssembly build of the library alongside the small glue file it needs to run
+
+[Unreleased]: https://github.com/openkakutou/character/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/openkakutou/character/releases/tag/v0.1.0
