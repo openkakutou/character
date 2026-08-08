@@ -118,48 +118,71 @@ func TestDecodeV1Palette_TooLong_ReturnsError(t *testing.T) {
 	}
 }
 
-// buildV1TableAndData assembles a synthetic *V1SpriteTable plus its backing
-// bytes for ResolveV1Palette tests: entries is a list of (offset, length,
-// sharedPalette) triples. A non-shared entry's own 768-byte palette block
-// (buildV1PaletteBlock's fixed pattern) is written at offset+length in
-// data, mirroring the real on-disk layout confirmed against the vendored
-// fixtures (see .vibe/decisions/014-palette-resolution-api-shape.md) —
-// immediately after the pixel data length, not inside it.
-func buildV1TableAndData(entries []struct {
+// buildV1PaletteBlockVariant returns a 768-byte v1 embedded palette block
+// distinct from buildV1PaletteBlock's own fixed pattern (color i is
+// (255-i, i, i/2)) — used where a test needs two distinguishable real
+// palettes to prove which one actually got resolved, not just that some
+// palette did.
+func buildV1PaletteBlockVariant() []byte {
+	block := make([]byte, 768)
+	for i := 0; i < 256; i++ {
+		block[i*3] = byte(255 - i)
+		block[i*3+1] = byte(i)
+		block[i*3+2] = byte(i / 2)
+	}
+	return block
+}
+
+// v1TestEntry is one buildV1TableAndData input: a sprite's Offset,
+// pixel-only byte count, Group/Image key, and SharedPalette bit.
+type v1TestEntry struct {
 	offset        int64
-	length        int
+	pixelLen      int
+	group, image  int
 	sharedPalette bool
-}) (*V1SpriteTable, []byte) {
+}
+
+// buildV1TableAndData assembles a synthetic *V1SpriteTable plus its backing
+// bytes for ResolveV1Palette tests. A non-shared entry's declared Length is
+// pixelLen+V1PaletteBlockSize, with its own 768-byte palette block
+// (buildV1PaletteBlock's fixed pattern) written as the *last*
+// V1PaletteBlockSize bytes of its own [Offset, Offset+Length) span — the
+// real on-disk layout confirmed against genuine .sff v1 files, not a
+// trimmed/re-encoded one (see
+// .vibe/decisions/018-v1-palette-block-lives-inside-declared-length.md). A
+// shared entry's declared Length is pixelLen alone (no embedded palette).
+func buildV1TableAndData(entries []v1TestEntry) (*V1SpriteTable, []byte) {
 	table := &V1SpriteTable{}
 	size := int64(0)
 	for _, e := range entries {
+		length := e.pixelLen
+		if !e.sharedPalette {
+			length += V1PaletteBlockSize
+		}
 		table.Sprites = append(table.Sprites, V1SpriteEntry{
-			Offset:        e.offset,
-			Length:        e.length,
+			Offset: e.offset, Length: length,
+			Group: e.group, Image: e.image,
 			SharedPalette: e.sharedPalette,
 		})
-		if end := e.offset + int64(e.length) + 768; end > size {
+		if end := e.offset + int64(length); end > size {
 			size = end
 		}
 	}
 
 	data := make([]byte, size)
 	block := buildV1PaletteBlock()
-	for _, e := range entries {
+	for i, e := range entries {
 		if !e.sharedPalette {
-			copy(data[e.offset+int64(e.length):], block)
+			end := e.offset + int64(table.Sprites[i].Length)
+			copy(data[end-V1PaletteBlockSize:end], block)
 		}
 	}
 	return table, data
 }
 
 func TestResolveV1Palette_SpriteOwnsItsPalette_DecodesItsOwnTrailingBlock(t *testing.T) {
-	table, data := buildV1TableAndData([]struct {
-		offset        int64
-		length        int
-		sharedPalette bool
-	}{
-		{offset: 100, length: 20, sharedPalette: false},
+	table, data := buildV1TableAndData([]v1TestEntry{
+		{offset: 100, pixelLen: 20, sharedPalette: false},
 	})
 
 	got, err := ResolveV1Palette(table, bytes.NewReader(data), 0, nil)
@@ -172,14 +195,10 @@ func TestResolveV1Palette_SpriteOwnsItsPalette_DecodesItsOwnTrailingBlock(t *tes
 	}
 }
 
-func TestResolveV1Palette_SharedSprite_InheritsNearestEarlierOwner(t *testing.T) {
-	table, data := buildV1TableAndData([]struct {
-		offset        int64
-		length        int
-		sharedPalette bool
-	}{
-		{offset: 100, length: 20, sharedPalette: false}, // sprite 0: owns
-		{offset: 1000, length: 5, sharedPalette: true},  // sprite 1: shares sprite 0's
+func TestResolveV1Palette_SharedSprite_NotGroupZeroImageZero_InheritsImmediatelyPrecedingSprite(t *testing.T) {
+	table, data := buildV1TableAndData([]v1TestEntry{
+		{offset: 100, pixelLen: 20, group: 3, image: 1, sharedPalette: false}, // sprite 0: owns
+		{offset: 1000, pixelLen: 5, group: 3, image: 2, sharedPalette: true},  // sprite 1: shares sprite 0's, not (0,0)
 	})
 
 	got, err := ResolveV1Palette(table, bytes.NewReader(data), 1, nil)
@@ -193,14 +212,10 @@ func TestResolveV1Palette_SharedSprite_InheritsNearestEarlierOwner(t *testing.T)
 }
 
 func TestResolveV1Palette_MultipleSharedSprites_WalksBackToRealOwner(t *testing.T) {
-	table, data := buildV1TableAndData([]struct {
-		offset        int64
-		length        int
-		sharedPalette bool
-	}{
-		{offset: 100, length: 20, sharedPalette: false}, // sprite 0: owns
-		{offset: 1000, length: 5, sharedPalette: true},  // sprite 1: shares
-		{offset: 2000, length: 5, sharedPalette: true},  // sprite 2: shares
+	table, data := buildV1TableAndData([]v1TestEntry{
+		{offset: 100, pixelLen: 20, group: 3, image: 1, sharedPalette: false}, // sprite 0: owns
+		{offset: 1000, pixelLen: 5, group: 3, image: 2, sharedPalette: true},  // sprite 1: shares
+		{offset: 2000, pixelLen: 5, group: 3, image: 3, sharedPalette: true},  // sprite 2: shares
 	})
 
 	got, err := ResolveV1Palette(table, bytes.NewReader(data), 2, nil)
@@ -213,28 +228,60 @@ func TestResolveV1Palette_MultipleSharedSprites_WalksBackToRealOwner(t *testing.
 	}
 }
 
-func TestResolveV1Palette_NoEarlierOwner_ReturnsError(t *testing.T) {
-	table, data := buildV1TableAndData([]struct {
-		offset        int64
-		length        int
-		sharedPalette bool
-	}{
-		{offset: 100, length: 20, sharedPalette: true}, // sprite 0: shares, but nothing precedes it
+func TestResolveV1Palette_SharedSprite_GroupZeroImageZero_InheritsFirstSpriteEvenWhenACloserOwnerExists(t *testing.T) {
+	table, data := buildV1TableAndData([]v1TestEntry{
+		{offset: 100, pixelLen: 20, group: 0, image: 0, sharedPalette: false}, // sprite 0: owns, block A
+		{offset: 1000, pixelLen: 5, group: 7, image: 7, sharedPalette: false}, // sprite 1: owns too, block A (closer, but must not win)
+		{offset: 2000, pixelLen: 5, group: 0, image: 0, sharedPalette: true},  // sprite 2: shares, is (0,0) -> must inherit sprite 0's, not sprite 1's
 	})
+	// Give sprite 1 a palette distinguishable from sprite 0's.
+	e1 := table.Sprites[1]
+	copy(data[e1.Offset+int64(e1.Length)-V1PaletteBlockSize:e1.Offset+int64(e1.Length)], buildV1PaletteBlockVariant())
+
+	got, err := ResolveV1Palette(table, bytes.NewReader(data), 2, nil)
+	if err != nil {
+		t.Fatalf("ResolveV1Palette: unexpected error: %v", err)
+	}
+	want, _ := DecodeV1Palette(buildV1PaletteBlock())
+	if got != want {
+		t.Fatalf("got %v, want %v (sprite 0's palette, not the nearer sprite 1's)", got[0], want[0])
+	}
+}
+
+func TestResolveV1Palette_SpriteZero_DecodesItsOwnBlockEvenWhenMarkedShared(t *testing.T) {
+	// Table index 0 has no earlier sprite to inherit from: the reference
+	// decoder this package tracks always decodes its own trailing block
+	// there, regardless of its own SharedPalette bit.
+	table, data := buildV1TableAndData([]v1TestEntry{
+		{offset: 100, pixelLen: 20, sharedPalette: false}, // Length still includes a real trailing block to decode
+	})
+	table.Sprites[0].SharedPalette = true
+
+	got, err := ResolveV1Palette(table, bytes.NewReader(data), 0, nil)
+	if err != nil {
+		t.Fatalf("ResolveV1Palette: unexpected error: %v", err)
+	}
+	want, _ := DecodeV1Palette(buildV1PaletteBlock())
+	if got != want {
+		t.Fatalf("got %v, want %v", got[0], want[0])
+	}
+}
+
+func TestResolveV1Palette_DeclaredLengthTooShortForPaletteBlock_ReturnsError(t *testing.T) {
+	table := &V1SpriteTable{Sprites: []V1SpriteEntry{
+		{Offset: 100, Length: 20, SharedPalette: false},
+	}}
+	data := make([]byte, 200)
 
 	_, err := ResolveV1Palette(table, bytes.NewReader(data), 0, nil)
 	if err == nil {
-		t.Fatal("expected an error when no earlier sprite owns a palette, got nil")
+		t.Fatal("expected an error when declared length is smaller than the palette block, got nil")
 	}
 }
 
 func TestResolveV1Palette_IndexOutOfRange_ReturnsError(t *testing.T) {
-	table, data := buildV1TableAndData([]struct {
-		offset        int64
-		length        int
-		sharedPalette bool
-	}{
-		{offset: 100, length: 20, sharedPalette: false},
+	table, data := buildV1TableAndData([]v1TestEntry{
+		{offset: 100, pixelLen: 20, sharedPalette: false},
 	})
 
 	if _, err := ResolveV1Palette(table, bytes.NewReader(data), -1, nil); err == nil {
@@ -454,12 +501,8 @@ func TestDecodeExternalPalette_Empty_ReturnsError(t *testing.T) {
 }
 
 func TestResolveV1Palette_OverrideSupplied_ReturnsOverrideInsteadOfSpritesOwnPalette(t *testing.T) {
-	table, data := buildV1TableAndData([]struct {
-		offset        int64
-		length        int
-		sharedPalette bool
-	}{
-		{offset: 100, length: 20, sharedPalette: false},
+	table, data := buildV1TableAndData([]v1TestEntry{
+		{offset: 100, pixelLen: 20, sharedPalette: false},
 	})
 
 	override, _ := DecodeExternalPalette(buildExternalPaletteBlock())

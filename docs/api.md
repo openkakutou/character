@@ -874,19 +874,32 @@ type V1WriteSprite struct {
     AxisY         int
     SharedPalette bool
     PixelData     []byte // PCX-encoded pixel data, e.g. from EncodePCX; empty for a linked sprite
+    Palette       []byte // this sprite's own 768-byte RGB palette block; required when SharedPalette is false
     LinkedIndex   int    // index (within this call's sprites) of the sprite this one links to, when PixelData is empty
 }
 ```
 
 Writes a full `.sff` v1 file to `w`: the fixed 512-byte header followed by
-one subheader plus pixel data blob per sprite, in order — the same layout
-`ParseV1` reads. `version` is written verbatim as the file's four raw
-version bytes; `sharedPalette` sets the header's file-level palette-sharing
-flag (independent of each sprite's own `SharedPalette`, which governs
-whether that individual sprite reuses the previous sprite's palette). The
-header's group/image counts are always derived from `sprites` — `ImageCount`
-is `len(sprites)`, `GroupCount` is the number of distinct `Group` values
+one subheader plus pixel data (and, for a sprite that doesn't share, its own
+trailing palette block) per sprite, in order — the same layout `ParseV1`
+reads. `version` is written verbatim as the file's four raw version bytes;
+`sharedPalette` sets the header's file-level palette-sharing flag
+(independent of each sprite's own `SharedPalette`, which governs whether
+that individual sprite reuses the previous sprite's palette). The header's
+group/image counts are always derived from `sprites` — `ImageCount` is
+`len(sprites)`, `GroupCount` is the number of distinct `Group` values
 present — so they can never disagree with what's actually written.
+
+A sprite that does not share its palette (`SharedPalette: false`, the zero
+value) must supply its own `Palette`: exactly `V1PaletteBlockSize` (768)
+bytes, the same 256-RGB-triplet shape `DecodeV1Palette` reads. Real `.sff`
+v1 files always embed an owning sprite's palette right after its own pixel
+data, folded into the sprite's own declared length rather than following
+it — see
+[`.vibe/decisions/018-v1-palette-block-lives-inside-declared-length.md`](../.vibe/decisions/018-v1-palette-block-lives-inside-declared-length.md).
+`SerializeV1` returns a descriptive error instead of writing an
+inconsistent file if `Palette` is missing or the wrong size for a
+non-sharing sprite.
 
 Leave `PixelData` empty and set `LinkedIndex` to write a sprite that links
 to (reuses the pixel data of) an earlier sprite in the same `sprites` slice,
@@ -921,7 +934,7 @@ if err != nil {
 defer f.Close()
 
 sprites := []sff.V1WriteSprite{
-    {Group: 0, Image: 0, PixelData: pixels},
+    {Group: 0, Image: 0, PixelData: pixels, Palette: make([]byte, sff.V1PaletteBlockSize)},
 }
 if err := sff.SerializeV1(f, [4]byte{1, 0, 0, 1}, false, sprites); err != nil {
     log.Fatal(err)
@@ -1105,9 +1118,13 @@ if err != nil {
 fmt.Printf("sprite (%d,%d) is %dx%d pixels, %d bytes per pixel\n", entry.Group, entry.Image, img.Width, img.Height, img.BytesPerPixel)
 ```
 
-### Resolving palette colors
+### Resolving v1 pixel data and palette colors
 
 ```go
+const V1PaletteBlockSize = 768
+
+func ResolveV1Pixels(table *V1SpriteTable, r io.ReaderAt, i int) (*PCXImage, error)
+
 type Palette [256]color.RGBA
 
 type AlphaRule int
@@ -1128,6 +1145,20 @@ func ResolveV2Palette(table *V2SpriteTable, r io.ReaderAt, index int, override *
 func DecodeExternalPalette(data []byte) (Palette, error)
 ```
 
+`ResolveV1Pixels` resolves sprite index `i`'s actual decoded PCX pixel
+data, following `.sff` v1's sprite-linking rule so a caller gets the same
+image `Load` itself derives dimensions from, without reimplementing the
+rule: a sprite with no pixel data of its own (`Length == 0`) always
+inherits the *immediately preceding table entry's* already-resolved
+image — its own `LinkedIndex` is not consulted for this case — while a
+sprite that does carry its own pixel data uses it unless `LinkedIndex` is a
+genuine backward reference (a self- or forward-reference is treated as "no
+link"). See
+[`.vibe/decisions/017-v1-sprite-linking-and-palette-inheritance-rules.md`](../.vibe/decisions/017-v1-sprite-linking-and-palette-inheritance-rules.md).
+A sprite with a corrupted or nonsensical declared size falls back to a
+synthetic, fully-transparent 1×1 image rather than erroring or attempting a
+pixel buffer allocation sized from untrusted data.
+
 `ResolvePixels` turns a decoded index buffer (`PCXImage.Pixels` or
 `V2Image.Pixels` with `BytesPerPixel: 1`) into final on-screen colors, given
 a resolved `Palette`. It applies one of two alpha rules depending on how the
@@ -1140,11 +1171,17 @@ at index 0 (`AlphaLiteral`).
 Getting a `Palette` differs by `.sff` version, since each stores its color
 data differently:
 - **v1** embeds each non-shared sprite's own 256-color RGB palette (3
-  bytes/color, always opaque) immediately after its pixel data — at
-  `Offset+Length`, a byte range `DecodePCX` itself never reads.
-  `ResolveV1Palette` walks backward from sprite index `i` to the nearest
-  sprite (including `i`) whose `SharedPalette` is `false`, reads that
-  sprite's embedded block via `r`, and decodes it with `DecodeV1Palette`.
+  bytes/color, always opaque, `V1PaletteBlockSize` bytes) as the *last*
+  `V1PaletteBlockSize` bytes of its own declared `[Offset, Offset+Length)`
+  span — a real v1 sprite's declared `Length` includes its own trailing
+  palette block when it owns one, not just its pixel data. See
+  [`.vibe/decisions/018-v1-palette-block-lives-inside-declared-length.md`](../.vibe/decisions/018-v1-palette-block-lives-inside-declared-length.md).
+  `ResolveV1Palette` decodes sprite `i`'s own block directly when it doesn't
+  share; when it does share, it inherits table index 0's own resolved
+  palette if `i` is itself `(Group 0, Image 0)`, or the immediately
+  preceding sprite's resolved palette otherwise — table index 0 always
+  decodes its own block, since no earlier sprite exists for it to inherit
+  from.
 - **v2** stores each palette bank's color data already as RGBA
   (`DecodeV2Palette` just reads it as-is). `ResolveV2Palette` reads the bank
   at `index` directly if it has its own data (`Length > 0`), or follows its
@@ -1167,13 +1204,7 @@ sprite with an external palette instead of its own. See
 ### Example
 
 ```go
-entry := table.Sprites[0]
-data := make([]byte, entry.Length)
-if _, err := f.ReadAt(data, entry.Offset); err != nil {
-    log.Fatal(err)
-}
-
-img, err := sff.DecodePCX(data)
+img, err := sff.ResolveV1Pixels(table, f, 0)
 if err != nil {
     log.Fatal(err)
 }

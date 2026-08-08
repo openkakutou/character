@@ -6,9 +6,9 @@ import (
 	"io"
 )
 
-// v1PaletteBlockSize is the fixed size, in bytes, of a .sff v1 sprite's
+// V1PaletteBlockSize is the fixed size, in bytes, of a .sff v1 sprite's
 // embedded 256-color RGB palette block.
-const v1PaletteBlockSize = 768
+const V1PaletteBlockSize = 768
 
 // Palette is a resolved 256-entry RGBA color table, indexed by a decoded
 // sprite's palette index bytes (PCXImage.Pixels / V2Image.Pixels with
@@ -54,12 +54,12 @@ func ResolvePixels(indices []byte, palette Palette, rule AlphaRule) []color.RGBA
 
 // DecodeV1Palette decodes a .sff v1 sprite's embedded palette block — 256
 // RGB triplets (3 bytes/color), always opaque — into a Palette. data must
-// be exactly v1PaletteBlockSize (768) bytes: the palette block itself, not
+// be exactly V1PaletteBlockSize (768) bytes: the palette block itself, not
 // the sprite's pixel data it follows (see ResolveV1Palette, which locates
 // it within a sprite's raw file bytes).
 func DecodeV1Palette(data []byte) (Palette, error) {
-	if len(data) != v1PaletteBlockSize {
-		return Palette{}, fmt.Errorf("sff: v1 palette block is %d bytes, want exactly %d", len(data), v1PaletteBlockSize)
+	if len(data) != V1PaletteBlockSize {
+		return Palette{}, fmt.Errorf("sff: v1 palette block is %d bytes, want exactly %d", len(data), V1PaletteBlockSize)
 	}
 
 	var p Palette
@@ -69,16 +69,22 @@ func DecodeV1Palette(data []byte) (Palette, error) {
 	return p, nil
 }
 
-// ResolveV1Palette resolves the palette used by sprite index i in table:
-// the nearest sprite at or before i (walking backward) whose SharedPalette
-// is false, i.e. the one that carries its own embedded palette rather than
-// reusing the previous sprite's. That owning sprite's palette block is
-// read via r from immediately after its own pixel data (Offset+Length,
-// v1PaletteBlockSize bytes) — a v1 sprite's declared pixel-data Length does
-// not include its trailing palette block, confirmed against the real
-// fixtures in testdata/files (see
-// .vibe/decisions/014-palette-resolution-api-shape.md) — and decoded via
-// DecodeV1Palette.
+// ResolveV1Palette resolves the palette used by sprite index i in table,
+// replicating the reference decoder's exact inheritance rule (see
+// .vibe/decisions/017-v1-sprite-linking-and-palette-inheritance-rules.md):
+// a sprite that does not share (SharedPalette == false) decodes its own
+// embedded block; one that does share inherits table index 0's own
+// resolved palette when it is itself (Group 0, Image 0), or the
+// immediately preceding sprite's resolved palette otherwise. Table index 0
+// always decodes its own block regardless of its own SharedPalette bit —
+// there is no earlier sprite for it to inherit from.
+//
+// An owning sprite's embedded block is read via r from the last
+// V1PaletteBlockSize bytes of its own declared [Offset, Offset+Length)
+// span, not a suffix starting right after it: a v1 sprite's declared
+// Length includes its own trailing palette block when it owns one,
+// confirmed against real, unmodified .sff v1 files — see
+// .vibe/decisions/018-v1-palette-block-lives-inside-declared-length.md.
 //
 // If override is non-nil, it is returned immediately instead — a caller-
 // supplied external palette (see DecodeExternalPalette) used in place of
@@ -88,33 +94,35 @@ func ResolveV1Palette(table *V1SpriteTable, r io.ReaderAt, i int, override *Pale
 	if override != nil {
 		return *override, nil
 	}
-
 	if i < 0 || i >= len(table.Sprites) {
 		return Palette{}, fmt.Errorf("sff: v1 palette: sprite index %d out of range (have %d sprites)", i, len(table.Sprites))
 	}
+	return resolveV1Palette(table, r, i)
+}
 
-	owner := -1
-	for j := i; j >= 0; j-- {
-		if !table.Sprites[j].SharedPalette {
-			owner = j
-			break
+func resolveV1Palette(table *V1SpriteTable, r io.ReaderAt, i int) (Palette, error) {
+	e := table.Sprites[i]
+
+	if e.SharedPalette && i > 0 {
+		if e.Group == 0 && e.Image == 0 {
+			return resolveV1Palette(table, r, 0)
 		}
-	}
-	if owner == -1 {
-		return Palette{}, fmt.Errorf("sff: v1 palette: sprite %d: no earlier sprite owns a palette", i)
+		return resolveV1Palette(table, r, i-1)
 	}
 
-	e := table.Sprites[owner]
-	block := make([]byte, v1PaletteBlockSize)
-	if _, err := r.ReadAt(block, e.Offset+int64(e.Length)); err != nil {
-		return Palette{}, fmt.Errorf("sff: v1 palette: reading sprite %d's embedded palette block: %w", owner, err)
+	if int64(e.Length) < V1PaletteBlockSize {
+		return Palette{}, fmt.Errorf("sff: v1 palette: sprite %d: declared length %d is smaller than the %d-byte palette block it must contain", i, e.Length, V1PaletteBlockSize)
+	}
+	block := make([]byte, V1PaletteBlockSize)
+	if _, err := r.ReadAt(block, e.Offset+int64(e.Length)-V1PaletteBlockSize); err != nil {
+		return Palette{}, fmt.Errorf("sff: v1 palette: reading sprite %d's embedded palette block: %w", i, err)
 	}
 	return DecodeV1Palette(block)
 }
 
 // externalPaletteSize is the fixed size, in bytes, of an external .act
 // palette file (256 RGB triplets, 3 bytes/color) — numerically the same as
-// v1PaletteBlockSize, but named separately since it is a distinct on-disk
+// V1PaletteBlockSize, but named separately since it is a distinct on-disk
 // concept (a standalone recolor file, not a sprite's own embedded palette).
 const externalPaletteSize = 768
 
@@ -165,7 +173,7 @@ func DecodeV2Palette(data []byte) (Palette, error) {
 // to otherwise — following the chain across further zero-length banks if
 // needed. A link chain that is out of range or cycles back on itself
 // returns a descriptive error instead of looping or panicking, mirroring
-// v1 linked-sprite resolution (resolveV1Pixels).
+// v1 linked-sprite resolution (ResolveV1Pixels).
 //
 // If override is non-nil, it is returned immediately instead — a caller-
 // supplied external palette (see DecodeExternalPalette) used in place of

@@ -10,6 +10,7 @@ func TestLoad_V1File_AssemblesSpriteGroupsWithDecodedDimensionsAndDerivedPalette
 		{
 			Group: 0, Image: 0, AxisX: 4, AxisY: -2, SharedPalette: false,
 			PixelData: mustEncodePCX(t, &PCXImage{Width: 4, Height: 2, Pixels: []byte{1, 1, 1, 1, 2, 2, 2, 2}}),
+			Palette:   v1TestPalette(),
 		},
 		{
 			// Shares sprite 0's palette: same derived Palette value.
@@ -20,6 +21,7 @@ func TestLoad_V1File_AssemblesSpriteGroupsWithDecodedDimensionsAndDerivedPalette
 			// Its own palette again: derived Palette value bumps up.
 			Group: 1, Image: 0, AxisX: 0, AxisY: 0, SharedPalette: false,
 			PixelData: mustEncodePCX(t, &PCXImage{Width: 2, Height: 2, Pixels: []byte{9, 9, 9, 9}}),
+			Palette:   v1TestPalette(),
 		},
 	}
 
@@ -108,7 +110,7 @@ func TestLoad_V1LinkedSprite_ResolvesDimensionsFromLinkTarget(t *testing.T) {
 	}
 
 	sprites := []V1WriteSprite{
-		{Group: 0, Image: 0, PixelData: mustEncodePCX(t, targetPixels)},
+		{Group: 0, Image: 0, PixelData: mustEncodePCX(t, targetPixels), Palette: v1TestPalette()},
 		{Group: 0, Image: 1, SharedPalette: true, LinkedIndex: 0}, // no PixelData, links to sprite 0
 	}
 
@@ -131,10 +133,24 @@ func TestLoad_V1LinkedSprite_ResolvesDimensionsFromLinkTarget(t *testing.T) {
 	}
 }
 
-func TestLoad_V1MutualLinkCycle_ReturnsDescriptiveErrorInsteadOfHangingOrPanicking(t *testing.T) {
+// TestLoad_V1FirstSpriteHasNoPixelDataOfItsOwn_ReturnsDescriptiveError covers
+// the terminal case of the corrected v1 linking rule (see
+// .vibe/decisions/017-v1-sprite-linking-and-palette-inheritance-rules.md):
+// table index 0 can never inherit pixel data from an earlier entry, since
+// none exists. Replaces a previous test built around a mutual LinkedIndex
+// cycle — no longer reachable now that a zero-length sprite always
+// inherits the immediately preceding table entry (never its own
+// LinkedIndex), so every resolution step strictly decreases the index and
+// can never cycle back on itself.
+func TestLoad_V1FirstSpriteHasNoPixelDataOfItsOwn_ReturnsDescriptiveError(t *testing.T) {
 	sprites := []V1WriteSprite{
-		{Group: 0, Image: 0, LinkedIndex: 1}, // links to sprite 1, no PixelData
-		{Group: 0, Image: 1, LinkedIndex: 0}, // links to sprite 0, no PixelData
+		// index 0: no PixelData; SerializeV1 requires a valid (in-range,
+		// non-self) LinkedIndex to accept a linked sprite at all, but the
+		// corrected read-side rule never consults it for a zero-length
+		// sprite — table index 0 has no earlier entry to inherit from
+		// regardless of what it points to.
+		{Group: 0, Image: 0, SharedPalette: true, LinkedIndex: 1},
+		{Group: 0, Image: 1, PixelData: mustEncodePCX(t, &PCXImage{Width: 1, Height: 1, Pixels: []byte{1}}), Palette: v1TestPalette()},
 	}
 
 	var buf bytes.Buffer
@@ -144,7 +160,39 @@ func TestLoad_V1MutualLinkCycle_ReturnsDescriptiveErrorInsteadOfHangingOrPanicki
 
 	_, err := Load(bytes.NewReader(buf.Bytes()))
 	if err == nil {
-		t.Fatal("expected an error for a mutual link cycle with no real pixel data anywhere, got nil")
+		t.Fatal("expected an error for a first sprite with no pixel data of its own, got nil")
+	}
+}
+
+// TestResolveV1Pixels_ChainRevisitsAnIndex_ReturnsErrorInsteadOfPanicking
+// exercises resolveV1Pixels's own cycle guard directly: every real
+// resolution step strictly decreases the index (see the test above), so a
+// cycle can no longer occur through Load itself, but the guard stays in
+// place as defense in depth and must still behave correctly if ever
+// reached — e.g. through a future caller that seeds its own seen map.
+func TestResolveV1Pixels_ChainRevisitsAnIndex_ReturnsErrorInsteadOfPanicking(t *testing.T) {
+	table := &V1SpriteTable{Sprites: []V1SpriteEntry{
+		{Group: 0, Image: 0, Length: 0},
+	}}
+	seen := map[int]bool{0: true} // pretend index 0 was already visited on this chain
+
+	_, err := resolveV1Pixels(table, bytes.NewReader(nil), 0, seen)
+	if err == nil {
+		t.Fatal("expected an error for a chain that revisits an index, got nil")
+	}
+}
+
+func TestResolveV1Pixels_IndexOutOfRange_ReturnsError(t *testing.T) {
+	table := &V1SpriteTable{Sprites: []V1SpriteEntry{
+		{Group: 0, Image: 0, Length: 4, SharedPalette: true},
+	}}
+	data := make([]byte, 100)
+
+	if _, err := ResolveV1Pixels(table, bytes.NewReader(data), -1); err == nil {
+		t.Error("expected an error for a negative index, got nil")
+	}
+	if _, err := ResolveV1Pixels(table, bytes.NewReader(data), 5); err == nil {
+		t.Error("expected an error for an out-of-range index, got nil")
 	}
 }
 

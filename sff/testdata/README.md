@@ -37,13 +37,27 @@ preserved rather than flattened away).
 No pixel or palette *content* is invented — every embedded byte is copied
 from the real upstream file. Only the surrounding container (header,
 sprite/palette table, which other sprites are physically present) is
-authored by the trimming tool, to keep the fixture small.
+authored by the trimming tool, to keep the fixture small. Item 028's v1
+scenarios needing an inherited sprite (a zero-length "copy" target and/or a
+palette-sharing target) collapse to at most one donor entry immediately
+before the target — real Length-versus-palette-block layout (see
+`.vibe/decisions/018-v1-palette-block-lives-inside-declared-length.md`) and
+the corrected linking rule (`.vibe/decisions/017-...md`) both resolve a
+predecessor positionally, never via the on-disk `LinkedIndex` field, once a
+sprite has no pixel data of its own.
 
 To regenerate (e.g. after adding a new scenario to `gen/main.go`):
 
 ```
 SRC_DIR=/path/to/sff-extractor/tests/files go run ./sff/testdata/gen
 ```
+
+## `files/*.act`
+
+Unmodified, standalone external-palette fixtures (`greenarrow-v1-palette1.act`,
+`cyclops-v1-palette1.act`), 768 raw bytes each — small enough to vendor
+as-is, unlike the multi-megabyte `.sff` source files. Used by item 028's
+"index == linked index" and "external palette" scenarios.
 
 ### Known caveat: `v2-loadmode1.sff`
 

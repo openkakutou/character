@@ -35,6 +35,15 @@ type V1WriteSprite struct {
 	// sprite that reuses another sprite's pixel data instead — see
 	// LinkedIndex.
 	PixelData []byte
+	// Palette is this sprite's own embedded 768-byte RGB palette block
+	// (256 triplets, 3 bytes/color, matching DecodeV1Palette's input
+	// shape). Required whenever SharedPalette is false: real .sff v1 files
+	// always embed an owning sprite's palette immediately after its own
+	// pixel data, folded into the subheader's declared Length rather than
+	// following it — see
+	// .vibe/decisions/018-v1-palette-block-lives-inside-declared-length.md.
+	// Ignored when SharedPalette is true.
+	Palette []byte
 	// LinkedIndex is the index, within the Sprites slice passed to
 	// SerializeV1, of the sprite this one shares pixel data with. Only
 	// meaningful when PixelData is empty.
@@ -61,6 +70,9 @@ type V1WriteSprite struct {
 // .vibe/decisions/005-sff-v1-serialize-is-semantic-not-byte-exact-round-trip.md.
 func SerializeV1(w io.Writer, version [4]byte, sharedPalette bool, sprites []V1WriteSprite) error {
 	for i, s := range sprites {
+		if !s.SharedPalette && len(s.Palette) != V1PaletteBlockSize {
+			return fmt.Errorf("sff: v1: sprite %d does not share a palette and needs its own %d-byte Palette, got %d bytes", i, V1PaletteBlockSize, len(s.Palette))
+		}
 		if len(s.PixelData) > 0 {
 			continue
 		}
@@ -77,11 +89,23 @@ func SerializeV1(w io.Writer, version [4]byte, sharedPalette bool, sprites []V1W
 		groups[s.Group] = struct{}{}
 	}
 
+	// A sprite that does not share its palette embeds its own trailing
+	// V1PaletteBlockSize-byte block, folded into its declared Length rather
+	// than following it — see .vibe/decisions/018-v1-palette-block-lives-
+	// inside-declared-length.md.
+	ownLength := func(s V1WriteSprite) uint32 {
+		n := uint32(len(s.PixelData))
+		if !s.SharedPalette {
+			n += V1PaletteBlockSize
+		}
+		return n
+	}
+
 	offsets := make([]uint32, len(sprites))
 	cur := uint32(headerSize)
 	for i, s := range sprites {
 		offsets[i] = cur
-		cur += subheaderSize + uint32(len(s.PixelData))
+		cur += subheaderSize + ownLength(s)
 	}
 
 	if err := writeV1Header(w, version, sharedPalette, len(groups), len(sprites), offsets); err != nil {
@@ -93,12 +117,17 @@ func SerializeV1(w io.Writer, version [4]byte, sharedPalette bool, sprites []V1W
 		if i+1 < len(sprites) {
 			next = offsets[i+1]
 		}
-		if err := writeV1Subheader(w, next, s); err != nil {
+		if err := writeV1Subheader(w, next, ownLength(s), s); err != nil {
 			return fmt.Errorf("sff: v1: writing sprite %d subheader: %w", i, err)
 		}
 		if len(s.PixelData) > 0 {
 			if _, err := w.Write(s.PixelData); err != nil {
 				return fmt.Errorf("sff: v1: writing sprite %d pixel data: %w", i, err)
+			}
+		}
+		if !s.SharedPalette {
+			if _, err := w.Write(s.Palette); err != nil {
+				return fmt.Errorf("sff: v1: writing sprite %d palette: %w", i, err)
 			}
 		}
 	}
@@ -132,10 +161,13 @@ func writeV1Header(w io.Writer, version [4]byte, sharedPalette bool, groupCount,
 }
 
 // writeV1Subheader writes one sprite's fixed 32-byte .sff v1 subheader.
-func writeV1Subheader(w io.Writer, next uint32, s V1WriteSprite) error {
+// length is the sprite's full declared Length (pixel data plus its own
+// trailing palette block, when it has one — see ownLength in SerializeV1),
+// not simply len(s.PixelData).
+func writeV1Subheader(w io.Writer, next, length uint32, s V1WriteSprite) error {
 	sub := make([]byte, subheaderSize)
 	binary.LittleEndian.PutUint32(sub[0:4], next)
-	binary.LittleEndian.PutUint32(sub[4:8], uint32(len(s.PixelData)))
+	binary.LittleEndian.PutUint32(sub[4:8], length)
 	binary.LittleEndian.PutUint16(sub[8:10], uint16(int16(s.AxisX)))
 	binary.LittleEndian.PutUint16(sub[10:12], uint16(int16(s.AxisY)))
 	binary.LittleEndian.PutUint16(sub[12:14], uint16(s.Group))

@@ -18,6 +18,13 @@ func mustEncodePCX(t *testing.T, img *PCXImage) []byte {
 	return data
 }
 
+// v1TestPalette returns a valid V1PaletteBlockSize-byte block for a
+// V1WriteSprite that does not share its palette — its exact colors are
+// irrelevant to these serializer tests, only its size.
+func v1TestPalette() []byte {
+	return make([]byte, V1PaletteBlockSize)
+}
+
 func TestSerializeV1_MultiSpriteRoundTrip_ReparsesToEquivalentMetadataAndPixels(t *testing.T) {
 	spriteAPixels := &PCXImage{Width: 4, Height: 2, Pixels: []byte{1, 1, 1, 2, 5, 6, 7, 8}}
 	spriteBPixels := &PCXImage{Width: 2, Height: 3, Pixels: []byte{9, 9, 8, 8, 7, 7}}
@@ -25,7 +32,7 @@ func TestSerializeV1_MultiSpriteRoundTrip_ReparsesToEquivalentMetadataAndPixels(
 	sprites := []V1WriteSprite{
 		{
 			Group: 0, Image: 0, AxisX: 5, AxisY: -3, SharedPalette: false,
-			PixelData: mustEncodePCX(t, spriteAPixels),
+			PixelData: mustEncodePCX(t, spriteAPixels), Palette: v1TestPalette(),
 		},
 		{
 			Group: 0, Image: 1, AxisX: 1, AxisY: 2, SharedPalette: true,
@@ -33,7 +40,7 @@ func TestSerializeV1_MultiSpriteRoundTrip_ReparsesToEquivalentMetadataAndPixels(
 		},
 		{
 			Group: 1, Image: 0, AxisX: 0, AxisY: 0, SharedPalette: false,
-			PixelData: mustEncodePCX(t, &PCXImage{Width: 1, Height: 1, Pixels: []byte{42}}),
+			PixelData: mustEncodePCX(t, &PCXImage{Width: 1, Height: 1, Pixels: []byte{42}}), Palette: v1TestPalette(),
 		},
 	}
 
@@ -130,7 +137,7 @@ func TestSerializeV1_LinkedSprite_PreservesLinkageAndTargetPixelsSurviveRoundTri
 	targetPixels := &PCXImage{Width: 3, Height: 2, Pixels: []byte{1, 2, 3, 4, 5, 6}}
 
 	sprites := []V1WriteSprite{
-		{Group: 0, Image: 0, PixelData: mustEncodePCX(t, targetPixels)},
+		{Group: 0, Image: 0, PixelData: mustEncodePCX(t, targetPixels), Palette: v1TestPalette()},
 		{Group: 0, Image: 1, SharedPalette: true, LinkedIndex: 0}, // links to sprite 0, no PixelData
 	}
 
@@ -173,8 +180,8 @@ func TestSerializeV1_LinkedSprite_PreservesLinkageAndTargetPixelsSurviveRoundTri
 
 func TestSerializeV1_LinkedIndexOutOfBounds_ReturnsError(t *testing.T) {
 	sprites := []V1WriteSprite{
-		{Group: 0, Image: 0, PixelData: mustEncodePCX(t, &PCXImage{Width: 1, Height: 1, Pixels: []byte{1}})},
-		{Group: 0, Image: 1, LinkedIndex: 7}, // no sprite at index 7
+		{Group: 0, Image: 0, PixelData: mustEncodePCX(t, &PCXImage{Width: 1, Height: 1, Pixels: []byte{1}}), Palette: v1TestPalette()},
+		{Group: 0, Image: 1, SharedPalette: true, LinkedIndex: 7}, // no sprite at index 7
 	}
 
 	var buf bytes.Buffer
@@ -187,7 +194,7 @@ func TestSerializeV1_LinkedIndexOutOfBounds_ReturnsError(t *testing.T) {
 
 func TestSerializeV1_SelfReferencingLinkedIndex_ReturnsError(t *testing.T) {
 	sprites := []V1WriteSprite{
-		{Group: 0, Image: 0, LinkedIndex: 0}, // links to itself, no PixelData anywhere
+		{Group: 0, Image: 0, SharedPalette: true, LinkedIndex: 0}, // links to itself, no PixelData anywhere
 	}
 
 	var buf bytes.Buffer
@@ -208,7 +215,7 @@ func (failingWriter) Write(p []byte) (int, error) {
 
 func TestSerializeV1_WriterError_IsPropagated(t *testing.T) {
 	sprites := []V1WriteSprite{
-		{Group: 0, Image: 0, PixelData: mustEncodePCX(t, &PCXImage{Width: 1, Height: 1, Pixels: []byte{1}})},
+		{Group: 0, Image: 0, PixelData: mustEncodePCX(t, &PCXImage{Width: 1, Height: 1, Pixels: []byte{1}}), Palette: v1TestPalette()},
 	}
 
 	err := SerializeV1(failingWriter{}, [4]byte{1, 0, 0, 1}, false, sprites)

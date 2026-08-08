@@ -133,71 +133,101 @@ func resolveGroupV2(table *sff.V2SpriteTable, group, nth int) (int, error) {
 	return 0, fmt.Errorf("group %d: only %d matching sprites, want index %d", group, n, nth)
 }
 
-// v1SubfileBounds returns the [start, end) byte range of sprite index i's
-// own on-disk subfile (its 32-byte subheader plus everything up to the
-// next sprite's subheader, or EOF for the last sprite) — the region a
-// non-shared sprite's trailing embedded palette lives at the end of.
-func v1SubfileBounds(table *sff.V1SpriteTable, data []byte, i int) (start, end int64) {
-	start = table.Sprites[i].Offset - 32
-	if i+1 < len(table.Sprites) {
-		end = table.Sprites[i+1].Offset - 32
-	} else {
-		end = int64(len(data))
+// resolvePaletteOwnerV1 mirrors the sff package's own (corrected)
+// palette-inheritance rule (see
+// .vibe/decisions/017-v1-sprite-linking-and-palette-inheritance-rules.md):
+// a sprite that shares (SharedPalette == true) inherits table index 0's
+// own owner when it is itself (Group 0, Image 0), or the immediately
+// preceding sprite's owner otherwise. Table index 0 always owns — there is
+// no earlier sprite for it to inherit from.
+func resolvePaletteOwnerV1(table *sff.V1SpriteTable, i int) int {
+	e := table.Sprites[i]
+	if e.SharedPalette && i > 0 {
+		if e.Group == 0 && e.Image == 0 {
+			return resolvePaletteOwnerV1(table, 0)
+		}
+		return resolvePaletteOwnerV1(table, i-1)
 	}
-	return start, end
+	return i
 }
 
-// findOwnPalette walks backward from sprite index i to the nearest sprite
-// (including i itself) that carries its own embedded palette
-// (SharedPalette == false), and returns that sprite's real trailing
-// 768-byte RGB palette block.
+// findOwnPalette returns real sprite index i's true resolved 768-byte RGB
+// palette block: its owner's (per resolvePaletteOwnerV1) own trailing
+// block, living inside the *last* 768 bytes of the owner's own declared
+// [Offset, Offset+Length) span — a v1 sprite's declared Length includes
+// its own trailing palette block when it owns one, confirmed against real
+// files (see
+// .vibe/decisions/018-v1-palette-block-lives-inside-declared-length.md),
+// not a suffix starting right after it.
 func findOwnPalette(table *sff.V1SpriteTable, data []byte, i int) ([]byte, error) {
-	for j := i; j >= 0; j-- {
-		if table.Sprites[j].SharedPalette {
-			continue
-		}
-		_, end := v1SubfileBounds(table, data, j)
-		start := end - 768
-		if start < 0 || end > int64(len(data)) {
-			return nil, fmt.Errorf("sprite %d: palette block out of range [%d,%d)", j, start, end)
-		}
-		return data[start:end], nil
+	owner := resolvePaletteOwnerV1(table, i)
+	e := table.Sprites[owner]
+	end := e.Offset + int64(e.Length)
+	start := end - 768
+	if start < 0 || end > int64(len(data)) {
+		return nil, fmt.Errorf("sprite %d (owner %d): palette block out of range [%d,%d)", i, owner, start, end)
 	}
-	return nil, fmt.Errorf("sprite %d: no earlier sprite owns a palette", i)
+	return data[start:end], nil
 }
 
-// resolvePixelOwnerV1 follows sprite index i's LinkedIndex chain (only
-// consulted when Length == 0 — a sprite with its own pixel data always
-// wins regardless of whatever raw value its LinkedIndex field happens to
-// hold, matching sff.Load's own resolveV1Pixels) until it reaches a sprite
-// that stores its own pixel data.
+// resolvePixelOwnerV1 mirrors the sff package's own (corrected) linking
+// rule (see
+// .vibe/decisions/017-v1-sprite-linking-and-palette-inheritance-rules.md):
+// a zero-length sprite always inherits the immediately preceding table
+// entry's pixel owner — its own LinkedIndex field is not consulted for
+// this case; a sprite with its own pixel data uses it unless its own
+// LinkedIndex is a genuine backward reference (strictly less than i, and
+// not 0 — 0 can never be a real link target through this field).
 func resolvePixelOwnerV1(table *sff.V1SpriteTable, i int) (int, error) {
-	owner := i
-	seen := map[int]bool{}
-	for table.Sprites[owner].Length == 0 {
-		if seen[owner] {
-			return 0, fmt.Errorf("sprite %d: linked chain cycles", i)
+	e := table.Sprites[i]
+	if e.Length == 0 {
+		if i == 0 {
+			return 0, fmt.Errorf("sprite 0 has no pixel data and no earlier sprite to inherit from")
 		}
-		seen[owner] = true
-		li := table.Sprites[owner].LinkedIndex
-		if li < 0 || li >= len(table.Sprites) {
-			return 0, fmt.Errorf("sprite %d: linked index %d out of range", owner, li)
-		}
-		owner = li
+		return resolvePixelOwnerV1(table, i-1)
 	}
-	return owner, nil
+	linked := e.LinkedIndex
+	if linked >= i {
+		linked = 0
+	}
+	if linked == 0 {
+		return i, nil
+	}
+	if linked < 0 || linked >= len(table.Sprites) {
+		return 0, fmt.Errorf("sprite %d: linked index %d out of range", i, linked)
+	}
+	return resolvePixelOwnerV1(table, linked)
+}
+
+// ownPixelLength returns real sprite index i's actual pixel-data-only byte
+// count: its declared Length, minus its own trailing 768-byte palette block
+// when it owns one (SharedPalette == false) — see findOwnPalette's doc
+// comment for why Length alone over-counts in that case.
+func ownPixelLength(table *sff.V1SpriteTable, i int) int {
+	e := table.Sprites[i]
+	if e.SharedPalette {
+		return e.Length
+	}
+	return e.Length - 768
 }
 
 // trimV1 builds a minimal, real-bytes-only .sff v1 file exposing exactly
-// the sprite scenario sc asks for. It keeps up to three distinct real
-// on-disk entries — the target sprite itself, its pixel-data owner
-// (resolved via LinkedIndex when the target's own Length is 0), and its
-// palette owner (resolved via SharedPalette, independently of pixel
-// ownership since v1 tracks palette sharing positionally, not via an
-// explicit index field) — deduplicating whichever of the three coincide,
-// and orders them so the palette owner always immediately precedes the
-// target with no other non-shared entry between them (palette
-// inheritance is purely positional in this format).
+// the sprite scenario sc asks for. When the target needs anything from an
+// earlier real sprite — its pixel data (Length == 0) and/or its palette
+// (SharedPalette == true) — it keeps exactly one donor entry, placed
+// immediately before the target: sff's corrected v1 resolution (see
+// .vibe/decisions/017-v1-sprite-linking-and-palette-inheritance-rules.md)
+// always inherits pixel data from the table position right before a
+// zero-length sprite, and — for the (Group, Image) != (0, 0) case this
+// package's scenarios exercise — palette from that same position for a
+// sharing sprite, so a single donor there satisfies both regardless of
+// whether the target's real pixel owner and real palette owner happen to
+// be the same source sprite. The donor's own palette bytes are always the
+// target's own true resolved palette (via findOwnPalette, which follows
+// the real source file's full inheritance chain regardless of length) —
+// not necessarily the pixel owner's own natural palette — precisely so
+// this single-donor collapse stays correct even when the two would
+// otherwise diverge.
 func trimV1(data []byte, sc scenario) ([]byte, error) {
 	table, err := sff.ParseV1(readerAt(data))
 	if err != nil {
@@ -214,66 +244,30 @@ func trimV1(data []byte, sc scenario) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-
-	paletteOwner := idx
-	for j := idx; j >= 0; j-- {
-		if !table.Sprites[j].SharedPalette {
-			paletteOwner = j
-			break
-		}
-	}
-
-	// realEntry builds a self-contained v1Sprite for real sprite index i:
-	// its own embedded real pixel bytes (following i's own pixel-owner
-	// chain, since i itself might be a zero-length copy) plus its own
-	// real palette bytes (via findOwnPalette).
-	realEntry := func(i int) (v1Sprite, error) {
-		po, err := resolvePixelOwnerV1(table, i)
-		if err != nil {
-			return v1Sprite{}, err
-		}
-		pe := table.Sprites[po]
-		pal, err := findOwnPalette(table, data, i)
-		if err != nil {
-			return v1Sprite{}, err
-		}
-		e := table.Sprites[i]
-		return v1Sprite{
-			group: e.Group, image: e.Image, axisX: e.AxisX, axisY: e.AxisY,
-			linkedIndex: -1, shared: false,
-			pixel:   data[pe.Offset : pe.Offset+int64(pe.Length)],
-			palette: pal,
-		}, nil
-	}
+	paletteOwner := resolvePaletteOwnerV1(table, idx)
 
 	var sprites []v1Sprite
-	positions := map[int]int{} // real sprite index -> position in sprites
 
-	if pixelOwner != idx && pixelOwner != paletteOwner {
-		e, err := realEntry(pixelOwner)
+	if pixelOwner != idx || paletteOwner != idx {
+		pe := table.Sprites[pixelOwner]
+		pal, err := findOwnPalette(table, data, idx)
 		if err != nil {
 			return nil, err
 		}
-		positions[pixelOwner] = len(sprites)
-		sprites = append(sprites, e)
-	}
-	if paletteOwner != idx {
-		e, err := realEntry(paletteOwner)
-		if err != nil {
-			return nil, err
-		}
-		positions[paletteOwner] = len(sprites)
-		sprites = append(sprites, e)
+		sprites = append(sprites, v1Sprite{
+			group: pe.Group, image: pe.Image, axisX: pe.AxisX, axisY: pe.AxisY,
+			linkedIndex: -1, shared: false,
+			pixel:   data[pe.Offset : pe.Offset+int64(ownPixelLength(table, pixelOwner))],
+			palette: pal,
+		})
 	}
 
-	// The target entry itself.
 	te := v1Sprite{group: target.Group, image: target.Image, axisX: target.AxisX, axisY: target.AxisY}
 	if pixelOwner == idx {
-		pe := table.Sprites[idx]
 		te.linkedIndex = -1
-		te.pixel = data[pe.Offset : pe.Offset+int64(pe.Length)]
+		te.pixel = data[target.Offset : target.Offset+int64(ownPixelLength(table, idx))]
 	} else {
-		te.linkedIndex = positions[pixelOwner]
+		te.linkedIndex = 0 // unused by the corrected reader (it inherits by position, not LinkedIndex), kept well-formed
 	}
 	if paletteOwner == idx {
 		te.shared = false
@@ -335,7 +329,14 @@ func encodeV1(h sff.V1Header, sprites []v1Sprite) ([]byte, error) {
 		if i+1 < len(sprites) {
 			binary.LittleEndian.PutUint32(sub[0:4], uint32(offsets[i+1]))
 		}
-		binary.LittleEndian.PutUint32(sub[4:8], uint32(len(s.pixel)))
+		// A non-shared entry's declared Length includes its own trailing
+		// palette block, matching real files — see
+		// .vibe/decisions/018-v1-palette-block-lives-inside-declared-length.md.
+		length := len(s.pixel)
+		if !s.shared {
+			length += len(s.palette)
+		}
+		binary.LittleEndian.PutUint32(sub[4:8], uint32(length))
 		binary.LittleEndian.PutUint16(sub[8:10], uint16(int16(s.axisX)))
 		binary.LittleEndian.PutUint16(sub[10:12], uint16(int16(s.axisY)))
 		binary.LittleEndian.PutUint16(sub[12:14], uint16(s.group))
