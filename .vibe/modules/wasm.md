@@ -1,0 +1,8 @@
+# Module: wasm
+
+**Role:** `cmd/wasm` is the library's WebAssembly entrypoint: thin `syscall/js` glue exposing the root package's `LoadBytes` (see `modules/root.md`) to a browser or any JS host as a single global function, so a consumer can load a MUGEN/Ikemen character without a Go toolchain of its own. It carries no logic beyond argument conversion, calling `LoadBytes`, and marshaling the result to JSON — all real behavior lives in `character`, unit-tested independently.
+**Files:** `cmd/wasm/main.go`, `cmd/wasm/smoke.mjs`
+**Exports (JS, not Go):** `globalThis.OpenKakutouCharacter.load(defBytes, airBytes, sffBytes, cnsBytes)` — four `Uint8Array` arguments, returns `{ character: string|null, error: string|null }` (exactly one non-null)
+**Depends on:** root package (`character.LoadBytes`)
+
+**Design decision:** `main.go` is build-tag gated (`//go:build js && wasm`), so it is invisible to a normal host `go build ./...`/`go test ./...` — only `GOOS=js GOARCH=wasm go build ./cmd/wasm` compiles it. The exposed `load` function never lets an internal panic escape to the JS caller (a `recover()` at the callback boundary reports it as `error` instead, since a panic there would otherwise tear down the whole page's WASM instance) and never leaves the module in a broken state after an error — the next call is handled independently. `smoke.mjs` is a Node.js verification harness (loads the built `.wasm` via `wasm_exec.js`, the same way a browser would) — it is not a `go test` file since `syscall/js` code cannot run under the plain Go toolchain, and doubles as a minimal JS usage example. See `.vibe/decisions/019-wasm-entrypoint-byte-buffer-loading-and-json-contract.md` and `docs/wasm.md`.

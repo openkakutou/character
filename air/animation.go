@@ -36,10 +36,10 @@ type BlendMode string
 // system used by Clsn1 (attack) and Clsn2 (vulnerability) boxes in .air
 // files: Left/Top is one corner, Right/Bottom the opposite corner.
 type ClsnBox struct {
-	Left   int
-	Top    int
-	Right  int
-	Bottom int
+	Left   int `json:"left"`
+	Top    int `json:"top"`
+	Right  int `json:"right"`
+	Bottom int `json:"bottom"`
 }
 
 // Frame is a single displayed image within an Animation: which sprite to
@@ -52,15 +52,15 @@ type ClsnBox struct {
 // sentinel meaning "show no sprite on this frame". Such a frame is not
 // malformed; see IsBlank.
 type Frame struct {
-	Group int
-	Image int
-	X     int
-	Y     int
-	Time  int
-	Flip  Flip
-	Blend BlendMode
-	Clsn1 []ClsnBox
-	Clsn2 []ClsnBox
+	Group int       `json:"group"`
+	Image int       `json:"image"`
+	X     int       `json:"x"`
+	Y     int       `json:"y"`
+	Time  int       `json:"time"`
+	Flip  Flip      `json:"flip"`
+	Blend BlendMode `json:"blend"`
+	Clsn1 []ClsnBox `json:"clsn1"`
+	Clsn2 []ClsnBox `json:"clsn2"`
 }
 
 // IsBlank reports whether frame uses the ".air" "no sprite shown" sentinel:
@@ -79,7 +79,7 @@ func (f Frame) IsBlank() bool {
 // value (0) matches .air's own default: an animation with no Loopstart
 // marker loops back to its very first frame.
 type Animation struct {
-	Number    int
-	Frames    []Frame
-	LoopStart int
+	Number    int     `json:"number"`
+	Frames    []Frame `json:"frames"`
+	LoopStart int     `json:"loopStart"`
 }

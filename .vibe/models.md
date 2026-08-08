@@ -35,11 +35,15 @@ Defined in: `def/document.go`
 | Sprites | []sff.SpriteGroup | Exposed through `sff`'s read-path type only |
 | StateDefs | []cns.StateDef | Exposed through `cns`'s read-path type only |
 
+Every field carries a `json:"..."` tag (`name`, `animations`, `sprites`, `stateDefs`).
+
 Method: `(*Character) ResolveSprite(frame air.Frame) (sff.Sprite, error)` — resolves `frame`'s `(Group, Image)` reference against `Sprites`, by delegating to `air.NewSpriteResolver(c.Sprites)`; returns the same descriptive error `SpriteResolver.Resolve` does when no match exists, including when `Sprites` is empty (e.g. a zero-value `Character`).
 
 Package function: `Load(path string) (*Character, error)` — the top-level entry point: opens the `.def` file at `path`, parses it with `def.Parse`, resolves its `.air`/`.sff`/`.cns` references against `path`'s own directory, reads them with `air.Parse`/`sff.Load`/`cns.Parse`, and returns the assembled `Character`. A missing or unreadable `.def`/`.air`/`.sff`/`.cns` file returns a descriptive error rather than panicking.
 
-Defined in: `character.go`, `load.go`
+Package function: `LoadBytes(defBytes, airBytes, sffBytes, cnsBytes []byte) (*Character, error)` — filesystem-independent counterpart of `Load`, for a caller (chiefly `cmd/wasm`) that already holds each file's bytes in memory: parses each buffer directly, never resolving referenced paths itself. Every slice/map reachable from the returned `Character` is normalized to non-`nil` before returning, so its JSON marshaling never surprises a caller with `null` where an empty, iterable collection was expected. See `.vibe/decisions/019-wasm-entrypoint-byte-buffer-loading-and-json-contract.md`.
+
+Defined in: `character.go`, `load.go`, `load_bytes.go`
 
 ## Animation
 | Field | Type | Notes |
@@ -47,6 +51,8 @@ Defined in: `character.go`, `load.go`
 | Number | int | Corresponds to the `.air` file's `[Begin Action N]` action number |
 | Frames | []Frame | Ordered sequence of displayed frames |
 | LoopStart | int | Index into Frames the animation loops back to; zero value (0) matches `.air`'s own default of looping to the first frame when no `Loopstart` marker is present |
+
+`json:"..."`-tagged (`number`, `frames`, `loopStart`).
 
 Defined in: `air/animation.go`
 
@@ -62,6 +68,8 @@ Defined in: `air/animation.go`
 | Blend | BlendMode | Blending mode token (e.g. additive, subtractive); zero value means normal blending |
 | Clsn1 | []ClsnBox | Attack collision boxes active on this frame, already resolved from any `Clsn1Default` |
 | Clsn2 | []ClsnBox | Vulnerability collision boxes active on this frame, already resolved from any `Clsn2Default` |
+
+`json:"..."`-tagged (`group`, `image`, `x`, `y`, `time`, `flip`, `blend`, `clsn1`, `clsn2`).
 
 Defined in: `air/animation.go`
 
@@ -92,6 +100,8 @@ Defined in: `air/resolve.go`
 | Right | int | |
 | Bottom | int | |
 
+`json:"..."`-tagged (`left`, `top`, `right`, `bottom`).
+
 Defined in: `air/animation.go`
 
 ## Sprite
@@ -105,6 +115,8 @@ Defined in: `air/animation.go`
 | AxisY | int | Vertical offset from top-left corner to the sprite's axis (pivot) point |
 | Palette | int | Palette reference; exact meaning defined by the `.sff` version that populates it |
 
+`json:"..."`-tagged (`group`, `image`, `width`, `height`, `axisX`, `axisY`, `palette`).
+
 Defined in: `sff/sprite.go`
 
 ## SpriteGroup
@@ -112,6 +124,8 @@ Defined in: `sff/sprite.go`
 |---|---|---|
 | Index | int | Group index shared by every Sprite in Sprites |
 | Sprites | []Sprite | Ordered collection of sprites belonging to this group; not itself validated against each Sprite's own Group field |
+
+`json:"..."`-tagged (`index`, `sprites`).
 
 Defined in: `sff/sprite.go`
 
@@ -270,7 +284,9 @@ Defined in: `sff/v2_serializer.go`
 | SprPriority | int | Sprite drawing (layering) priority for this state |
 | Controllers | []Controller | State controllers that run while this state is active, in file order |
 
-Populated by `Parse(r io.Reader) ([]StateDef, error)`, which reads `[Statedef N]`/`[State N]` `.cns` text into this shape, skipping unrecognized sections. Written back out by `Serialize(w io.Writer, states []StateDef) error` (a semantic round trip through `Parse`, not byte-exact preservation of an original file's formatting/comments — see `Document (cns)` below for that case). Not yet wired into the root `Character` struct (backlog item 022). See `.vibe/decisions/011-cns-controller-parameters-are-untyped-key-value-data.md` and `.vibe/decisions/012-cns-parse-header-detection-strategy.md`.
+`json:"..."`-tagged (`number`, `type`, `moveType`, `physics`, `anim`, `ctrl`, `powerAdd`, `juggle`, `faceP2`, `hitDefPersist`, `moveHitPersist`, `hitCountPersist`, `sprPriority`, `controllers`).
+
+Populated by `Parse(r io.Reader) ([]StateDef, error)`, which reads `[Statedef N]`/`[State N]` `.cns` text into this shape, skipping unrecognized sections. Written back out by `Serialize(w io.Writer, states []StateDef) error` (a semantic round trip through `Parse`, not byte-exact preservation of an original file's formatting/comments — see `Document (cns)` below for that case). Wired into the root `Character` struct via `character.Load`/`character.LoadBytes`. See `.vibe/decisions/011-cns-controller-parameters-are-untyped-key-value-data.md` and `.vibe/decisions/012-cns-parse-header-detection-strategy.md`.
 
 Defined in: `cns/statedef.go`, `cns/parser.go`
 
@@ -282,6 +298,8 @@ Defined in: `cns/statedef.go`, `cns/parser.go`
 | Parameters | map[string]string | Remaining key/value parameters, verbatim and unevaluated, keyed by lowercase parameter name |
 
 A controller's effect (e.g. which state a "ChangeState" controller transitions to) is just another `Parameters` entry, not a dedicated field.
+
+`json:"..."`-tagged (`type`, `triggers`, `parameters`).
 
 Defined in: `cns/statedef.go`, `cns/parser.go`
 

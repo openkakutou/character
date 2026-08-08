@@ -20,10 +20,10 @@ import (
 // never a write-only, format-preservation type — per CLAUDE.md's read/write
 // separation constraint.
 type Character struct {
-	Name       string
-	Animations []air.Animation
-	Sprites    []sff.SpriteGroup
-	StateDefs  []cns.StateDef
+	Name       string            `json:"name"`
+	Animations []air.Animation   `json:"animations"`
+	Sprites    []sff.SpriteGroup `json:"sprites"`
+	StateDefs  []cns.StateDef    `json:"stateDefs"`
 }
 
 // ResolveSprite returns the Sprite that frame's (Group, Image) reference

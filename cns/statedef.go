@@ -75,47 +75,47 @@ const (
 type StateDef struct {
 	// Number is the state number this block defines (the N in
 	// [Statedef N]).
-	Number int
+	Number int `json:"number"`
 	// Type is the state's classification ("type" parameter).
-	Type StateType
+	Type StateType `json:"type"`
 	// MoveType is the state's move classification ("movetype" parameter).
-	MoveType MoveType
+	MoveType MoveType `json:"moveType"`
 	// Physics is the built-in physics applied while this state is active
 	// ("physics" parameter).
-	Physics PhysicsType
+	Physics PhysicsType `json:"physics"`
 	// Anim is the animation number played on entering this state ("anim"
 	// parameter); 0 means "not set", in which case MUGEN/Ikemen defaults
 	// it to Number.
-	Anim int
+	Anim int `json:"anim"`
 	// Ctrl reports whether the player has control while this state is
 	// active ("ctrl" parameter).
-	Ctrl bool
+	Ctrl bool `json:"ctrl"`
 	// PowerAdd is the power meter gain applied on entering this state
 	// ("poweradd" parameter).
-	PowerAdd int
+	PowerAdd int `json:"powerAdd"`
 	// Juggle is the juggle points this state costs to use against an
 	// already-airborne opponent ("juggle" parameter).
-	Juggle int
+	Juggle int `json:"juggle"`
 	// FaceP2 reports whether the character turns to face the opponent on
 	// entering this state ("facep2" parameter).
-	FaceP2 bool
+	FaceP2 bool `json:"faceP2"`
 	// HitDefPersist reports whether an active hit definition survives
 	// into this state instead of being cleared ("hitdefpersist"
 	// parameter).
-	HitDefPersist bool
+	HitDefPersist bool `json:"hitDefPersist"`
 	// MoveHitPersist reports whether "MoveHit"-triggered conditions
 	// survive into this state instead of being cleared
 	// ("movehitpersist" parameter).
-	MoveHitPersist bool
+	MoveHitPersist bool `json:"moveHitPersist"`
 	// HitCountPersist reports whether the hit counter survives into this
 	// state instead of being reset ("hitcountpersist" parameter).
-	HitCountPersist bool
+	HitCountPersist bool `json:"hitCountPersist"`
 	// SprPriority is the sprite drawing priority (layering order) for
 	// this state ("sprpriority" parameter).
-	SprPriority int
+	SprPriority int `json:"sprPriority"`
 	// Controllers are the state controllers ([State N] blocks) that run
 	// while this state is active, in file order.
-	Controllers []Controller
+	Controllers []Controller `json:"controllers"`
 }
 
 // Controller is a .cns [State N] block: a single state controller, stored
@@ -126,15 +126,15 @@ type StateDef struct {
 type Controller struct {
 	// Type is the controller type ("type" parameter of the [State N]
 	// block, e.g. "ChangeState", "VelSet", "HitDef").
-	Type string
+	Type string `json:"type"`
 	// Triggers are this controller's trigger condition expressions
 	// ("trigger1", "trigger2", ... lines), verbatim and unevaluated, in
 	// file order. A nil or empty Triggers means the controller has no
 	// trigger lines at all — it runs unconditionally whenever its state
 	// is active, not "never runs".
-	Triggers []string
+	Triggers []string `json:"triggers"`
 	// Parameters are this controller's remaining key/value parameters
 	// (every non-trigger line of the block), verbatim and unevaluated,
 	// keyed by parameter name.
-	Parameters map[string]string
+	Parameters map[string]string `json:"parameters"`
 }

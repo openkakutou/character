@@ -21,23 +21,23 @@ package sff
 // corner to its axis (pivot) point, and which palette it uses.
 type Sprite struct {
 	// Group is the sprite group index this sprite belongs to.
-	Group int
+	Group int `json:"group"`
 	// Image is this sprite's image index within its Group.
-	Image int
+	Image int `json:"image"`
 	// Width is the sprite's width in pixels.
-	Width int
+	Width int `json:"width"`
 	// Height is the sprite's height in pixels.
-	Height int
+	Height int `json:"height"`
 	// AxisX is the horizontal offset from the sprite's top-left corner to
 	// its axis (pivot) point, used when positioning the sprite.
-	AxisX int
+	AxisX int `json:"axisX"`
 	// AxisY is the vertical offset from the sprite's top-left corner to
 	// its axis (pivot) point, used when positioning the sprite.
-	AxisY int
+	AxisY int `json:"axisY"`
 	// Palette is a reference to the palette this sprite is drawn with. Its
 	// exact meaning (e.g. a shared palette table index) is defined by the
 	// .sff version that populates it.
-	Palette int
+	Palette int `json:"palette"`
 }
 
 // SpriteGroup is a collection of Sprites that share the same group index —
@@ -45,7 +45,7 @@ type Sprite struct {
 // index within the group.
 type SpriteGroup struct {
 	// Index is the sprite group index shared by every Sprite in Sprites.
-	Index int
+	Index int `json:"index"`
 	// Sprites is the ordered collection of sprites belonging to this group.
-	Sprites []Sprite
+	Sprites []Sprite `json:"sprites"`
 }

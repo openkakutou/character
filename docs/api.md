@@ -18,6 +18,7 @@ type Character struct {
 func (c *Character) ResolveSprite(frame air.Frame) (sff.Sprite, error)
 
 func Load(path string) (*Character, error)
+func LoadBytes(defBytes, airBytes, sffBytes, cnsBytes []byte) (*Character, error)
 ```
 
 `Character` is the assembled unit a library consumer (editor, engine) works
@@ -39,6 +40,19 @@ missing or unreadable `.def`, `.air`, `.sff`, or `.cns` file returns a
 descriptive error naming which file and step failed, rather than panicking.
 See
 [`.vibe/decisions/010-def-loader-assembles-character-from-referenced-files.md`](../.vibe/decisions/010-def-loader-assembles-character-from-referenced-files.md).
+
+`LoadBytes` is `Load`'s counterpart for a caller with no filesystem access —
+chiefly the WASM entrypoint (see [docs/wasm.md](wasm.md)), whose JS caller
+has already fetched or selected each file's bytes itself. Unlike `Load`, it
+does not resolve or follow the `.def` file's own referenced paths: the
+caller supplies `.air`/`.sff`/`.cns` content directly. Every field on the
+returned `Character` carries an explicit `json:"..."` tag, and every
+reachable slice/map is guaranteed non-`nil` (encoding/json renders empty as
+`[]`/`{}`, never `null`), so its JSON marshaling is safe to hand to a JS
+caller without a null-check. A malformed or truncated buffer for any of the
+four inputs returns a descriptive error naming which one failed, rather
+than panicking; on any error the returned `*Character` is always `nil`. See
+[`.vibe/decisions/019-wasm-entrypoint-byte-buffer-loading-and-json-contract.md`](../.vibe/decisions/019-wasm-entrypoint-byte-buffer-loading-and-json-contract.md).
 
 ### Example
 

@@ -1,0 +1,46 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v[0-9]*.[0-9]*.[0-9]*'
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Build
+        run: go build ./...
+
+      - name: Test
+        run: go test ./...
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Build WASM module
+        run: GOOS=js GOARCH=wasm go build -o character.wasm ./cmd/wasm
+
+      - name: Copy wasm_exec.js glue
+        run: cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" wasm_exec.js
+
+      - name: Publish release assets
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            character.wasm
+            wasm_exec.js
+          fail_on_unmatched_files: true

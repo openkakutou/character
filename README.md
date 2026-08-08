@@ -31,11 +31,12 @@ This project is in early-stage development. Shipped so far:
 - Recoloring a sprite with an external `.act` palette file instead of its own — reading the `.act` file's colors in the correct order with the correct transparency, and using it in place of the sprite's own palette when resolving its on-screen colors; a wrongly-sized `.act` file is caught with a descriptive error instead of crashing
 - Resolving a `.sff` v1 sprite's actual decoded pixel data through the same public interface as its palette, validated against real, unmodified MUGEN/Ikemen character files rather than only hand-built test data — this caught and fixed two decoding inaccuracies affecting some real sprites: a sprite whose stored "linked sprite" reference points at itself or a later sprite now correctly falls back to its own image, and a sprite's own color palette is now located correctly for every real file layout, not just the common case; a sprite with a corrupted or nonsensical declared size falls back to a blank placeholder image instead of risking a crash
 
+- A character (name, animations, sprites, combat logic) can now be loaded directly in a web browser via a WebAssembly build — no local Go installation needed; tagging a new release automatically publishes a downloadable module ready for a web app to load
+
 Planned:
 
 - Decoding the remaining, less common `.sff` v2 compressed pixel format (RLE5)
 - Preserving comments and ordering when the saved `.def`/`.air`/`.cns` file actually differs from the original (today this is guaranteed only when nothing changed)
-- No rendering dependency, so the library can compile to WebAssembly for web-based tooling
 <!-- vibe:end:features -->
 
 <!-- vibe:begin:install -->
@@ -761,10 +762,41 @@ func main() {
 ```
 
 Wiring `.cns` into `Character`, and decoding/encoding the remaining `.sff` v2 compressed pixel formats (RLE-based), are not implemented yet — this API surface will grow as those pieces are added.
+
+### Loading a character in a web browser (WebAssembly)
+
+A web app with no Go toolchain of its own can load a character too, using a pre-built WebAssembly module downloaded from a tagged release's assets (`character.wasm` + `wasm_exec.js`):
+
+```html
+<script src="wasm_exec.js"></script>
+<script>
+  const go = new Go();
+  WebAssembly.instantiateStreaming(fetch("character.wasm"), go.importObject)
+    .then((result) => go.run(result.instance))
+    .then(async () => {
+      const [defBytes, airBytes, sffBytes, cnsBytes] = await Promise.all(
+        ["kfm.def", "kfm.air", "kfm.sff", "kfm.cns"].map(
+          (name) => fetch(name).then((r) => r.arrayBuffer()).then((buf) => new Uint8Array(buf)),
+        ),
+      );
+
+      const result = globalThis.OpenKakutouCharacter.load(defBytes, airBytes, sffBytes, cnsBytes);
+      if (result.error) {
+        throw new Error(result.error);
+      }
+
+      const character = JSON.parse(result.character);
+      console.log(`${character.name}: ${character.animations.length} animations`);
+    });
+</script>
+```
+
+See [docs/wasm.md](docs/wasm.md) for the full JS API contract and how to build the module locally.
 <!-- vibe:end:usage -->
 
 <!-- vibe:begin:docs-index -->
 - [docs/api.md](docs/api.md) — the library's public API, package by package
 - [docs/architecture.md](docs/architecture.md) — how the packages fit together and the read/write split
 - [docs/testing.md](docs/testing.md) — how to run the test suite and what it covers
+- [docs/wasm.md](docs/wasm.md) — the WebAssembly entrypoint's JS API, how to build it locally, and the release pipeline that publishes it
 <!-- vibe:end:docs-index -->
