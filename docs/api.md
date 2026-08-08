@@ -1120,10 +1120,12 @@ const (
 func ResolvePixels(indices []byte, palette Palette, rule AlphaRule) []color.RGBA
 
 func DecodeV1Palette(data []byte) (Palette, error)
-func ResolveV1Palette(table *V1SpriteTable, r io.ReaderAt, i int) (Palette, error)
+func ResolveV1Palette(table *V1SpriteTable, r io.ReaderAt, i int, override *Palette) (Palette, error)
 
 func DecodeV2Palette(data []byte) (Palette, error)
-func ResolveV2Palette(table *V2SpriteTable, r io.ReaderAt, index int) (Palette, error)
+func ResolveV2Palette(table *V2SpriteTable, r io.ReaderAt, index int, override *Palette) (Palette, error)
+
+func DecodeExternalPalette(data []byte) (Palette, error)
 ```
 
 `ResolvePixels` turns a decoded index buffer (`PCXImage.Pixels` or
@@ -1155,6 +1157,13 @@ Kept as an explicit opt-in helper separate from `PCXImage`/`V2Image`/`Sprite`
 — those pure-data read-path types carry no palette-resolution logic. See
 [`.vibe/decisions/014-palette-resolution-api-shape.md`](../.vibe/decisions/014-palette-resolution-api-shape.md).
 
+Both `ResolveV1Palette` and `ResolveV2Palette` take a trailing `override
+*Palette` argument: `nil` preserves the lookup described above, while a
+non-nil `Palette` is returned immediately in its place, bypassing the table
+lookup entirely (and, for v1, the `io.ReaderAt` read) — used to recolor a
+sprite with an external palette instead of its own. See
+[`.vibe/decisions/016-external-palette-override-api-shape.md`](../.vibe/decisions/016-external-palette-override-api-shape.md).
+
 ### Example
 
 ```go
@@ -1169,13 +1178,45 @@ if err != nil {
     log.Fatal(err)
 }
 
-palette, err := sff.ResolveV1Palette(table, f, 0)
+palette, err := sff.ResolveV1Palette(table, f, 0, nil)
 if err != nil {
     log.Fatal(err)
 }
 
 pixels := sff.ResolvePixels(img.Pixels, palette, sff.AlphaForceTransparentAtIndexZero)
 fmt.Printf("pixel (0,0) color: %v\n", pixels[0])
+```
+
+### External `.act` palette override
+
+```go
+func DecodeExternalPalette(data []byte) (Palette, error)
+```
+
+Decodes an external MUGEN/Ikemen `.act` palette file (256 RGB triplets,
+always opaque on disk, exactly 768 bytes) into a `Palette`, reproducing
+`convertExternalPaletteToRGBA.mjs`'s two quirks: the file's triplets are
+stored in reverse index order (the first triplet becomes palette index 255,
+the last becomes index 0), and only the resulting index 0 is forced to fully
+transparent — every other entry stays opaque. A buffer that isn't exactly
+768 bytes returns a descriptive error.
+
+```go
+altBytes, err := os.ReadFile("kfm-alt.act")
+if err != nil {
+    log.Fatal(err)
+}
+altPalette, err := sff.DecodeExternalPalette(altBytes)
+if err != nil {
+    log.Fatal(err)
+}
+
+// Same sprite as above, resolved against the alternate palette instead.
+recolored, err := sff.ResolveV1Palette(table, f, 0, &altPalette)
+if err != nil {
+    log.Fatal(err)
+}
+pixels := sff.ResolvePixels(img.Pixels, recolored, sff.AlphaForceTransparentAtIndexZero)
 ```
 
 ### Writing v2 files

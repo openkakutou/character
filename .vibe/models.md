@@ -319,7 +319,7 @@ Write-only counterpart to `V2PaletteEntry`, passed to `SerializeV2`.
 Defined in: `sff/v2_serializer.go`
 
 ## Palette
-`[256]color.RGBA` — a resolved color table, indexed by a decoded sprite's palette index bytes (`PCXImage.Pixels` / `V2Image.Pixels` with `BytesPerPixel: 1`). Kept separate from `PCXImage`/`V2Image`/`Sprite`; produced by `DecodeV1Palette`/`ResolveV1Palette` or `DecodeV2Palette`/`ResolveV2Palette`, consumed by `ResolvePixels`.
+`[256]color.RGBA` — a resolved color table, indexed by a decoded sprite's palette index bytes (`PCXImage.Pixels` / `V2Image.Pixels` with `BytesPerPixel: 1`). Kept separate from `PCXImage`/`V2Image`/`Sprite`; produced by `DecodeV1Palette`/`ResolveV1Palette`, `DecodeV2Palette`/`ResolveV2Palette`, or `DecodeExternalPalette` (an external `.act` file, used as an optional `override` argument to `ResolveV1Palette`/`ResolveV2Palette` in place of a sprite's own); consumed by `ResolvePixels`.
 
 Defined in: `sff/palette.go`
 

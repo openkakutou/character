@@ -162,7 +162,7 @@ func TestResolveV1Palette_SpriteOwnsItsPalette_DecodesItsOwnTrailingBlock(t *tes
 		{offset: 100, length: 20, sharedPalette: false},
 	})
 
-	got, err := ResolveV1Palette(table, bytes.NewReader(data), 0)
+	got, err := ResolveV1Palette(table, bytes.NewReader(data), 0, nil)
 	if err != nil {
 		t.Fatalf("ResolveV1Palette: unexpected error: %v", err)
 	}
@@ -182,7 +182,7 @@ func TestResolveV1Palette_SharedSprite_InheritsNearestEarlierOwner(t *testing.T)
 		{offset: 1000, length: 5, sharedPalette: true},  // sprite 1: shares sprite 0's
 	})
 
-	got, err := ResolveV1Palette(table, bytes.NewReader(data), 1)
+	got, err := ResolveV1Palette(table, bytes.NewReader(data), 1, nil)
 	if err != nil {
 		t.Fatalf("ResolveV1Palette: unexpected error: %v", err)
 	}
@@ -203,7 +203,7 @@ func TestResolveV1Palette_MultipleSharedSprites_WalksBackToRealOwner(t *testing.
 		{offset: 2000, length: 5, sharedPalette: true},  // sprite 2: shares
 	})
 
-	got, err := ResolveV1Palette(table, bytes.NewReader(data), 2)
+	got, err := ResolveV1Palette(table, bytes.NewReader(data), 2, nil)
 	if err != nil {
 		t.Fatalf("ResolveV1Palette: unexpected error: %v", err)
 	}
@@ -222,7 +222,7 @@ func TestResolveV1Palette_NoEarlierOwner_ReturnsError(t *testing.T) {
 		{offset: 100, length: 20, sharedPalette: true}, // sprite 0: shares, but nothing precedes it
 	})
 
-	_, err := ResolveV1Palette(table, bytes.NewReader(data), 0)
+	_, err := ResolveV1Palette(table, bytes.NewReader(data), 0, nil)
 	if err == nil {
 		t.Fatal("expected an error when no earlier sprite owns a palette, got nil")
 	}
@@ -237,10 +237,10 @@ func TestResolveV1Palette_IndexOutOfRange_ReturnsError(t *testing.T) {
 		{offset: 100, length: 20, sharedPalette: false},
 	})
 
-	if _, err := ResolveV1Palette(table, bytes.NewReader(data), -1); err == nil {
+	if _, err := ResolveV1Palette(table, bytes.NewReader(data), -1, nil); err == nil {
 		t.Error("expected an error for a negative index, got nil")
 	}
-	if _, err := ResolveV1Palette(table, bytes.NewReader(data), 5); err == nil {
+	if _, err := ResolveV1Palette(table, bytes.NewReader(data), 5, nil); err == nil {
 		t.Error("expected an error for an out-of-range index, got nil")
 	}
 }
@@ -320,7 +320,7 @@ func TestResolveV2Palette_BankOwnsItsData_DecodesItsOwnColorData(t *testing.T) {
 		{Group: 0, Number: 0, Offset: 100, Length: len(colorData)},
 	}}
 
-	got, err := ResolveV2Palette(table, bytes.NewReader(data), 0)
+	got, err := ResolveV2Palette(table, bytes.NewReader(data), 0, nil)
 	if err != nil {
 		t.Fatalf("ResolveV2Palette: unexpected error: %v", err)
 	}
@@ -340,7 +340,7 @@ func TestResolveV2Palette_ZeroLengthBank_InheritsLinkedBanksColors(t *testing.T)
 		{Group: 0, Number: 1, Length: 0, LinkedIndex: 0},
 	}}
 
-	got, err := ResolveV2Palette(table, bytes.NewReader(data), 1)
+	got, err := ResolveV2Palette(table, bytes.NewReader(data), 1, nil)
 	if err != nil {
 		t.Fatalf("ResolveV2Palette: unexpected error: %v", err)
 	}
@@ -361,7 +361,7 @@ func TestResolveV2Palette_ZeroLengthBankLinkedToIndexZero_ResolvesToFirstBank(t 
 		{Group: 0, Number: 2, Length: 0, LinkedIndex: 0}, // also links to the first bank
 	}}
 
-	got, err := ResolveV2Palette(table, bytes.NewReader(data), 2)
+	got, err := ResolveV2Palette(table, bytes.NewReader(data), 2, nil)
 	if err != nil {
 		t.Fatalf("ResolveV2Palette: unexpected error: %v", err)
 	}
@@ -377,10 +377,10 @@ func TestResolveV2Palette_IndexOutOfRange_ReturnsError(t *testing.T) {
 	}}
 	data := make([]byte, 1200)
 
-	if _, err := ResolveV2Palette(table, bytes.NewReader(data), -1); err == nil {
+	if _, err := ResolveV2Palette(table, bytes.NewReader(data), -1, nil); err == nil {
 		t.Error("expected an error for a negative index, got nil")
 	}
-	if _, err := ResolveV2Palette(table, bytes.NewReader(data), 5); err == nil {
+	if _, err := ResolveV2Palette(table, bytes.NewReader(data), 5, nil); err == nil {
 		t.Error("expected an error for an out-of-range index, got nil")
 	}
 }
@@ -392,9 +392,128 @@ func TestResolveV2Palette_LinkChainCyclesBackOnItself_ReturnsError(t *testing.T)
 	}}
 	data := make([]byte, 10)
 
-	_, err := ResolveV2Palette(table, bytes.NewReader(data), 0)
+	_, err := ResolveV2Palette(table, bytes.NewReader(data), 0, nil)
 	if err == nil {
 		t.Fatal("expected an error for a cyclic link chain, got nil")
+	}
+}
+
+// buildExternalPaletteBlock returns a 768-byte external .act buffer (256 RGB
+// triplets in the file's own on-disk order) using the same fixed pattern as
+// buildV1PaletteBlock (triplet i is (i, 255-i, i/2)) — but, unlike v1's
+// embedded block, DecodeExternalPalette reads this order in reverse.
+func buildExternalPaletteBlock() []byte {
+	return buildV1PaletteBlock()
+}
+
+func TestDecodeExternalPalette_ReversesTripletOrderAndForcesIndexZeroTransparent(t *testing.T) {
+	got, err := DecodeExternalPalette(buildExternalPaletteBlock())
+	if err != nil {
+		t.Fatalf("DecodeExternalPalette: unexpected error: %v", err)
+	}
+
+	// The file's first triplet (i=0: R=0, G=255, B=0) becomes palette index 255.
+	if want := (color.RGBA{R: 0, G: 255, B: 0, A: 255}); got[255] != want {
+		t.Errorf("index 255: got %v, want %v", got[255], want)
+	}
+	// The file's second triplet (i=1: R=1, G=254, B=0) becomes palette index 254.
+	if want := (color.RGBA{R: 1, G: 254, B: 0, A: 255}); got[254] != want {
+		t.Errorf("index 254: got %v, want %v", got[254], want)
+	}
+	// The file's last triplet (i=255: R=255, G=0, B=127) becomes palette index
+	// 0, with its alpha forced to 0 — unlike every other resolved index.
+	if want := (color.RGBA{R: 255, G: 0, B: 127, A: 0}); got[0] != want {
+		t.Errorf("index 0: got %v, want %v", got[0], want)
+	}
+	for i := 1; i < 256; i++ {
+		if got[i].A != 255 {
+			t.Fatalf("index %d: alpha = %d, want 255 (only index 0 is forced transparent)", i, got[i].A)
+		}
+	}
+}
+
+func TestDecodeExternalPalette_TooShort_ReturnsError(t *testing.T) {
+	_, err := DecodeExternalPalette(make([]byte, 767))
+	if err == nil {
+		t.Fatal("expected an error for a 767-byte buffer, got nil")
+	}
+}
+
+func TestDecodeExternalPalette_TooLong_ReturnsError(t *testing.T) {
+	_, err := DecodeExternalPalette(make([]byte, 769))
+	if err == nil {
+		t.Fatal("expected an error for a 769-byte buffer, got nil")
+	}
+}
+
+func TestDecodeExternalPalette_Empty_ReturnsError(t *testing.T) {
+	_, err := DecodeExternalPalette(nil)
+	if err == nil {
+		t.Fatal("expected an error for an empty buffer, got nil")
+	}
+}
+
+func TestResolveV1Palette_OverrideSupplied_ReturnsOverrideInsteadOfSpritesOwnPalette(t *testing.T) {
+	table, data := buildV1TableAndData([]struct {
+		offset        int64
+		length        int
+		sharedPalette bool
+	}{
+		{offset: 100, length: 20, sharedPalette: false},
+	})
+
+	override, _ := DecodeExternalPalette(buildExternalPaletteBlock())
+	got, err := ResolveV1Palette(table, bytes.NewReader(data), 0, &override)
+	if err != nil {
+		t.Fatalf("ResolveV1Palette: unexpected error: %v", err)
+	}
+	if got != override {
+		t.Fatalf("got %v, want the override palette %v", got, override)
+	}
+}
+
+func TestResolveV1Palette_OverrideSupplied_BypassesIndexRangeCheck(t *testing.T) {
+	table := &V1SpriteTable{} // no sprites at all
+	override, _ := DecodeExternalPalette(buildExternalPaletteBlock())
+
+	got, err := ResolveV1Palette(table, bytes.NewReader(nil), 999, &override)
+	if err != nil {
+		t.Fatalf("ResolveV1Palette: unexpected error: %v", err)
+	}
+	if got != override {
+		t.Fatalf("got %v, want the override palette", got)
+	}
+}
+
+func TestResolveV2Palette_OverrideSupplied_ReturnsOverrideInsteadOfBanksOwnColors(t *testing.T) {
+	colorData := buildV2PaletteColorData(256)
+	data := make([]byte, 100+len(colorData))
+	copy(data[100:], colorData)
+
+	table := &V2SpriteTable{Palettes: []V2PaletteEntry{
+		{Group: 0, Number: 0, Offset: 100, Length: len(colorData)},
+	}}
+
+	override, _ := DecodeExternalPalette(buildExternalPaletteBlock())
+	got, err := ResolveV2Palette(table, bytes.NewReader(data), 0, &override)
+	if err != nil {
+		t.Fatalf("ResolveV2Palette: unexpected error: %v", err)
+	}
+	if got != override {
+		t.Fatalf("got %v, want the override palette %v", got, override)
+	}
+}
+
+func TestResolveV2Palette_OverrideSupplied_BypassesIndexRangeCheck(t *testing.T) {
+	table := &V2SpriteTable{} // no palette banks at all
+	override, _ := DecodeExternalPalette(buildExternalPaletteBlock())
+
+	got, err := ResolveV2Palette(table, bytes.NewReader(nil), 999, &override)
+	if err != nil {
+		t.Fatalf("ResolveV2Palette: unexpected error: %v", err)
+	}
+	if got != override {
+		t.Fatalf("got %v, want the override palette", got)
 	}
 }
 

@@ -79,7 +79,16 @@ func DecodeV1Palette(data []byte) (Palette, error) {
 // fixtures in testdata/files (see
 // .vibe/decisions/014-palette-resolution-api-shape.md) — and decoded via
 // DecodeV1Palette.
-func ResolveV1Palette(table *V1SpriteTable, r io.ReaderAt, i int) (Palette, error) {
+//
+// If override is non-nil, it is returned immediately instead — a caller-
+// supplied external palette (see DecodeExternalPalette) used in place of
+// the sprite's own, bypassing the table lookup entirely. See
+// .vibe/decisions/016-external-palette-override-api-shape.md.
+func ResolveV1Palette(table *V1SpriteTable, r io.ReaderAt, i int, override *Palette) (Palette, error) {
+	if override != nil {
+		return *override, nil
+	}
+
 	if i < 0 || i >= len(table.Sprites) {
 		return Palette{}, fmt.Errorf("sff: v1 palette: sprite index %d out of range (have %d sprites)", i, len(table.Sprites))
 	}
@@ -101,6 +110,32 @@ func ResolveV1Palette(table *V1SpriteTable, r io.ReaderAt, i int) (Palette, erro
 		return Palette{}, fmt.Errorf("sff: v1 palette: reading sprite %d's embedded palette block: %w", owner, err)
 	}
 	return DecodeV1Palette(block)
+}
+
+// externalPaletteSize is the fixed size, in bytes, of an external .act
+// palette file (256 RGB triplets, 3 bytes/color) — numerically the same as
+// v1PaletteBlockSize, but named separately since it is a distinct on-disk
+// concept (a standalone recolor file, not a sprite's own embedded palette).
+const externalPaletteSize = 768
+
+// DecodeExternalPalette decodes an external MUGEN/Ikemen .act palette file
+// (256 RGB triplets, always opaque on disk) into a Palette, reproducing
+// convertExternalPaletteToRGBA.mjs's two quirks: the file stores its 256
+// triplets in reverse index order — the first triplet becomes palette index
+// 255, the last becomes index 0 — and only the resulting index 0 is forced
+// to fully transparent (alpha 0); every other entry stays opaque. data must
+// be exactly externalPaletteSize (768) bytes.
+func DecodeExternalPalette(data []byte) (Palette, error) {
+	if len(data) != externalPaletteSize {
+		return Palette{}, fmt.Errorf("sff: external .act palette is %d bytes, want exactly %d", len(data), externalPaletteSize)
+	}
+
+	var p Palette
+	for i := 0; i < 256; i++ {
+		p[255-i] = color.RGBA{R: data[i*3], G: data[i*3+1], B: data[i*3+2], A: 255}
+	}
+	p[0].A = 0
+	return p, nil
 }
 
 // DecodeV2Palette decodes a .sff v2 palette bank's raw color data — already
@@ -131,7 +166,15 @@ func DecodeV2Palette(data []byte) (Palette, error) {
 // needed. A link chain that is out of range or cycles back on itself
 // returns a descriptive error instead of looping or panicking, mirroring
 // v1 linked-sprite resolution (resolveV1Pixels).
-func ResolveV2Palette(table *V2SpriteTable, r io.ReaderAt, index int) (Palette, error) {
+//
+// If override is non-nil, it is returned immediately instead — a caller-
+// supplied external palette (see DecodeExternalPalette) used in place of
+// the bank's own, bypassing the table lookup entirely. See
+// .vibe/decisions/016-external-palette-override-api-shape.md.
+func ResolveV2Palette(table *V2SpriteTable, r io.ReaderAt, index int, override *Palette) (Palette, error) {
+	if override != nil {
+		return *override, nil
+	}
 	return resolveV2Palette(table, r, index, nil)
 }
 

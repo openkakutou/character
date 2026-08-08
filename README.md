@@ -28,6 +28,7 @@ This project is in early-stage development. Shipped so far:
 - Writing combat logic data back out to valid `.cns` text, ready to be read by MUGEN/Ikemen GO or read back in by this library
 - Loading a `.cns` file and saving it back out unchanged reproduces the original file exactly, including comments, block ordering, and any sections the library doesn't otherwise recognize — so re-saving a file you haven't edited never creates a noisy diff
 - Resolving a decoded sprite's pixel data into its actual on-screen colors using the sprite's palette — including reading a `.sff` v1 sprite's own embedded palette and following `.sff` v2 palette bank sharing/linking — with the correct transparency rule applied depending on how the sprite was originally encoded
+- Recoloring a sprite with an external `.act` palette file instead of its own — reading the `.act` file's colors in the correct order with the correct transparency, and using it in place of the sprite's own palette when resolving its on-screen colors; a wrongly-sized `.act` file is caught with a descriptive error instead of crashing
 
 Planned:
 
@@ -274,7 +275,7 @@ func main() {
 		panic(err)
 	}
 
-	palette, err := sff.ResolveV1Palette(table, f, 0)
+	palette, err := sff.ResolveV1Palette(table, f, 0, nil)
 	if err != nil {
 		panic(err)
 	}
@@ -282,6 +283,48 @@ func main() {
 	// PCX-decoded sprites use the "index 0 is always transparent" rule.
 	pixels := sff.ResolvePixels(img.Pixels, palette, sff.AlphaForceTransparentAtIndexZero)
 	fmt.Printf("pixel (0,0) color: %v\n", pixels[0])
+}
+```
+
+Recolor a sprite with an external `.act` palette file instead of its own: decode it with `sff.DecodeExternalPalette`, then pass it as the last argument to `sff.ResolveV1Palette`/`sff.ResolveV2Palette` in place of `nil`:
+
+```go
+package main
+
+import (
+	"fmt"
+	"os"
+
+	"github.com/openkakutou/character/sff"
+)
+
+func main() {
+	f, err := os.Open("kfm.sff")
+	if err != nil {
+		panic(err)
+	}
+	defer f.Close()
+
+	table, err := sff.ParseV1(f)
+	if err != nil {
+		panic(err)
+	}
+
+	actBytes, err := os.ReadFile("kfm-alt.act")
+	if err != nil {
+		panic(err)
+	}
+	altPalette, err := sff.DecodeExternalPalette(actBytes)
+	if err != nil {
+		panic(err)
+	}
+
+	// Same sprite, but resolved against the alternate palette instead of its own.
+	palette, err := sff.ResolveV1Palette(table, f, 0, &altPalette)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Printf("recolored palette entry 1: %v\n", palette[1])
 }
 ```
 
