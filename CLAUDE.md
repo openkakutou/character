@@ -5,7 +5,7 @@
 
 ## Project overview
 
-OpenKakutou `character` is a read/write Go library for MUGEN/Ikemen GO fighting-game character files (`.def`, `.sff`, `.air`, `.cns`). It is the foundation of the OpenKakutou org: a web-based character editor (`editor`, built on top of this library) and, later, a game engine (`engine`) will both depend on it. It has no rendering dependency and must compile cleanly to WebAssembly.
+OpenKakutou `character` is a read/write Go library for MUGEN/Ikemen GO fighting-game character files (`.def`, `.air`, `.cns`, plus `.cmd`/`.zss` planned). Sprite (`.sff`) handling itself lives in the separate [`sff`](https://github.com/openkakutou/sff) repo, which this library depends on (see backlog item 035). It is the foundation of the OpenKakutou org: the web-based character viewer/editor apps (`character-viewer-web`, `character-editor`) and the combat simulation engine (`engine`) all depend on it. It has no rendering dependency and must compile cleanly to WebAssembly.
 
 **Stack:** Go 1.26, compiled to WASM (`GOOS=js GOARCH=wasm`) for the web editor; reusable later in a desktop build via Wails. No UI code lives in this repo.
 **Type:** library
@@ -17,45 +17,52 @@ English — all documentation, backlog items, code comments, and other generated
 ## Project context <!-- keep -->
 
 Long-term scope of the OpenKakutou org (github.com/openkakutou):
-- `character` (this repo) — read/write library for MUGEN/Ikemen GO character files
-- `editor` — web-based character editor (built on top of `character`)
-- `engine` (future) — a game engine in the spirit of Ikemen GO, built on the same extracted libraries
+- `sff` — shared read/write library for MUGEN/Ikemen GO sprite sheet (`.sff`) files, extracted out of this repo (backlog item 035) since `stage` and the lifebar apps need sprite parsing too, not just `character`
+- `character` (this repo) — read/write library for MUGEN/Ikemen GO character files (`.def`/`.air`/`.cns`, plus `.cmd`/`.zss` planned), depending on `sff` for sprites
+- `character-viewer-web` — read-only web app to browse/preview a character, built on top of `character`
+- `character-editor` — read+write web app to modify/create a character, a separate app from `character-viewer-web`, not a successor to it
+- `engine` — combat simulation (state execution, physics, hit detection, damage, round flow — not menus/game flow), built on `character`'s parse output plus `stage`'s boundary/camera data
 
-This repo is the foundation everything else depends on. It must stay independent from any rendering/graphics backend — Ikemen GO's own source tightly couples file parsing with OpenGL texture generation, which makes it unsuitable to extract from directly. This library is built from the MUGEN/Ikemen file format specs instead.
+This repo is the foundation the character-domain apps and `engine` depend on. It must stay independent from any rendering/graphics backend — Ikemen GO's own source tightly couples file parsing with OpenGL texture generation, which makes it unsuitable to extract from directly. This library is built from the MUGEN/Ikemen file format specs instead.
 
 ## Scope of this repo <!-- keep -->
 
 Read **and** write support for MUGEN/Ikemen GO character files:
 - `.def` — character definition, references the other files
-- `.sff` — sprites (binary format)
-- `.air` — animations (text format) — **priority for the first implementation**
-- `.cns` — combat logic/state machine (text format) — later, not required for the sprite/animation editor
+- `.air` — animations (text format)
+- `.cns` — combat logic/state machine (text format)
+- `.cmd` — input commands (motion + button sequences) — planned, backlog item 036
+- `.zss` — Ikemen GO Lua-like state scripts, an alternative to `.cns` — planned, backlog item 037
+
+Sprite (`.sff`) files are handled by the separate `sff` repo, a dependency of this one — not implemented here directly (see backlog item 035).
 
 ## Design constraints <!-- keep -->
 
-1. **No rendering dependency.** This module only parses/serializes data — no OpenGL, no canvas, nothing rendering-related. It must compile cleanly to WASM, and later be usable as-is by both the web editor and, eventually, a game engine.
+1. **No rendering dependency.** This module only parses/serializes data — no OpenGL, no canvas, nothing rendering-related. It must compile cleanly to WASM, and stay usable as-is by `character-viewer-web`/`character-editor` and by `engine`.
 
 2. **Read and write live in the same repo, but as clearly separated sub-concerns** (not necessarily separate packages from day one — separate the concerns internally):
-   - **Read path**: exposes a minimal, stable, pure-data API — the surface a future game engine would consume. Design it as if the engine were already a real client, not as "whatever's left after removing write."
-   - **Write path**: needs to preserve as much of the original file structure as possible on round-trip (ordering, comments) for `.air`/`.cns` — otherwise every save from the editor produces a huge, unreadable Git diff, which hurts community collaboration on character files.
+   - **Read path**: exposes a minimal, stable, pure-data API — the surface `engine` actually consumes. Design it as if the engine were already a real client, not as "whatever's left after removing write."
+   - **Write path**: needs to preserve as much of the original file structure as possible on round-trip (ordering, comments) for `.air`/`.cns` — otherwise every save from `character-editor` produces a huge, unreadable Git diff, which hurts community collaboration on character files.
    - Because Go only compiles what's actually imported, a consumer that only imports the read-oriented sub-package won't pull in write-only dependencies (e.g. formatting-preservation logic) — this already gives engine-side isolation without needing a separate repo.
 
-3. **Formats are interdependent, not independent.** `.air` references sprite groups defined in `.sff` — there's essentially no real use case for parsing one without the other.
+3. **Formats are interdependent, not independent.** `.air` references sprite groups resolved via the `sff` dependency — there's essentially no real use case for reading animation data without also loading the sprites it points to.
 
 ## Architecture
 
 ```
 character/
-  character.go   # root package: assembles sub-packages into a single Character{} struct
-  def/            → .def parsing (entry point, references other files) — not yet implemented
-  sff/            → sprite parsing (binary) — not yet implemented
-  air/            → animation parsing (text, depends on sff) — start here, not yet implemented
-  cns/            → combat logic parsing (text) — later, not yet implemented
+  character.go   # root package: assembles sub-packages + the external sff dependency into a single Character{} struct
+  def/            → .def parsing (entry point, references the other files) — implemented, read+write
+  air/            → animation parsing (text, resolves sprites via the sff dependency) — implemented, read+write
+  cns/            → combat logic parsing (text) — implemented, read+write
+  cmd/            → input command parsing (text) — planned, backlog item 036
+  zss/            → Ikemen GO Lua-like state script parsing (text) — planned, backlog item 037
+  cmd/wasm/       → WebAssembly entrypoint (own build + release pipeline)
 ```
 
-The root `character` package assembles the format-specific sub-packages into a single `Character{}` struct (sprites + animations + hitboxes) — the unit a library consumer actually wants to work with, not raw per-format structs.
+The root `character` package assembles the format-specific sub-packages, plus sprites resolved via the external [`sff`](https://github.com/openkakutou/sff) module, into a single `Character{}` struct (sprites + animations + combat states) — the unit a library consumer actually wants to work with, not raw per-format structs.
 
-**Where to start:** `.air` parsing (`character/air`), since it's the first editor feature (sprite/animation editor). `.sff` support (`character/sff`) is needed alongside it since animations reference sprites. `.cns` can wait.
+Sprite (`.sff`) parsing itself is **not** a sub-package here — it was extracted into the standalone `sff` repo (backlog item 035) since `stage` and the lifebar apps need it too, not just this repo.
 
 <!-- The import below loads the compact codebase map into every session. It is maintained by /vibe:sync; details (modules/, models.md, glossary.md) stay on-demand. -->
 @.vibe/index.md
@@ -137,7 +144,7 @@ Agents active for `/vibe:review` on this project:
 | `vibe:review-antipatterns` | ✅ | always active |
 | `vibe:review-simplicity` | ✅ | always active |
 | `vibe:review-overengineering` | ✅ | always active |
-| `vibe:review-solid` | ✅ | active: explicit modular architecture (def/sff/air/cns sub-packages assembled by a root package) |
+| `vibe:review-solid` | ✅ | active: explicit modular architecture (def/air/cns sub-packages plus the external sff dependency, assembled by a root package) |
 | `vibe:review-ddd` | ❌ | inactive: no explicit domain layer (`domain/`, `entities/`, etc.) |
 | `vibe:review-architecture` | ✅ | active: `.vibe/` generated by this run's `/vibe:sync` |
 | `vibe:review-performance` | ❌ | inactive: library, not an API/server/full-stack project |
