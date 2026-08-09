@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Sprite (`.sff`) file support now comes from the separate, independently published `github.com/openkakutou/sff` library instead of code bundled inside this project — no change in behavior, and nothing consumers of this library need to do differently
+
 ## [0.3.1] - 2026-08-09
 
 ### Fixed

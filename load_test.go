@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/openkakutou/character/cns"
-	"github.com/openkakutou/character/sff"
+	"github.com/openkakutou/sff"
 )
 
 // writeFixtureCharacter creates a .def, .air, and .sff file inside a fresh

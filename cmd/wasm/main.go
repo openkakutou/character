@@ -22,7 +22,7 @@ import (
 	"syscall/js"
 
 	character "github.com/openkakutou/character"
-	"github.com/openkakutou/character/sff"
+	"github.com/openkakutou/sff"
 )
 
 func main() {

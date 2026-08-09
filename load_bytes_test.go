@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/openkakutou/character/sff"
+	"github.com/openkakutou/sff"
 )
 
 // fixtureCharacterBytes builds valid, minimal .def/.air/.sff/.cns content

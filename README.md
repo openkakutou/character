@@ -183,7 +183,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/openkakutou/character/sff"
+	"github.com/openkakutou/sff"
 )
 
 func main() {
@@ -215,7 +215,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/openkakutou/character/sff"
+	"github.com/openkakutou/sff"
 )
 
 func main() {
@@ -254,7 +254,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/openkakutou/character/sff"
+	"github.com/openkakutou/sff"
 )
 
 func main() {
@@ -300,7 +300,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/openkakutou/character/sff"
+	"github.com/openkakutou/sff"
 )
 
 func main() {
@@ -341,7 +341,7 @@ package main
 import (
 	"os"
 
-	"github.com/openkakutou/character/sff"
+	"github.com/openkakutou/sff"
 )
 
 func main() {
@@ -377,7 +377,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/openkakutou/character/sff"
+	"github.com/openkakutou/sff"
 )
 
 func main() {
@@ -409,7 +409,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/openkakutou/character/sff"
+	"github.com/openkakutou/sff"
 )
 
 func main() {
@@ -447,7 +447,7 @@ package main
 import (
 	"os"
 
-	"github.com/openkakutou/character/sff"
+	"github.com/openkakutou/sff"
 )
 
 func main() {
@@ -483,7 +483,7 @@ import (
 	"fmt"
 
 	"github.com/openkakutou/character/air"
-	"github.com/openkakutou/character/sff"
+	"github.com/openkakutou/sff"
 )
 
 func main() {
@@ -517,7 +517,7 @@ import (
 
 	"github.com/openkakutou/character"
 	"github.com/openkakutou/character/air"
-	"github.com/openkakutou/character/sff"
+	"github.com/openkakutou/sff"
 )
 
 func main() {

@@ -44,7 +44,7 @@ function assert(condition, message) {
 
 const defBytes = new TextEncoder().encode("[Info]\nname = Smoke Test\nauthor = Someone\n");
 const airBytes = toUint8Array("air/testdata/sample.air");
-const sffBytes = toUint8Array("sff/testdata/files/v1-basic.sff");
+const sffBytes = toUint8Array("cmd/wasm/testdata/v1-basic.sff");
 const cnsBytes = toUint8Array("cns/testdata/sample.cns");
 
 // --- nominal path ---
@@ -93,7 +93,7 @@ assert(notFound.width === 0 && notFound.height === 0, "resolveSprites: nonexiste
 assert(typeof notFound.error === "string" && notFound.error.startsWith("sprite not found: "), `resolveSprites: nonexistent sprite error is distinguishable (got: ${notFound.error})`);
 
 // --- external palette override recolors the sprite ---
-const actBytes = toUint8Array("sff/testdata/files/cyclops-v1-palette1.act");
+const actBytes = toUint8Array("cmd/wasm/testdata/cyclops-v1-palette1.act");
 const overriddenResult = globalThis.OpenKakutouCharacter.resolveSprites(sffBytes, [[0, 0]], actBytes);
 assert(overriddenResult[0].error === null, `resolveSprites: override reports no error (got: ${overriddenResult[0].error})`);
 const differs = overriddenResult[0].pixels.some((b, i) => b !== found.pixels[i]);

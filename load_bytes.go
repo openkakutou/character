@@ -7,7 +7,7 @@ import (
 	"github.com/openkakutou/character/air"
 	"github.com/openkakutou/character/cns"
 	"github.com/openkakutou/character/def"
-	"github.com/openkakutou/character/sff"
+	"github.com/openkakutou/sff"
 )
 
 // LoadBytes assembles a fully populated Character from .def/.air/.sff/.cns

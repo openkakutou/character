@@ -9,7 +9,7 @@ package character
 import (
 	"github.com/openkakutou/character/air"
 	"github.com/openkakutou/character/cns"
-	"github.com/openkakutou/character/sff"
+	"github.com/openkakutou/sff"
 )
 
 // Character is the in-memory representation of a MUGEN/Ikemen GO character,

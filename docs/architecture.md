@@ -3,23 +3,24 @@
 # Architecture
 
 `character` is a Go module made of a thin root package plus format-specific
-sub-packages, one per MUGEN/Ikemen GO file format. The root package
-(`character`) assembles the sub-packages into a single `Character` struct —
-the unit a library consumer (the `editor` or a future `engine`) actually
-wants to work with, rather than raw per-format structs.
+sub-packages, one per MUGEN/Ikemen GO file format still owned by this repo,
+plus one external dependency for sprite (`.sff`) files. The root package
+(`character`) assembles them into a single `Character` struct — the unit a
+library consumer (the `editor` or a future `engine`) actually wants to work
+with, rather than raw per-format structs.
 
 ```mermaid
 graph TD
     root["character (root package)<br/>Character struct<br/>+ ResolveSprite(frame)<br/>+ Load(defPath)"]
     air["character/air<br/>Animation, Frame, ClsnBox<br/>+ Parse/Serialize(.air text)"]
     def["character/def<br/>CharacterInfo (data model)<br/>+ Parse/Serialize(.def text)"]
-    sff["character/sff<br/>Sprite, SpriteGroup<br/>+ ParseV1/DecodePCX (.sff v1 read)<br/>+ SerializeV1/EncodePCX (.sff v1 write)<br/>+ ParseV2/DecodeV2Sprite (.sff v2 read)<br/>+ SerializeV2/EncodeV2Sprite (.sff v2 write)<br/>+ Load (full-file read, either version)<br/>+ ResolvePixels/Palette (index-to-RGBA resolution)"]
+    sff["github.com/openkakutou/sff (external module)<br/>Sprite, SpriteGroup<br/>+ Load (.sff read, either version)<br/>+ ResolveSpritePixels"]
     cns["character/cns<br/>StateDef, Controller (data model)<br/>+ Parse/Serialize(.cns text)<br/>+ Document (comment-preserving round trip)"]
 
     root -->|assembles| air
     root -->|assembles| def
-    root -->|assembles| sff
     root -->|assembles| cns
+    root -->|depends on| sff
     air -->|SpriteResolver resolves frame references against| sff
 ```
 
@@ -28,10 +29,17 @@ graph TD
 | Package | Responsibility | Status |
 |---|---|---|
 | `character` (root) | Assembles the sub-packages into a single `Character{}` struct, resolves an animation frame to its actual sprite (`ResolveSprite`), and loads a full `Character` directly from a `.def` file path (`Load`) | `Animations []air.Animation`, `Sprites []sff.SpriteGroup`, and `StateDefs []cns.StateDef` all wired in, via a `.def`-driven top-level loader — completing the full read surface across all four formats |
-| `character/air` | MUGEN/Ikemen GO animation (`.air`) files: the `Animation`/`Frame`/`ClsnBox` data model, a parser that reads `.air` text into that model, a serializer that writes it back out, a `Document` type for comment-preserving round trips, and a `SpriteResolver` that resolves a `Frame`'s sprite reference against sprites loaded via `character/sff` | Data model + read path implemented; `Serialize` produces valid, re-readable output (not a byte-exact round-trip of an original file's formatting); `Document`/`ParseDocument` round-trip unmodified files byte-for-byte, comments included; `SpriteResolver` resolves every `Frame` reference to its `sff.Sprite`, or a descriptive error for a missing one, regardless of `.sff` version |
+| `character/air` | MUGEN/Ikemen GO animation (`.air`) files: the `Animation`/`Frame`/`ClsnBox` data model, a parser that reads `.air` text into that model, a serializer that writes it back out, a `Document` type for comment-preserving round trips, and a `SpriteResolver` that resolves a `Frame`'s sprite reference against sprites loaded via `github.com/openkakutou/sff` | Data model + read path implemented; `Serialize` produces valid, re-readable output (not a byte-exact round-trip of an original file's formatting); `Document`/`ParseDocument` round-trip unmodified files byte-for-byte, comments included; `SpriteResolver` resolves every `Frame` reference to its `sff.Sprite`, or a descriptive error for a missing one, regardless of `.sff` version |
 | `character/def` | Character definition (`.def`) files — the entry point referencing the other formats: the `CharacterInfo` data model, a text parser (`Parse`), a serializer (`Serialize`), and a `Document` type for comment-preserving round trips | Data model and read+write cycle implemented (`CharacterInfo`; `Parse` reads `[Info]`/`[Files]` text into it, skipping unrecognized sections; `Serialize` writes it back out to valid, re-readable text; `Document`/`ParseDocument` round-trip unmodified files byte-for-byte, comments and unrecognized sections included); wired into the root `Character` struct via `character.Load` |
-| `character/sff` | Sprite (`.sff`, binary) files: the `Sprite`/`SpriteGroup` data model, a version-agnostic full-file loader (`Load`), a v1 header/sprite-index-table reader (`ParseV1`) and pixel decoder (`DecodePCX`), their write-path counterparts (`SerializeV1`, `EncodePCX`), a v2 header/sprite-and-palette-table reader (`ParseV2`) with its own pixel decoder (`DecodeV2Sprite`), the v2 write-path counterparts (`SerializeV2`, `EncodeV2Sprite`), and a palette resolution helper (`ResolvePixels`/`Palette`, plus version-specific `DecodeV1Palette`/`ResolveV1Palette` and `DecodeV2Palette`/`ResolveV2Palette`, both accepting an optional external override palette) turning a decoded index buffer into final on-screen colors, and `DecodeExternalPalette` decoding an external MUGEN/Ikemen `.act` palette file for use as that override | Data model implemented (version-agnostic, no v1/v2-specific fields); v1 read+write cycle implemented (`ParseV1`/`DecodePCX`, `SerializeV1`/`EncodePCX`); v2 header/table reading implemented (`ParseV2`); v2 pixel decoding implemented for raw, RLE8-compressed, LZ5-compressed, and PNG-encoded sprites (`DecodeV2Sprite`); v2 write path implemented for the raw/PNG scope only (`SerializeV2`/`EncodeV2Sprite`), completing the v2 read+write cycle for those formats; `Load` assembles a full `.sff` file (auto-detecting v1/v2) into `[]SpriteGroup`; palette index-to-RGBA resolution implemented for both versions, including v1's embedded palette, v2's palette bank linking, and an optional external `.act` palette override — RLE5 v2 pixel decoding, and RLE8/LZ5/RLE5 v2 pixel encoding, not yet implemented |
 | `character/cns` | Combat logic / state machine (`.cns`, text) files: the `StateDef`/`Controller` data model, a text parser (`Parse`) that reads `[Statedef N]`/`[State ...]` blocks into it, keeping trigger conditions and parameters as unevaluated data (and, for `StateDef`'s own numeric header fields, an unevaluated-expression fallback via `HeaderExprs`), a serializer (`Serialize`) that writes it back out, and a `Document` type for comment-preserving round trips | Data model and read+write cycle implemented; unrecognized sections are skipped by `Parse` rather than aborting the read, matching `def.Parse`'s tolerance; a `[State ...]` header's content is unconstrained (no state number required, matching real-world files) since `Parse` never stores it; `Document`/`ParseDocument` round-trip unmodified files byte-for-byte, comments and unrelated sections included; wired into the root `Character` struct via `character.Load` |
+
+Sprite (`.sff`, binary) file support is no longer a sub-package of this
+repo — it now comes from the separate, independently published
+[`github.com/openkakutou/sff`](https://github.com/openkakutou/sff) module,
+pinned in `go.mod`, so that other OpenKakutou repos needing sprite parsing
+(`stage`, `lifebar`) don't need to depend on this one to get it. This
+repo's own docs cover only how `character`/`air` *use* that module
+(below); its own internal implementation is documented in its own repo.
 
 ## Read/write separation
 
@@ -124,73 +132,16 @@ and one-shot overrides while reading the file, keeping that resolution
 logic out of the pure-data type the read API exposes. See
 [`.vibe/decisions/001-frame-clsn-boxes-pre-resolved.md`](../.vibe/decisions/001-frame-clsn-boxes-pre-resolved.md).
 
-`sff.ParseV1` similarly keeps its output out of the public `Sprite`/
-`SpriteGroup` model: it returns a separate `V1SpriteTable`/`V1SpriteEntry`
-pair carrying file offsets and format-version-specific bookkeeping that
-`Sprite` deliberately does not expose. See
-[`.vibe/decisions/004-sff-v1-table-is-a-separate-low-level-type.md`](../.vibe/decisions/004-sff-v1-table-is-a-separate-low-level-type.md).
-`sff.ParseV2` follows the same pattern for the v2 format, returning
-`V2SpriteTable`/`V2SpriteEntry`/`V2PaletteEntry` rather than populating
-`Sprite`/`SpriteGroup` directly — v2 additionally needs a palette bank
-table, which v1 (single shared or per-sprite palette, no bank indirection)
-has no equivalent of.
-
-`sff.DecodePCX` follows the same pattern: it returns a `PCXImage` (pixel
-buffer + dimensions), not a populated `Sprite`, since it decodes only the
-raw palette-index pixel data. `Width`/`Height` resolution into `Sprite` is
-`Load`'s job (above); resolving those same indices into actual on-screen
-colors against a palette is its own further opt-in step — see
-`sff.ResolvePixels`, below.
-
-`sff.DecodeV2Sprite` returns its own `V2Image`, not `PCXImage`: unlike v1's
-always-8-bit-indexed PCX data, v2 sprites can be indexed (raw, PNG8) *or*
-direct-color (PNG24, PNG32, no palette involved at all), so `V2Image` tracks
-how many bytes each pixel occupies rather than assuming one index byte per
-pixel. Raw, run-length-compressed ("RLE8"), dictionary-compressed ("LZ5",
-item 025 — ported from `sff-extractor`'s `decodeLZ5.mjs`, cross-checked
-against Ikemen-GO's `Lz5Decode`), and PNG-encoded sprites are decoded
-today; the remaining, less common RLE-based v2 format (RLE5) returns a
-descriptive "unsupported format" error rather than being guessed at. See
-[`.vibe/decisions/006-sff-v2-pixel-decode-shape-and-scope.md`](../.vibe/decisions/006-sff-v2-pixel-decode-shape-and-scope.md)
-and
-[`.vibe/decisions/015-v2-lz5-decode-error-handling-diverges-from-reference.md`](../.vibe/decisions/015-v2-lz5-decode-error-handling-diverges-from-reference.md).
-
-On the write side, `sff.SerializeV1` mirrors this with its own write-only
-input type, `V1WriteSprite`, rather than reusing `V1SpriteEntry`: a reader's
-`Offset`/`Length` are facts computed while parsing a file, not inputs a
-writer should trust a caller to supply. Unlike `air`'s `Document` type,
-`SerializeV1`/`EncodePCX` do not attempt a byte-exact round trip of an
-original file — `.sff` is a binary format with no diff-friendliness benefit
-to preserving one, so round-trip fidelity is verified semantically
-(serialize, re-parse, re-decode, compare) instead. See
-[`.vibe/decisions/005-sff-v1-serialize-is-semantic-not-byte-exact-round-trip.md`](../.vibe/decisions/005-sff-v1-serialize-is-semantic-not-byte-exact-round-trip.md).
-
-`sff.SerializeV2`/`EncodeV2Sprite` follow the same v1 write-path pattern
-(their own write-only `V2WriteSprite`/`V2WritePalette` input types, a
-semantic rather than byte-exact round trip) with two v2-specific choices:
-they always write sprite and palette data into the file's single literal
-data section, since `V2SpriteEntry` — the type a caller would round-trip
-through this write path — has no field recording which of the format's two
-data sections a sprite's bytes originally came from; and `EncodeV2Sprite`
-only encodes the raw/PNG format scope `DecodeV2Sprite` originally decoded
-(item 011) — it has not grown alongside `DecodeV2Sprite`'s later RLE8
-(item 024) and LZ5 (item 025) decode support, so RLE8 and LZ5, like the
-still fully unimplemented RLE5 format, remain a descriptive error on the
-write side, for the same reason item 011 gave for not guessing at any of
-their decode sides.
-See
-[`.vibe/decisions/007-sff-v2-serialize-shape-and-scope.md`](../.vibe/decisions/007-sff-v2-serialize-shape-and-scope.md).
-
-`sff.ResolvePixels`/`Palette` follow the same "separate opt-in type" pattern
-one step further: turning a `PCXImage`/`V2Image` index buffer into actual
-colors needs a resolved 256-entry `Palette`, which is never added as a field
-on those pure-data types. Getting that `Palette` is version-specific
-(`DecodeV1Palette`/`ResolveV1Palette` for v1's embedded-after-pixel-data RGB
-block, `DecodeV2Palette`/`ResolveV2Palette` for v2's already-RGBA,
-independently linkable palette banks), but `ResolvePixels` itself, and the
-alpha-forcing rule it takes (`AlphaRule`), are shared across both versions.
-See
-[`.vibe/decisions/014-palette-resolution-api-shape.md`](../.vibe/decisions/014-palette-resolution-api-shape.md).
+`.sff` parsing internals (`ParseV1`/`ParseV2`, pixel decoding, palette
+resolution) used to be documented here in detail, back when `sff` was a
+sub-package of this repo. That code — and the design decisions behind its
+own low-level types (`V1SpriteTable`, `V2Image`, `PCXImage`, and so on) —
+now lives in the separate
+[`github.com/openkakutou/sff`](https://github.com/openkakutou/sff) module;
+see its own documentation for that level of detail. `.vibe/decisions/004`
+through `007`, `014`, and `015` in this repo remain as the historical
+record of why `sff` was originally shaped the way it was, from back when
+it lived here.
 
 ## No rendering dependency
 

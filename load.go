@@ -8,7 +8,7 @@ import (
 	"github.com/openkakutou/character/air"
 	"github.com/openkakutou/character/cns"
 	"github.com/openkakutou/character/def"
-	"github.com/openkakutou/character/sff"
+	"github.com/openkakutou/sff"
 )
 
 // Load reads the .def character definition file at path and assembles a

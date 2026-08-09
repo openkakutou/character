@@ -117,7 +117,7 @@ Defined in: `air/animation.go`
 
 `json:"..."`-tagged (`group`, `image`, `width`, `height`, `axisX`, `axisY`, `palette`).
 
-Defined in: `sff/sprite.go`
+Defined by the external `github.com/openkakutou/sff` module (item 035); consumed in: `character.go`, `load.go`, `load_bytes.go`, `air/resolve.go`
 
 ## SpriteGroup
 | Field | Type | Notes |
@@ -127,144 +127,12 @@ Defined in: `sff/sprite.go`
 
 `json:"..."`-tagged (`index`, `sprites`).
 
-Defined in: `sff/sprite.go`
+Defined by the external `github.com/openkakutou/sff` module (item 035); consumed in: `character.go`, `load.go`, `load_bytes.go`, `air/resolve.go`
 
-## V1Header
-| Field | Type | Notes |
-|---|---|---|
-| Version | [4]byte | Raw version bytes as stored in the file (verhi, verlo1, verlo2, verlo3) |
-| GroupCount | int | Number of sprite groups declared in the header |
-| ImageCount | int | Total number of sprites declared in the header |
-| SharedPalette | bool | True when sprites share one palette table (SPRPALTYPE_SHARED); false when each sprite carries its own (SPRPALTYPE_INDIV) |
-
-Defined in: `sff/v1.go`
-
-## V1SpriteEntry
-| Field | Type | Notes |
-|---|---|---|
-| Group | int | Sprite group index |
-| Image | int | Image index within Group |
-| AxisX | int | Horizontal offset from top-left corner to the axis (pivot) point |
-| AxisY | int | Vertical offset from top-left corner to the axis (pivot) point |
-| Offset | int64 | Absolute file offset of this sprite's pixel data, immediately after its subheader |
-| Length | int | Pixel data length in bytes; 0 means this sprite links to another sprite's data (see LinkedIndex) |
-| LinkedIndex | int | Index, within the owning V1SpriteTable's Sprites, of the sprite this one shares pixel data with; only meaningful when Length is 0 |
-| SharedPalette | bool | True when this sprite reuses the previous sprite's palette |
-
-Defined in: `sff/v1.go`
-
-## PCXImage
-| Field | Type | Notes |
-|---|---|---|
-| Width | int | Pixel width, recovered from the PCX data's own embedded header |
-| Height | int | Pixel height, recovered from the PCX data's own embedded header |
-| Pixels | []byte | Row-major buffer of palette index values, length Width*Height; no RGB/palette resolution performed |
-
-Defined in: `sff/pcx.go`
-
-## V1SpriteTable
-| Field | Type | Notes |
-|---|---|---|
-| Header | V1Header | The parsed file header |
-| Sprites | []V1SpriteEntry | Sprite index table entries, in file order |
-
-Write/read helper: `Offset(group, image int) (int64, bool)` resolves a `(group, image)` pair to its pixel data's file offset.
-
-Defined in: `sff/v1.go`
-
-## V1WriteSprite
-| Field | Type | Notes |
-|---|---|---|
-| Group | int | Sprite group index |
-| Image | int | Image index within Group |
-| AxisX | int | Horizontal offset from top-left corner to the axis (pivot) point |
-| AxisY | int | Vertical offset from top-left corner to the axis (pivot) point |
-| SharedPalette | bool | True when this sprite reuses the previous sprite's palette |
-| PixelData | []byte | This sprite's PCX-encoded pixel data (e.g. from `EncodePCX`); empty to write a linked sprite instead |
-| LinkedIndex | int | Index, within the `SerializeV1` call's sprite slice, this sprite links to; only meaningful when PixelData is empty |
-
-Write-only counterpart to `V1SpriteEntry`, passed to `SerializeV1`; it has no `Offset`/`Length` fields since those are computed by the writer, not supplied.
-
-Defined in: `sff/v1_serializer.go`
-
-## V2Header
-| Field | Type | Notes |
-|---|---|---|
-| Version | [4]byte | Raw version bytes as stored in the file (verlo3, verlo2, verlo1, verhi); Version[3] is 2 for a v2 file |
-| SpriteCount | int | Total number of sprites declared in the header |
-| PaletteCount | int | Total number of palette banks declared in the header |
-
-Defined in: `sff/v2.go`
-
-## V2SpriteEntry
-| Field | Type | Notes |
-|---|---|---|
-| Group | int | Sprite group index |
-| Image | int | Image index within Group |
-| Width | int | Pixel width, as declared in the table |
-| Height | int | Pixel height, as declared in the table |
-| AxisX | int | Horizontal offset from top-left corner to the axis (pivot) point |
-| AxisY | int | Vertical offset from top-left corner to the axis (pivot) point |
-| Offset | int64 | Absolute file offset of this sprite's encoded pixel data, already resolved against the file's literal or translated data section |
-| Length | int | Encoded pixel data length in bytes; 0 means this sprite links to another sprite's data (see LinkedIndex) |
-| LinkedIndex | int | Index, within the owning V2SpriteTable's Sprites, of the sprite this one shares pixel data with; only meaningful when Length is 0 |
-| Format | int | Pixel-data encoding code (see the V2Format* constants); only meaningful when Length is non-zero |
-| ColorDepth | int | Bit depth of the encoded pixel data |
-| PaletteIndex | int | Index, within the owning V2SpriteTable's Palettes, of the palette bank this sprite is drawn with |
-
-Defined in: `sff/v2.go`
-
-## V2PaletteEntry
-| Field | Type | Notes |
-|---|---|---|
-| Group | int | Palette bank's group index |
-| Number | int | Palette bank's index within Group |
-| ColorCount | int | Number of colors declared for this palette bank |
-| Offset | int64 | Absolute file offset of this palette bank's RGBA color data |
-| Length | int | Color data length in bytes; 0 means this bank links to another bank's data (see LinkedIndex) |
-| LinkedIndex | int | Index, within the owning V2SpriteTable's Palettes, of the palette bank this one shares color data with; only meaningful when Length is 0 |
-
-Defined in: `sff/v2.go`
-
-## V2SpriteTable
-| Field | Type | Notes |
-|---|---|---|
-| Header | V2Header | The parsed file header |
-| Sprites | []V2SpriteEntry | Sprite index table entries, in file order |
-| Palettes | []V2PaletteEntry | Palette bank table entries, in file order |
-
-Read helpers: `Offset(group, image int) (int64, bool)` resolves a `(group, image)` pair to its pixel data's file offset; `PaletteOffset(group, number int) (int64, bool)` resolves a `(group, number)` pair to its palette bank's color data file offset.
-
-Defined in: `sff/v2.go`
-
-## V2Image
-| Field | Type | Notes |
-|---|---|---|
-| Width | int | Pixel width |
-| Height | int | Pixel height |
-| BytesPerPixel | int | 1 for indexed data (raw, PNG8), 3 for RGB (PNG24), 4 for RGBA (PNG32) |
-| Pixels | []byte | Row-major buffer, length Width*Height*BytesPerPixel; indexed data holds palette index values (no RGB/palette resolution performed), direct-color data holds actual color channels |
-
-Defined in: `sff/v2_decoder.go`
-
-## V2WriteSprite
-| Field | Type | Notes |
-|---|---|---|
-| Group | int | Sprite group index |
-| Image | int | Image index within Group |
-| Width | int | Sprite width in pixels |
-| Height | int | Sprite height in pixels |
-| AxisX | int | Horizontal offset from top-left corner to the axis (pivot) point |
-| AxisY | int | Vertical offset from top-left corner to the axis (pivot) point |
-| Format | int | How PixelData is encoded (see the V2Format* constants); only meaningful when PixelData is non-empty |
-| ColorDepth | int | Bit depth of PixelData |
-| PaletteIndex | int | Index, within the `SerializeV2` call's palette slice, of the palette bank this sprite is drawn with |
-| PixelData | []byte | This sprite's already-encoded pixel data (e.g. from `EncodeV2Sprite`); empty to write a linked sprite instead |
-| LinkedIndex | int | Index, within the `SerializeV2` call's sprite slice, this sprite links to; only meaningful when PixelData is empty |
-
-Write-only counterpart to `V2SpriteEntry`, passed to `SerializeV2`; it has no `Offset`/`Length` fields since those are computed by the writer, not supplied.
-
-Defined in: `sff/v2_serializer.go`
+`.sff`-specific low-level types (`V1Header`/`V1SpriteEntry`/`V1SpriteTable`/`V1WriteSprite`/`PCXImage`,
+`V2Header`/`V2SpriteEntry`/`V2PaletteEntry`/`V2SpriteTable`/`V2Image`/`V2WriteSprite`/`V2WritePalette`,
+`AlphaRule`) moved out of this repo along with the `sff` package itself (item 035) — they now live in
+`github.com/openkakutou/sff`'s own model docs; this repo no longer references them by name.
 
 ## StateDef
 | Field | Type | Notes |
@@ -324,29 +192,7 @@ String-based enums matching `.cns [Statedef N]` header tokens.
 
 Defined in: `cns/statedef.go`
 
-## V2WritePalette
-| Field | Type | Notes |
-|---|---|---|
-| Group | int | Palette bank's group index |
-| Number | int | Palette bank's index within Group |
-| ColorCount | int | Number of colors in this palette bank |
-| ColorData | []byte | This bank's own RGBA color data; empty to write a linked bank instead |
-| LinkedIndex | int | Index, within the `SerializeV2` call's palette slice, this bank links to; only meaningful when ColorData is empty |
-
-Write-only counterpart to `V2PaletteEntry`, passed to `SerializeV2`.
-
-Defined in: `sff/v2_serializer.go`
-
 ## Palette
-`[256]color.RGBA` — a resolved color table, indexed by a decoded sprite's palette index bytes (`PCXImage.Pixels` / `V2Image.Pixels` with `BytesPerPixel: 1`). Kept separate from `PCXImage`/`V2Image`/`Sprite`; produced by `DecodeV1Palette`/`ResolveV1Palette`, `DecodeV2Palette`/`ResolveV2Palette`, or `DecodeExternalPalette` (an external `.act` file, used as an optional `override` argument to `ResolveV1Palette`/`ResolveV2Palette` in place of a sprite's own); consumed by `ResolvePixels`.
+`[256]color.RGBA` — a resolved color table, indexed by a decoded sprite's palette index bytes. Produced by `DecodeV1Palette`/`ResolveV1Palette`, `DecodeV2Palette`/`ResolveV2Palette`, or `DecodeExternalPalette` (an external `.act` file, used as an optional `override` argument in place of a sprite's own).
 
-Defined in: `sff/palette.go`
-
-## AlphaRule
-`int`-based enum selecting how `ResolvePixels` determines a resolved pixel's alpha at palette index 0.
-| Value | Notes |
-|---|---|
-| AlphaForceTransparentAtIndexZero | Forces index 0 to `(0,0,0,0)` regardless of the palette's own stored value; used for PCX (v1) and PNG8 (v2) decoded pixel data |
-| AlphaLiteral | Uses the palette's own stored alpha unmodified, including at index 0; used for RLE8/LZ5 (v2) decoded pixel data |
-
-Defined in: `sff/palette.go`
+Defined by the external `github.com/openkakutou/sff` module (item 035); consumed in: `cmd/wasm/main.go` (palette-override support)

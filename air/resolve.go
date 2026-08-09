@@ -3,7 +3,7 @@ package air
 import (
 	"fmt"
 
-	"github.com/openkakutou/character/sff"
+	"github.com/openkakutou/sff"
 )
 
 // SpriteResolver resolves a Frame's (Group, Image) reference against a

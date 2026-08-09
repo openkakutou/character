@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/openkakutou/character/air"
-	"github.com/openkakutou/character/sff"
+	"github.com/openkakutou/sff"
 )
 
 func TestCharacter_ZeroValue_HasEmptyName(t *testing.T) {

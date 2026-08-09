@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/openkakutou/character/sff"
+	"github.com/openkakutou/sff"
 )
 
 // sampleSpriteGroups builds a small, multi-group sprite collection with

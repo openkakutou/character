@@ -23,37 +23,23 @@ An axis-aligned box attached to a Frame that defines a region used for hit detec
 _Sources: `air/animation.go`, `.vibe/decisions/001-frame-clsn-boxes-pre-resolved.md`_
 
 ## Sprite
-A single image belonging to a character, identified by its group and image index, with a pixel width/height, an axis (pivot) point offset used when positioning it, and a reference to the palette it is drawn with. A Frame's `Group`/`Image` fields identify the Sprite it displays.
+A single image belonging to a character, identified by its group and image index, with a pixel width/height, an axis (pivot) point offset used when positioning it, and a reference to the palette it is drawn with. A Frame's `Group`/`Image` fields identify the Sprite it displays. Defined and decoded by the external `github.com/openkakutou/sff` module (item 035); this repo consumes it as `sff.Sprite`.
 **Do not confuse with:** Frame, which is a step of an Animation that references a Sprite to display, not the sprite itself.
-_Sources: `sff/sprite.go`_
+_Sources: `character.go`, `load.go`, `load_bytes.go`, `air/resolve.go`_
 
 ## Sprite group
-A collection of Sprites that share the same group index — e.g. the frames of a single stance or attack, addressed by their image index within the group.
-_Sources: `sff/sprite.go`_
-
-## Sprite index table
-The part of a `.sff` file that lists every sprite by its `(group, image)` key and points to where that sprite's pixel data lives in the file, without describing the pixel data itself.
-_Sources: `sff/v1.go`_
-
-## Linked sprite
-A sprite whose pixel data is not stored separately in the `.sff` file: it reuses ("links to") a previous sprite's already-stored pixel data, identified by an index, to avoid duplicating identical image data on disk.
-**Do not confuse with:** Sprite, which always has its own metadata entry even when it links to another sprite's pixel data.
-_Sources: `sff/v1.go`, `sff/v2.go`_
+A collection of Sprites that share the same group index — e.g. the frames of a single stance or attack, addressed by their image index within the group. Defined by the external `github.com/openkakutou/sff` module (item 035); this repo consumes it as `sff.SpriteGroup`.
+_Sources: `character.go`, `load.go`, `load_bytes.go`, `air/resolve.go`_
 
 ## Palette
-The resolved set of 256 colors a Sprite's pixel indices are drawn with — the final on-screen color for each possible index byte. Getting a Sprite's Palette differs by `.sff` version: v1 embeds each non-shared sprite's own palette bytes directly in the file, as the trailing portion of that sprite's own declared data (folded into its length, not stored right after it); v2 organizes colors into Palette banks, referenced by a Sprite's Palette index. Resolving a decoded Sprite's raw pixel indices against its Palette also applies one of three rules for how transparent index 0 is (and, for one of the three, whether its color survives at all), depending on how the sprite was originally encoded. An External palette, once decoded, can be supplied in place of a Sprite's own Palette when resolving its colors.
-**Do not confuse with:** Palette bank, which is v2's specific, linkable on-disk storage unit for a Palette's colors — v1 has no equivalent, storing a palette directly per sprite instead. Also not to be confused with External palette, which is a standalone recolor file rather than data owned by any particular Sprite.
-_Sources: `sff/palette.go`, `.vibe/decisions/014-palette-resolution-api-shape.md`_
+The resolved set of 256 colors a Sprite's pixel indices are drawn with — the final on-screen color for each possible index byte. An External palette, once decoded, can be supplied in place of a Sprite's own Palette when resolving its colors. Resolution logic (per-`.sff`-version palette lookup, alpha rules) is defined by the external `github.com/openkakutou/sff` module (item 035); this repo consumes it as `sff.Palette`, notably in `cmd/wasm`'s palette-override support.
+**Do not confuse with:** External palette, which is a standalone recolor file rather than data owned by any particular Sprite.
+_Sources: `cmd/wasm/main.go`, `.vibe/decisions/014-palette-resolution-api-shape.md`_
 
 ## External palette
-A standalone `.act` palette file (256 RGB colors) used to recolor a character without touching its sprites — e.g. for alternate costumes/skins. Unlike a Sprite's own embedded Palette or a v2 Palette bank, it belongs to no particular Sprite or `.sff` file; its 256 colors are stored in reverse index order on disk, and only its resulting index 0 is treated as transparent.
+A standalone `.act` palette file (256 RGB colors) used to recolor a character without touching its sprites — e.g. for alternate costumes/skins. Unlike a Sprite's own embedded Palette, it belongs to no particular Sprite or `.sff` file; its 256 colors are stored in reverse index order on disk, and only its resulting index 0 is treated as transparent. Decoded by the external `github.com/openkakutou/sff` module's `DecodeExternalPalette` (item 035); this repo calls it from `cmd/wasm` to support a palette-override request from a browser caller.
 **Do not confuse with:** Palette, which is a Sprite's own resolved colors — an External palette is a separate file a caller may substitute in its place.
-_Sources: `sff/palette.go`, `.vibe/decisions/016-external-palette-override-api-shape.md`_
-
-## Palette bank
-A named (group, number) collection of colors a `.sff` v2 sprite can be drawn with, stored in the file's own palette table separately from the sprite table. Like a Linked sprite, a palette bank can link to (reuse) another bank's already-stored color data instead of storing its own, identified by an index. A Sprite's Palette reference identifies which palette bank it uses.
-**Do not confuse with:** Sprite, which is drawn using a palette bank's colors but is not itself one.
-_Sources: `sff/v2.go`_
+_Sources: `cmd/wasm/main.go`, `.vibe/decisions/016-external-palette-override-api-shape.md`_
 
 ## State
 A named mode of a character's behavior (e.g. standing, an attack, a hit reaction), defined by a `.cns` `[Statedef N]` block: a state number, its type/move-type/physics classification, and the State controllers that run while it is active.
