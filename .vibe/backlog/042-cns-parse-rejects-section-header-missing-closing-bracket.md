@@ -13,3 +13,5 @@ status: todo
 
 ## Notes
 Only one real-world example is in hand so far (the Bardock file's `[State 110, 1`); worth a quick corpus check (similar to item 032's) to see how common this specific typo is before deciding how far the tolerance should extend (e.g. also missing opening `[`?). Not part of item 041's scope — that item only concerned `.air` blank-frame sentinels.
+
+**Update (full corpus scan, 2026-08-10):** confirmed as the single most common `character.Load` failure across the whole local corpus (`~/workspace/ikemen-quick-versus/chars`) — 109 of 717 real `.def` files (~15%) fail on exactly this pattern, all with the identical message shape `cns: line N: malformed section header "..."`. Additional real fixture: `~/workspace/ikemen-quick-versus/chars/Capcom/Commando (CVS)/Commando.def` fails on `cvscommando.cns` with `[State -2, Blocking-12` (missing `]`) — same root cause as the Bardock case, confirms the fix should not be scoped narrowly to one character's file.
