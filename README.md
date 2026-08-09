@@ -35,10 +35,10 @@ This project is in early-stage development. Shipped so far:
 - A character (name, animations, sprites, combat logic) can now be loaded directly in a web browser via a WebAssembly build — no local Go installation needed; tagging a new release automatically publishes a downloadable module ready for a web app to load
 - A sprite's actual image can now be resolved directly in the browser via that same WebAssembly build — not just its dimensions and metadata — including recoloring it with an external palette file; multiple sprites can be resolved in a single call so browsing a whole sprite sheet doesn't require one round trip per sprite
 - `.sff` v2 sprites that carry no image data of their own — a shorthand some real character files use to mean "reuse the character's very first sprite" — now resolve to that actual image instead of reporting an error, validated against real, unmodified MUGEN/Ikemen character files rather than only hand-built test data; that same validation also caught and fixed two color-accuracy bugs affecting some real sprites: `.sff` v2 sprites using the 32-bit PNG format now show correct colors wherever they're partially see-through, and `.sff` v2 sprites using the 8-bit indexed PNG format now always show fully opaque colors outside their transparent areas
+- `.sff` v2 sprites using the less common "RLE5" compressed pixel format can now be resolved too, alongside the other supported encodings — unlike those, this one hasn't yet been validated against a real character file (none using it has been found so far), so treat it as unproven until one turns up
 
 Planned:
 
-- Decoding the remaining, less common `.sff` v2 compressed pixel format (RLE5)
 - Preserving comments and ordering when the saved `.def`/`.air`/`.cns` file actually differs from the original (today this is guaranteed only when nothing changed)
 <!-- vibe:end:features -->
 
