@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `.sff` v2 sprites using the RLE5 pixel compression format can now be resolved instead of reporting an error, via the updated `sff` dependency (v0.2.0). Unlike every other supported format, RLE5 support has not been validated against a real character file — none using it is known to exist yet — so it should be treated as unproven until one turns up.
+
 ## [0.3.2] - 2026-08-09
 
 ### Changed
