@@ -1,9 +1,7 @@
 ---
-status: running
+status: idle
 started: 2026-08-06T00:00
 limit: none
-current: 029
-attempt: 1
 ---
 # Auto run journal
 
@@ -26,3 +24,6 @@ attempt: 1
 - 016 — feature — done (5642ad4)
 - 017 — feature — done (d45aaa6, resumed under /vibe:feature after session-limit interruption)
 - 018 — feature — done (4ff6b9d, discovered already finished on resume — auto-state was stale)
+
+## 2026-08-09T10:44 — resumed via /vibe:next-task auto 1 (limit: 1, driven by /loop 3h)
+- 029 — feature — done (efa1e83)
