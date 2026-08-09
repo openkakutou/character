@@ -105,6 +105,9 @@ func normalizeAnimationForJSON(a *air.Animation) {
 }
 
 func normalizeStateDefForJSON(s *cns.StateDef) {
+	if s.HeaderExprs == nil {
+		s.HeaderExprs = map[string]string{}
+	}
 	if s.Controllers == nil {
 		s.Controllers = []cns.Controller{}
 	}

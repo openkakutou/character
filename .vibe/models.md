@@ -282,11 +282,12 @@ Defined in: `sff/v2_serializer.go`
 | MoveHitPersist | bool | Whether "MoveHit"-triggered conditions survive into this state |
 | HitCountPersist | bool | Whether the hit counter survives into this state |
 | SprPriority | int | Sprite drawing (layering) priority for this state |
+| HeaderExprs | map[string]string | Raw, unevaluated source text (keyed by lowercase field name) of `anim`/`poweradd`/`juggle`/`sprpriority` whenever the source held a MUGEN trigger expression rather than a literal integer; the corresponding typed field stays at its zero value in that case |
 | Controllers | []Controller | State controllers that run while this state is active, in file order |
 
-`json:"..."`-tagged (`number`, `type`, `moveType`, `physics`, `anim`, `ctrl`, `powerAdd`, `juggle`, `faceP2`, `hitDefPersist`, `moveHitPersist`, `hitCountPersist`, `sprPriority`, `controllers`).
+`json:"..."`-tagged (`number`, `type`, `moveType`, `physics`, `anim`, `ctrl`, `powerAdd`, `juggle`, `faceP2`, `hitDefPersist`, `moveHitPersist`, `hitCountPersist`, `sprPriority`, `headerExprs`, `controllers`).
 
-Populated by `Parse(r io.Reader) ([]StateDef, error)`, which reads `[Statedef N]`/`[State N]` `.cns` text into this shape, skipping unrecognized sections. Written back out by `Serialize(w io.Writer, states []StateDef) error` (a semantic round trip through `Parse`, not byte-exact preservation of an original file's formatting/comments — see `Document (cns)` below for that case). Wired into the root `Character` struct via `character.Load`/`character.LoadBytes`. See `.vibe/decisions/011-cns-controller-parameters-are-untyped-key-value-data.md` and `.vibe/decisions/012-cns-parse-header-detection-strategy.md`.
+Populated by `Parse(r io.Reader) ([]StateDef, error)`, which reads `[Statedef N]`/`[State ...]` `.cns` text into this shape, skipping unrecognized sections. A `[State ...]` header's own content (numbered or a bare label) is unconstrained and discarded. Written back out by `Serialize(w io.Writer, states []StateDef) error` (a semantic round trip through `Parse`, not byte-exact preservation of an original file's formatting/comments — see `Document (cns)` below for that case); a field with a `HeaderExprs` entry is written using that raw text instead of its typed value. Wired into the root `Character` struct via `character.Load`/`character.LoadBytes`. See `.vibe/decisions/011-cns-controller-parameters-are-untyped-key-value-data.md`, `.vibe/decisions/012-cns-parse-header-detection-strategy.md`, `.vibe/decisions/022-cns-parse-state-header-accepts-any-label.md`, and `.vibe/decisions/023-statedef-numeric-header-fields-unevaluated-expression-escape-hatch.md`.
 
 Defined in: `cns/statedef.go`, `cns/parser.go`
 

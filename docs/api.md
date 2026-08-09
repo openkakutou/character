@@ -507,6 +507,7 @@ type StateDef struct {
     MoveHitPersist  bool
     HitCountPersist bool
     SprPriority     int
+    HeaderExprs     map[string]string
     Controllers     []Controller
 }
 
@@ -527,6 +528,17 @@ unconditionally, not "never runs"); `Parameters` are every other key/value
 line, keyed by lowercase parameter name. See
 [`.vibe/decisions/011-cns-controller-parameters-are-untyped-key-value-data.md`](../.vibe/decisions/011-cns-controller-parameters-are-untyped-key-value-data.md).
 
+`StateDef.HeaderExprs` extends that same philosophy one layer up, to
+`StateDef`'s own typed numeric header fields: real `.cns` files sometimes
+give `anim`/`poweradd`/`juggle`/`sprpriority` a MUGEN trigger expression
+(e.g. `anim = IfElse(ceil(lifemax/2) < life ,181,182)`) instead of a literal
+integer. When that happens, the corresponding typed field (`Anim`, etc.)
+stays at its zero value and `HeaderExprs` gets an entry keyed by lowercase
+field name (`"anim"`, `"poweradd"`, `"juggle"`, `"sprpriority"`) holding the
+raw source text verbatim. A field absent from `HeaderExprs` was a literal
+integer, held in its typed field as usual. See
+[`.vibe/decisions/023-statedef-numeric-header-fields-unevaluated-expression-escape-hatch.md`](../.vibe/decisions/023-statedef-numeric-header-fields-unevaluated-expression-escape-hatch.md).
+
 ### Reading
 
 ```go
@@ -538,26 +550,37 @@ Reads MUGEN/Ikemen GO `.cns` combat logic text from `r` and returns the
 
 A `trigger`-prefixed key (`trigger1`, `trigger2`, ..., `triggerall`) appends
 to a controller's `Triggers`; `type` sets `Controller.Type`; every other key
-becomes a `Parameters` entry, normalized to lowercase. A `[Statedef N]`/
-`[State N]` header may carry a trailing `, label` comment (e.g.
-`[Statedef 0, Standing]`), which is tolerated and ignored. Bracket sections
-that are neither of those two headers — `[Data]`, `[Clsn1Default]`, and the
-like — are skipped without validating their content, the same tolerance
-`def.Parse` applies to sections outside its own scope. See
-[`.vibe/decisions/012-cns-parse-header-detection-strategy.md`](../.vibe/decisions/012-cns-parse-header-detection-strategy.md).
+becomes a `Parameters` entry, normalized to lowercase. A `[Statedef N]`
+header may carry a trailing `, label` comment (e.g. `[Statedef 0, Standing]`),
+which is tolerated and ignored. A `[State ...]` header's content is entirely
+unconstrained and discarded — a numbered form (`[State 200]`,
+`[State 200, VelSet]`) and a bare label with no number at all
+(`[State VelSet]`), both found in real files, are accepted identically; the
+controller that follows always attaches to whichever `Statedef` is currently
+open. Bracket sections that don't start with the `statedef`/`state` keyword
+at all — `[Data]`, `[Clsn1Default]`, and the like — are skipped without
+validating their content, the same tolerance `def.Parse` applies to sections
+outside its own scope. See
+[`.vibe/decisions/012-cns-parse-header-detection-strategy.md`](../.vibe/decisions/012-cns-parse-header-detection-strategy.md)
+and
+[`.vibe/decisions/022-cns-parse-state-header-accepts-any-label.md`](../.vibe/decisions/022-cns-parse-state-header-accepts-any-label.md).
+
+A `Statedef` header's `anim`/`poweradd`/`juggle`/`sprpriority` value that
+isn't a valid integer is never an error either: it's stored verbatim in
+`StateDef.HeaderExprs` instead (see the data model section above and
+[`.vibe/decisions/023-statedef-numeric-header-fields-unevaluated-expression-escape-hatch.md`](../.vibe/decisions/023-statedef-numeric-header-fields-unevaluated-expression-escape-hatch.md)).
 
 ### Error handling
 
 `Parse` returns a descriptive error identifying the offending line number,
 rather than panicking or silently producing incorrect data, when:
 - a `[...]` section header line is missing its closing `]`
-- a bracket line starts with the `statedef`/`state` keyword but its state
-  number is missing or non-numeric
-- a `[State N]` block appears with no enclosing `[Statedef ...]` block
+- a bracket line starts with the `statedef` keyword but its state number is
+  missing or non-numeric
+- a `[State ...]` block appears with no enclosing `[Statedef ...]` block
 - a line inside a `Statedef` header or `State` block has no `=` (or an empty
   key before it)
-- a `Statedef` header's `anim`/`poweradd`/`juggle`/`sprpriority` value isn't
-  a valid integer, or its `ctrl`/`facep2`/`hitdefpersist`/`movehitpersist`/
+- a `Statedef` header's `ctrl`/`facep2`/`hitdefpersist`/`movehitpersist`/
   `hitcountpersist` value isn't a valid boolean
 - the underlying reader itself fails
 
@@ -580,13 +603,15 @@ an original file's formatting, comments, or unrecognized sections — it
 always writes fresh output (see `Document`, below, for that case). Every
 recognized `Statedef` header field is always written, even at its zero
 value, since a `StateDef` cannot distinguish "not present in the original
-file" from "explicitly set to the zero value". A `Controller`'s `Triggers`
-are written as `trigger1`, `trigger2`, ... in slice order; `Parameters` (an
-unordered map) are written sorted by key for deterministic output. A
-`[State N]` block's `N` is always its enclosing `StateDef`'s `Number` —
-`Parse` discards this number entirely, so any value reparses identically.
-`Serialize` returns an error rather than panicking if the underlying writer
-fails.
+file" from "explicitly set to the zero value" — except when the field has a
+`HeaderExprs` entry, in which case that raw expression text is written
+verbatim in its place instead of the (necessarily zero) typed field. A
+`Controller`'s `Triggers` are written as `trigger1`, `trigger2`, ... in
+slice order; `Parameters` (an unordered map) are written sorted by key for
+deterministic output. A `[State N]` block's `N` is always its enclosing
+`StateDef`'s `Number` — `Parse` discards this number entirely, so any value
+reparses identically. `Serialize` returns an error rather than panicking if
+the underlying writer fails.
 
 ### Comment-preserving round trip
 

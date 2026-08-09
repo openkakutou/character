@@ -12,6 +12,11 @@
 // unevaluated data (plain strings and a string-to-string map), not resolved
 // or type-checked against MUGEN/Ikemen's trigger expression language. See
 // .vibe/decisions/011-cns-controller-parameters-are-untyped-key-value-data.md.
+// StateDef's own typed numeric header fields carry the same escape hatch,
+// one layer up: HeaderExprs holds the raw source text for one of those
+// fields whenever it held a trigger expression rather than a literal
+// integer. See
+// .vibe/decisions/023-statedef-numeric-header-fields-unevaluated-expression-escape-hatch.md.
 package cns
 
 // StateType is a .cns [Statedef N] block's "type" parameter: the state
@@ -113,6 +118,17 @@ type StateDef struct {
 	// SprPriority is the sprite drawing priority (layering order) for
 	// this state ("sprpriority" parameter).
 	SprPriority int `json:"sprPriority"`
+	// HeaderExprs holds the raw, unevaluated source text of a numeric
+	// header field ("anim", "poweradd", "juggle", "sprpriority") whose
+	// value did not parse as a plain literal integer — real MUGEN/Ikemen
+	// .cns files sometimes give these fields a trigger expression instead
+	// (e.g. "anim = IfElse(ceil(lifemax/2) < life ,181,182)"). Keyed by
+	// lowercase field name. A field with an entry here has its
+	// corresponding typed field (Anim, PowerAdd, Juggle, SprPriority)
+	// left at its zero value; a field without an entry here was a literal
+	// integer and its typed field holds it as usual. See
+	// .vibe/decisions/023-statedef-numeric-header-fields-unevaluated-expression-escape-hatch.md.
+	HeaderExprs map[string]string `json:"headerExprs"`
 	// Controllers are the state controllers ([State N] blocks) that run
 	// while this state is active, in file order.
 	Controllers []Controller `json:"controllers"`

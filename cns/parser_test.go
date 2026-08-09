@@ -194,17 +194,56 @@ type = S
 	}
 }
 
-func TestParse_MalformedStateHeader_ReturnsErrorNamingTheLine(t *testing.T) {
+// Real MUGEN/Ikemen .cns files widely write "[State <label>]" with no state
+// number at all (e.g. "[State removeexplod]") instead of "[State N]" — real
+// engines tolerate this. cns.Controller never stored the header's own number
+// in the first place (Parse discards it unconditionally), so this parser
+// tolerates it too. See .vibe/decisions/022-cns-parse-state-header-accepts-any-label.md.
+func TestParse_StateHeaderWithoutNumber_AttachesToEnclosingStatedef(t *testing.T) {
 	src := `[Statedef 0]
 type = S
 
-[State xyz]
-type = VelSet
+[State removeexplod]
+type = RemoveExplod
+trigger1 = Time = 0
+`
+
+	states, err := Parse(strings.NewReader(src))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(states) != 1 {
+		t.Fatalf("expected 1 StateDef, got %d", len(states))
+	}
+	if len(states[0].Controllers) != 1 {
+		t.Fatalf("expected the controller under the label-only [State] header to attach to Statedef 0, got %d controllers", len(states[0].Controllers))
+	}
+	ctrl := states[0].Controllers[0]
+	if ctrl.Type != "RemoveExplod" {
+		t.Errorf("expected controller Type %q, got %q", "RemoveExplod", ctrl.Type)
+	}
+	if len(ctrl.Triggers) != 1 || ctrl.Triggers[0] != "Time = 0" {
+		t.Errorf("expected Triggers [\"Time = 0\"], got %v", ctrl.Triggers)
+	}
+}
+
+// A bracket line that starts with the "state" keyword but has no closing
+// bracket is still a genuine error — the label-only relaxation only widens
+// what counts as valid content between the brackets, not whether the
+// brackets themselves are well-formed (already covered generically by
+// TestParse_MalformedSectionHeader_ReturnsErrorNamingTheLine, exercised here
+// specifically for a "[State" line to guard the relaxation above).
+func TestParse_UnclosedStateHeader_ReturnsErrorNamingTheLine(t *testing.T) {
+	src := `[Statedef 0]
+type = S
+
+[State removeexplod
+type = RemoveExplod
 `
 
 	_, err := Parse(strings.NewReader(src))
 	if err == nil {
-		t.Fatal("expected an error for the malformed State header, got nil")
+		t.Fatal("expected an error for the unclosed State header, got nil")
 	}
 	if !strings.Contains(err.Error(), "line 4") {
 		t.Errorf("expected error to identify line 4, got: %v", err)
@@ -255,18 +294,86 @@ ctrl = maybe
 	}
 }
 
-func TestParse_InvalidIntegerFieldValue_ReturnsErrorNamingTheLine(t *testing.T) {
+// Real MUGEN/Ikemen .cns files sometimes give a numeric header field a
+// trigger expression instead of a literal integer (e.g.
+// "anim = IfElse(ceil(lifemax/2) < life ,181,182)"). Parse cannot tell a
+// genuine expression apart from a typo without an expression evaluator this
+// codebase deliberately doesn't have (ADR 011), so it stores the raw text
+// unevaluated instead of erroring. See
+// .vibe/decisions/023-statedef-numeric-header-fields-unevaluated-expression-escape-hatch.md.
+func TestParse_NumericHeaderFieldWithExpression_StoresRawTextInHeaderExprs(t *testing.T) {
+	src := `[Statedef 0]
+type = S
+anim = IfElse(ceil(lifemax/2) < life ,181,182)
+poweradd = ifelse(PrevStateNo = 9000, 0, 20)
+`
+
+	states, err := Parse(strings.NewReader(src))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(states) != 1 {
+		t.Fatalf("expected 1 StateDef, got %d", len(states))
+	}
+
+	s := states[0]
+	if s.Anim != 0 {
+		t.Errorf("expected Anim to stay at its zero value when the source is an expression, got %d", s.Anim)
+	}
+	if got, want := s.HeaderExprs["anim"], "IfElse(ceil(lifemax/2) < life ,181,182)"; got != want {
+		t.Errorf("expected HeaderExprs[\"anim\"] = %q, got %q", want, got)
+	}
+	if s.PowerAdd != 0 {
+		t.Errorf("expected PowerAdd to stay at its zero value when the source is an expression, got %d", s.PowerAdd)
+	}
+	if got, want := s.HeaderExprs["poweradd"], "ifelse(PrevStateNo = 9000, 0, 20)"; got != want {
+		t.Errorf("expected HeaderExprs[\"poweradd\"] = %q, got %q", want, got)
+	}
+}
+
+// A numeric header field's source text that isn't even a plausible
+// expression (plain garbage) is stored the same way as a real expression,
+// not rejected — Parse has no expression grammar to tell the two apart, so
+// it treats anything that fails strconv.Atoi identically. See ADR 023.
+func TestParse_NumericHeaderFieldWithGarbageValue_StoresRawTextInsteadOfErroring(t *testing.T) {
 	src := `[Statedef 0]
 type = S
 anim = abc
 `
 
-	_, err := Parse(strings.NewReader(src))
-	if err == nil {
-		t.Fatal("expected an error for an invalid integer value, got nil")
+	states, err := Parse(strings.NewReader(src))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
-	if !strings.Contains(err.Error(), "line 3") {
-		t.Errorf("expected error to identify line 3, got: %v", err)
+	if len(states) != 1 {
+		t.Fatalf("expected 1 StateDef, got %d", len(states))
+	}
+	if states[0].Anim != 0 {
+		t.Errorf("expected Anim to stay at its zero value, got %d", states[0].Anim)
+	}
+	if got, want := states[0].HeaderExprs["anim"], "abc"; got != want {
+		t.Errorf("expected HeaderExprs[\"anim\"] = %q, got %q", want, got)
+	}
+}
+
+// A literal integer value for a numeric header field is completely
+// unaffected by the expression escape hatch: the typed field is set and no
+// HeaderExprs entry is created for it.
+func TestParse_NumericHeaderFieldWithLiteralInteger_DoesNotPopulateHeaderExprs(t *testing.T) {
+	src := `[Statedef 0]
+type = S
+anim = 200
+`
+
+	states, err := Parse(strings.NewReader(src))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if states[0].Anim != 200 {
+		t.Errorf("expected Anim 200, got %d", states[0].Anim)
+	}
+	if _, ok := states[0].HeaderExprs["anim"]; ok {
+		t.Errorf("expected no HeaderExprs entry for a literal integer field, got %v", states[0].HeaderExprs)
 	}
 }
 

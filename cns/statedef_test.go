@@ -50,6 +50,12 @@ func TestStateDef_ZeroValue_HasPredictableDefaults(t *testing.T) {
 	if len(s.Controllers) != 0 {
 		t.Errorf("expected zero-value StateDef to have 0 controllers, got %d", len(s.Controllers))
 	}
+	if s.HeaderExprs != nil {
+		t.Errorf("expected zero-value StateDef to have nil HeaderExprs, got %v", s.HeaderExprs)
+	}
+	if _, ok := s.HeaderExprs["anim"]; ok {
+		t.Fatal("expected a lookup on a nil HeaderExprs map to report not found, not panic")
+	}
 
 	// Ranging over a nil Controllers slice must not panic.
 	for range s.Controllers {

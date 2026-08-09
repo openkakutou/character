@@ -120,6 +120,42 @@ func TestSerialize_RoundTripsThroughParse_ProducesEquivalentStateDefs(t *testing
 	}
 }
 
+// A StateDef carrying a numeric header field's unevaluated expression text
+// (HeaderExprs) round-trips through Serialize/Parse: the raw expression is
+// written out verbatim in place of the typed field's formatted value, and
+// re-parsing recovers the same HeaderExprs entry with the typed field left
+// at its zero value. See
+// .vibe/decisions/023-statedef-numeric-header-fields-unevaluated-expression-escape-hatch.md.
+func TestSerialize_NumericHeaderFieldExpression_RoundTripsThroughParse(t *testing.T) {
+	states := []StateDef{
+		{
+			Number: 0,
+			Type:   StateTypeStanding,
+			HeaderExprs: map[string]string{
+				"anim":     "IfElse(ceil(lifemax/2) < life ,181,182)",
+				"poweradd": "ifelse(PrevStateNo = 9000, 0, 20)",
+			},
+		},
+	}
+
+	var buf bytes.Buffer
+	if err := Serialize(&buf, states); err != nil {
+		t.Fatalf("unexpected error serializing: %v", err)
+	}
+
+	if !strings.Contains(buf.String(), "anim = IfElse(ceil(lifemax/2) < life ,181,182)") {
+		t.Errorf("expected the raw anim expression to be written verbatim, got:\n%s", buf.String())
+	}
+
+	reparsed, err := Parse(bytes.NewReader(buf.Bytes()))
+	if err != nil {
+		t.Fatalf("unexpected error re-parsing serialized output: %v\n--- output ---\n%s", err, buf.String())
+	}
+	if !reflect.DeepEqual(reparsed, states) {
+		t.Errorf("round trip did not produce an equivalent structure.\n--- original ---\n%+v\n--- reparsed ---\n%+v", states, reparsed)
+	}
+}
+
 func TestSerialize_StatedefWithNoControllers_OmitsStateSections(t *testing.T) {
 	states := []StateDef{
 		{Number: 5, Type: StateTypeStanding},

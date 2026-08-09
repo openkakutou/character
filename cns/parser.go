@@ -23,17 +23,16 @@ var statedefHeaderPattern = regexp.MustCompile(`(?i)^\[\s*statedef\s+(-?\d+)\s*(
 // .vibe/decisions/012-cns-parse-header-detection-strategy.md.
 var statedefAttemptPattern = regexp.MustCompile(`(?i)^\[\s*statedef(\s|\])`)
 
-// stateHeaderPattern matches a "[State N]" line, capturing the number of the
-// Statedef it belongs to (not stored on Controller — see cns.Controller). A
-// trailing ", label" comment is tolerated and ignored, same as
-// statedefHeaderPattern.
-var stateHeaderPattern = regexp.MustCompile(`(?i)^\[\s*state\s+(-?\d+)\s*(?:,[^\]]*)?\]$`)
-
-// stateAttemptPattern recognizes any bracket line that starts with the
-// "state" keyword. It never fires on a "[Statedef ...]" line: "statedef" has
-// no space (or "]") right after "state", so it fails the (\s|\]) lookahead
-// that both attempt patterns require.
-var stateAttemptPattern = regexp.MustCompile(`(?i)^\[\s*state(\s|\])`)
+// stateHeaderPattern matches any "[State ...]" line — a numbered
+// "[State N]"/"[State N, label]" header, or a bare label with no number at
+// all (e.g. "[State removeexplod]"), which real MUGEN/Ikemen engines accept
+// and treat identically. The content is never captured: it is not stored on
+// Controller (see cns.Controller) and has no effect other than marking the
+// start of a controller block attached to whichever Statedef is currently
+// open. It never fires on a "[Statedef ...]" line: "statedef" has no space
+// (or "]") right after "state", so it fails the (\s|\]) requirement below.
+// See .vibe/decisions/022-cns-parse-state-header-accepts-any-label.md.
+var stateHeaderPattern = regexp.MustCompile(`(?i)^\[\s*state(\s.*)?\]$`)
 
 // Parse reads .cns text from r and returns the StateDefs ("[Statedef N]"
 // blocks) it describes, in file order, each carrying its state controllers
@@ -88,16 +87,13 @@ func Parse(r io.Reader) ([]StateDef, error) {
 				return nil, fmt.Errorf("cns: line %d: malformed Statedef header %q", lineNumber, line)
 			}
 
-			if m := stateHeaderPattern.FindStringSubmatch(line); m != nil {
+			if stateHeaderPattern.MatchString(line) {
 				if current == nil {
-					return nil, fmt.Errorf("cns: line %d: [State N] block found outside of any Statedef: %q", lineNumber, line)
+					return nil, fmt.Errorf("cns: line %d: [State ...] block found outside of any Statedef: %q", lineNumber, line)
 				}
 				current.Controllers = append(current.Controllers, Controller{})
 				currentCtrl = &current.Controllers[len(current.Controllers)-1]
 				continue
-			}
-			if stateAttemptPattern.MatchString(line) {
-				return nil, fmt.Errorf("cns: line %d: malformed State header %q", lineNumber, line)
 			}
 
 			// An unrecognized section: its content has no place in this
@@ -155,9 +151,12 @@ func applyControllerField(c *Controller, key, value string) {
 }
 
 // applyStatedefField applies a single key=value line to a StateDef header
-// being built. An unrecognized key is ignored. A recognized key with a
-// value that doesn't parse as the field's type (int or bool) returns a
-// descriptive error.
+// being built. An unrecognized key is ignored. A recognized boolean field
+// with a value that doesn't parse as a bool returns a descriptive error. A
+// recognized numeric field with a value that doesn't parse as a literal
+// integer never errors: it is treated as an unevaluated MUGEN/Ikemen trigger
+// expression and stored in HeaderExprs instead — see
+// .vibe/decisions/023-statedef-numeric-header-fields-unevaluated-expression-escape-hatch.md.
 func applyStatedefField(s *StateDef, key, value string) error {
 	switch strings.ToLower(key) {
 	case "type":
@@ -167,11 +166,7 @@ func applyStatedefField(s *StateDef, key, value string) error {
 	case "physics":
 		s.Physics = PhysicsType(value)
 	case "anim":
-		n, err := parseIntField("anim", value)
-		if err != nil {
-			return err
-		}
-		s.Anim = n
+		applyIntOrExprField(s, "anim", value, &s.Anim)
 	case "ctrl":
 		b, err := parseBoolField("ctrl", value)
 		if err != nil {
@@ -179,17 +174,9 @@ func applyStatedefField(s *StateDef, key, value string) error {
 		}
 		s.Ctrl = b
 	case "poweradd":
-		n, err := parseIntField("poweradd", value)
-		if err != nil {
-			return err
-		}
-		s.PowerAdd = n
+		applyIntOrExprField(s, "poweradd", value, &s.PowerAdd)
 	case "juggle":
-		n, err := parseIntField("juggle", value)
-		if err != nil {
-			return err
-		}
-		s.Juggle = n
+		applyIntOrExprField(s, "juggle", value, &s.Juggle)
 	case "facep2":
 		b, err := parseBoolField("facep2", value)
 		if err != nil {
@@ -215,24 +202,29 @@ func applyStatedefField(s *StateDef, key, value string) error {
 		}
 		s.HitCountPersist = b
 	case "sprpriority":
-		n, err := parseIntField("sprpriority", value)
-		if err != nil {
-			return err
-		}
-		s.SprPriority = n
+		applyIntOrExprField(s, "sprpriority", value, &s.SprPriority)
 	}
 	// Any other key is unrecognized within a Statedef header and ignored.
 	return nil
 }
 
-// parseIntField parses value as an int for the Statedef header field named
-// name, returning a descriptive error on failure.
-func parseIntField(name, value string) (int, error) {
+// applyIntOrExprField sets *dst from value when value parses as a literal
+// integer. Otherwise it leaves *dst untouched (at its zero value) and
+// records value verbatim in s.HeaderExprs under name instead — value is
+// treated as an unevaluated MUGEN/Ikemen trigger expression, since Parse has
+// no expression grammar to tell a real expression apart from a malformed
+// value. See
+// .vibe/decisions/023-statedef-numeric-header-fields-unevaluated-expression-escape-hatch.md.
+func applyIntOrExprField(s *StateDef, name, value string, dst *int) {
 	n, err := strconv.Atoi(value)
 	if err != nil {
-		return 0, fmt.Errorf("invalid %s %q: %w", name, value, err)
+		if s.HeaderExprs == nil {
+			s.HeaderExprs = make(map[string]string)
+		}
+		s.HeaderExprs[name] = value
+		return
 	}
-	return n, nil
+	*dst = n
 }
 
 // parseBoolField parses value as a bool for the Statedef header field named

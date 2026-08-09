@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Combat logic (`.cns`) files that write a state controller header with no state number (e.g. `[State removeexplod]` instead of `[State 3000]`) — a common real-world authoring style — are no longer rejected as malformed
+- Combat logic (`.cns`) files that give a numeric state header field like `anim` or `poweradd` a formula instead of a plain number (e.g. `anim = IfElse(ceil(lifemax/2) < life ,181,182)`) — also common in real character files — no longer fail to load; the formula's original text is now kept alongside the state
+
 ## [0.3.0] - 2026-08-09
 
 ### Added
