@@ -1,9 +1,7 @@
 ---
-status: running
+status: idle
 started: 2026-08-09T13:19
 limit: 1
-current: 030
-attempt: 1
 ---
 # Auto run journal
 
@@ -29,3 +27,6 @@ attempt: 1
 
 ## 2026-08-09T10:44 — resumed via /vibe:next-task auto 1 (limit: 1, driven by /loop 3h)
 - 029 — feature — done (efa1e83)
+
+## 2026-08-09T13:19 — resumed via /vibe:next-task auto 1 (limit: 1, driven by /loop 3h)
+- 030 — feature — blocked: no real RLE5-encoded sprite found in the 562-file local corpus, trigger condition (a real fixture) not met (e031de2)
