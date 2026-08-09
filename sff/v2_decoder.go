@@ -340,18 +340,33 @@ func decodeV2PNG(format, width, height int, data []byte) (*V2Image, error) {
 		return &V2Image{Width: width, Height: height, BytesPerPixel: 3, Pixels: pixels}, nil
 
 	case V2FormatPNG32:
-		// Alpha-premultiplied, like V2FormatPNG24's color.RGBAModel
-		// conversion just above — confirmed against a real, unmodified
-		// .sff v2 file: a non-premultiplied (color.NRGBAModel) conversion
-		// preserves each pixel's original RGB even where alpha is low or
-		// zero, but the real file's own semi-transparent pixels decode
-		// correctly only once RGB is scaled down by alpha the same way
-		// color.RGBAModel already does for every other color.Color value
-		// in this package.
+		// Straight (non-premultiplied) alpha — matching the file's own
+		// on-disk representation (a standard PNG, colorType 6, decoded by
+		// Go's image/png as *image.NRGBA) and this package's own original,
+		// documented contract for PNG32 (.vibe/decisions/006-...md: "4 for
+		// PNG32 (Pixels holds RGBA bytes, straight/non-premultiplied
+		// alpha)"). Reads NRGBAAt's raw struct fields directly rather than
+		// through color.RGBAModel.Convert (used by the PNG24 case above,
+		// harmless there since PNG24 is always fully opaque): that
+		// conversion always alpha-premultiplies per the color.Color
+		// interface's own contract, which — confirmed against this
+		// package's real, unmodified v2 PNG32 fixture and the reference
+		// project's own expected output — corrupts every partially- or
+		// fully-transparent pixel's color, not just its alpha. A prior fix
+		// (see CHANGELOG 0.2.0) introduced exactly this premultiplication
+		// believing it correct; it was itself validated only against a
+		// pixel-comparison test helper that silently alpha-premultiplied
+		// both sides via the same color.Color contract, masking the
+		// regression. See backlog item 029 (fixture-driven v2 sprite test
+		// suite) for the real-file comparison that caught it.
+		nrgba, ok := img.(*image.NRGBA)
+		if !ok {
+			return nil, fmt.Errorf("sff: v2 sprite: PNG32 pixel data decoded as %T, want *image.NRGBA (non-alpha-premultiplied)", img)
+		}
 		pixels := make([]byte, width*height*4)
 		for y := 0; y < height; y++ {
 			for x := 0; x < width; x++ {
-				c := color.RGBAModel.Convert(img.At(bounds.Min.X+x, bounds.Min.Y+y)).(color.RGBA)
+				c := nrgba.NRGBAAt(bounds.Min.X+x, bounds.Min.Y+y)
 				i := (y*width + x) * 4
 				pixels[i] = c.R
 				pixels[i+1] = c.G

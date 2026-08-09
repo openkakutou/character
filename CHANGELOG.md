@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `.sff` v2 sprites with no pixel data of their own (a common "reuse the character's first sprite" shorthand real files use) can now have their image resolved instead of reporting an error
+
+### Fixed
+
+- `.sff` v2 sprites using the 32-bit PNG pixel format (PNG32) now show their true colors again for any pixel that isn't fully opaque: a previous fix (0.2.0) had them alpha-premultiplied, darkening semi-transparent areas, but that "fix" was itself validated against a broken comparison that silently hid the very regression it introduced
+- `.sff` v2 sprites using the 8-bit indexed PNG pixel format (PNG8) now always show fully opaque colors outside their transparent index, instead of occasionally showing an unintended partial transparency some real files' own embedded color data carries
+
 ## [0.2.0] - 2026-08-08
 
 ### Added

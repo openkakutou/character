@@ -170,14 +170,14 @@ func TestResolveSpritePixels_MalformedFile(t *testing.T) {
 	}
 }
 
-// TestResolveSpritePixels_V2LinkedSpriteNotYetSupported documents and
-// verifies the deliberate scope cut: v2 sprites that share (rather than
-// own) their pixel data are not yet resolved by this function — no v2
-// linked-sprite decode path has been validated against real files anywhere
-// in this package yet (that is item 029's job, still open). Resolving one
-// must report a clear, distinct error instead of guessing at the linking
-// rule the way an unvalidated implementation risks.
-func TestResolveSpritePixels_V2LinkedSpriteNotYetSupported(t *testing.T) {
+// TestResolveSpritePixels_V2ZeroLengthSpriteCopiesFirstSprite documents and
+// verifies item 029's closing of what was previously a deliberate scope
+// cut: a v2 sprite with no pixel data of its own (Length == 0, LinkedIndex
+// == 0) now resolves to the sprite table's own first entry's image,
+// reproducing the reference project's own extractSpritesFromSFFV2.mjs
+// exactly. See
+// .vibe/decisions/021-v2-zero-length-sprite-always-copies-table-index-zero.md.
+func TestResolveSpritePixels_V2ZeroLengthSpriteCopiesFirstSprite(t *testing.T) {
 	f := openTestdataFile(t, "v2-zero-length-copy.sff")
 	defer f.Close()
 
@@ -190,9 +190,52 @@ func TestResolveSpritePixels_V2LinkedSpriteNotYetSupported(t *testing.T) {
 		t.Fatalf("fixture assumption broken: expected the target sprite (group %d, image %d) to have zero-length (linked) pixel data", target.Group, target.Image)
 	}
 
-	_, _, _, err = ResolveSpritePixels(f, target.Group, target.Image, nil)
+	got, width, height, err := ResolveSpritePixels(f, target.Group, target.Image, nil)
+	if err != nil {
+		t.Fatalf("ResolveSpritePixels: %v", err)
+	}
+
+	want := decodeExpectedPNG(t, "v2-sprite-006.png")
+	assertPixelsMatch(t, got, width, height, want)
+}
+
+// TestResolveSpritePixels_V2LinkedIndexSpriteNotYetSupported documents and
+// verifies the narrower scope cut item 029 left in place: a v2 sprite
+// linked via a nonzero LinkedIndex (as opposed to the Length==0/LinkedIndex
+// ==0 "copy the first sprite" case above) is not resolved by this
+// function — the reference project itself does not resolve this case
+// within its own sprite-extraction pass either (see
+// .vibe/decisions/021-...md), and no fixture in this package's corpus
+// exercises it. Built as a small in-memory file via SerializeV2 rather
+// than a vendored fixture, since no real scenario in this item's corpus
+// needs one.
+func TestResolveSpritePixels_V2LinkedIndexSpriteNotYetSupported(t *testing.T) {
+	var buf bytes.Buffer
+	err := SerializeV2(&buf, [4]byte{0, 0, 0, 2},
+		[]V2WriteSprite{
+			{Group: 0, Image: 0, Width: 2, Height: 2, Format: V2FormatRaw, ColorDepth: 8, PaletteIndex: 0, PixelData: []byte{0, 0, 0, 0}},
+			{Group: 1, Image: 0, LinkedIndex: 2}, // no pixel data of its own; links to a positive, non-self index
+			{Group: 2, Image: 0, Width: 2, Height: 2, Format: V2FormatRaw, ColorDepth: 8, PaletteIndex: 0, PixelData: []byte{1, 1, 1, 1}},
+		},
+		[]V2WritePalette{{Group: 0, Number: 0, ColorCount: 1, ColorData: []byte{0, 0, 0, 255}}},
+	)
+	if err != nil {
+		t.Fatalf("SerializeV2: %v", err)
+	}
+	r := bytes.NewReader(buf.Bytes())
+
+	table, err := ParseV2(r)
+	if err != nil {
+		t.Fatalf("ParseV2: %v", err)
+	}
+	target := table.Sprites[1]
+	if target.Length != 0 || target.LinkedIndex <= 0 {
+		t.Fatalf("fixture assumption broken: expected sprite 1 to have zero-length pixel data and a positive LinkedIndex, got Length=%d LinkedIndex=%d", target.Length, target.LinkedIndex)
+	}
+
+	_, _, _, err = ResolveSpritePixels(r, target.Group, target.Image, nil)
 	if err == nil {
-		t.Fatal("expected an error for a linked v2 sprite, got nil")
+		t.Fatal("expected an error for a LinkedIndex>0 v2 sprite, got nil")
 	}
 }
 

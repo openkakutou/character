@@ -41,6 +41,27 @@ func TestResolvePixels_LiteralRule_UsesPaletteAlphaUnmodifiedEvenAtIndexZero(t *
 	}
 }
 
+func TestResolvePixels_OpaqueExceptIndexZeroRule_KeepsColorButReplacesAlpha(t *testing.T) {
+	var palette Palette
+	// Index 0's stored color must survive (unlike AlphaForceTransparentAtIndexZero,
+	// which zeroes it); only alpha is replaced. A non-zero index's stored
+	// alpha (128, deliberately not 255) must be ignored outright — forced
+	// to 255 regardless.
+	palette[0] = color.RGBA{R: 10, G: 20, B: 30, A: 255}
+	palette[5] = color.RGBA{R: 100, G: 150, B: 200, A: 128}
+
+	got := ResolvePixels([]byte{0, 5, 0}, palette, AlphaOpaqueExceptIndexZero)
+
+	want := []color.RGBA{
+		{R: 10, G: 20, B: 30, A: 0},
+		{R: 100, G: 150, B: 200, A: 255},
+		{R: 10, G: 20, B: 30, A: 0},
+	}
+	if !colorsEqual(got, want) {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+}
+
 func TestResolvePixels_EmptyIndices_ReturnsEmptySlice(t *testing.T) {
 	var palette Palette
 	got := ResolvePixels(nil, palette, AlphaLiteral)

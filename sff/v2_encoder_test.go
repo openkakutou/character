@@ -56,11 +56,12 @@ func TestEncodeV2Sprite_PNG24Format_RoundTripsThroughDecodeV2Sprite(t *testing.T
 
 func TestEncodeV2Sprite_PNG32Format_RoundTripsThroughDecodeV2SpriteWithAlpha(t *testing.T) {
 	// 2x1: opaque green, half-transparent white — exercises non-255 alpha.
-	// Pixels are alpha-premultiplied (see EncodeV2Sprite/decodeV2PNG's
-	// V2FormatPNG32 doc comments): straight-alpha white (255,255,255) at
-	// alpha 128 premultiplies to (128,128,128,128), not (255,255,255,128)
-	// — a premultiplied color's R/G/B can never exceed its own A.
-	img := &V2Image{Width: 2, Height: 1, BytesPerPixel: 4, Pixels: []byte{0, 255, 0, 255, 128, 128, 128, 128}}
+	// Pixels are straight (non-premultiplied) alpha, matching the file's
+	// own on-disk representation (.vibe/decisions/006-...md, confirmed by
+	// backlog item 029's real-file testing): straight-alpha white
+	// (255,255,255) at alpha 128 stays (255,255,255,128) — never scaled by
+	// its own alpha.
+	img := &V2Image{Width: 2, Height: 1, BytesPerPixel: 4, Pixels: []byte{0, 255, 0, 255, 255, 255, 255, 128}}
 
 	data, err := EncodeV2Sprite(V2FormatPNG32, img)
 	if err != nil {
@@ -71,13 +72,12 @@ func TestEncodeV2Sprite_PNG32Format_RoundTripsThroughDecodeV2SpriteWithAlpha(t *
 	if err != nil {
 		t.Fatalf("DecodeV2Sprite on encoded PNG32 data: %v", err)
 	}
-	// Approximate, not byte-exact: un-premultiplying then re-premultiplying
-	// an 8-bit premultiplied value is inherently lossy (each step
-	// truncates), the same "semantic round trip, not byte-exact" nature
-	// this package's other binary write paths already document (see
-	// .vibe/decisions/005-sff-v1-serialize-is-semantic-not-byte-exact-round-trip.md).
-	if !bytesApproxEqual(got.Pixels, img.Pixels, 1) {
-		t.Errorf("expected pixels %v (±1), got %v", img.Pixels, got.Pixels)
+	// Byte-exact: writing and reading straight alpha directly (no
+	// premultiply/un-premultiply conversion in either direction) has no
+	// lossy rounding step, unlike the premultiplied round trip this test
+	// previously exercised.
+	if !bytesEqual(got.Pixels, img.Pixels) {
+		t.Errorf("expected pixels %v, got %v", img.Pixels, got.Pixels)
 	}
 }
 
@@ -114,20 +114,4 @@ func TestEncodeV2Sprite_ReturnsErrorOnBytesPerPixelMismatch(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected an error for a BytesPerPixel mismatch, got nil")
 	}
-}
-
-// bytesApproxEqual reports whether a and b are the same length and every
-// byte pair differs by at most tolerance — used for PNG32's premultiplied-
-// alpha round trip, which is not byte-exact (see the test using this).
-func bytesApproxEqual(a, b []byte, tolerance int) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		d := int(a[i]) - int(b[i])
-		if d < -tolerance || d > tolerance {
-			return false
-		}
-	}
-	return true
 }

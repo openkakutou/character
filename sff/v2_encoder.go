@@ -130,12 +130,13 @@ func encodeV2PNG24(img *V2Image) ([]byte, error) {
 	return withV2LengthPrefix(uint32(img.Width*img.Height), buf.Bytes()), nil
 }
 
-// encodeV2PNG32 encodes an alpha-premultiplied RGBA pixel buffer (matching
-// decodeV2PNG's V2FormatPNG32 output shape) as a PNG, the inverse of
-// decodeV2PNG's V2FormatPNG32 branch. A PNG file itself always stores
-// straight alpha (per the PNG format spec), so each pixel is un-
-// premultiplied via color.NRGBAModel before writing — the exact inverse of
-// decode's own color.RGBAModel.Convert premultiplication step.
+// encodeV2PNG32 encodes a straight-alpha (non-premultiplied) RGBA pixel
+// buffer (matching decodeV2PNG's V2FormatPNG32 output shape — see
+// .vibe/decisions/006-...md and backlog item 029) as a PNG, the inverse of
+// decodeV2PNG's V2FormatPNG32 branch. Written directly via SetNRGBA, with
+// no premultiply/un-premultiply conversion: img.Pixels already holds the
+// same straight bytes a PNG file itself stores on disk (per the PNG format
+// spec), so no conversion is needed and none would be lossless anyway.
 func encodeV2PNG32(img *V2Image) ([]byte, error) {
 	if img.BytesPerPixel != 4 {
 		return nil, fmt.Errorf("sff: v2 sprite: PNG32 format requires BytesPerPixel 4 (RGBA), got %d", img.BytesPerPixel)
@@ -149,9 +150,7 @@ func encodeV2PNG32(img *V2Image) ([]byte, error) {
 	for y := 0; y < img.Height; y++ {
 		for x := 0; x < img.Width; x++ {
 			i := (y*img.Width + x) * 4
-			premultiplied := color.RGBA{R: img.Pixels[i], G: img.Pixels[i+1], B: img.Pixels[i+2], A: img.Pixels[i+3]}
-			straight := color.NRGBAModel.Convert(premultiplied).(color.NRGBA)
-			dst.SetNRGBA(x, y, straight)
+			dst.SetNRGBA(x, y, color.NRGBA{R: img.Pixels[i], G: img.Pixels[i+1], B: img.Pixels[i+2], A: img.Pixels[i+3]})
 		}
 	}
 

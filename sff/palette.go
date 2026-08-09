@@ -21,31 +21,52 @@ const V1PaletteBlockSize = 768
 type Palette [256]color.RGBA
 
 // AlphaRule selects how ResolvePixels determines a resolved pixel's alpha
-// channel at palette index 0. The reference decoders this package tracks
-// apply one of two rules depending on the sprite's own encoding, not a
-// single universal rule.
+// channel (and, for AlphaForceTransparentAtIndexZero, its color channels
+// too) at palette index 0. The reference decoders this package tracks
+// apply one of three rules depending on the sprite's own encoding, not a
+// single universal rule — confirmed by fixture-driven testing against real
+// files (item 029) after two of the three were found to differ from what
+// had been assumed.
 type AlphaRule int
 
 const (
 	// AlphaForceTransparentAtIndexZero forces palette index 0 to resolve to
-	// fully transparent ((0,0,0,0)), regardless of the palette's own stored
-	// value there. Used by PCX (v1) and PNG8 (v2) decoded pixel data.
+	// fully transparent ((0,0,0,0)) — every channel, not just alpha —
+	// regardless of the palette's own stored value there. Used by PCX (v1)
+	// decoded pixel data (decodePCX.mjs's implementation2: `red = green =
+	// blue = alpha = 0` at index 0).
 	AlphaForceTransparentAtIndexZero AlphaRule = iota
-	// AlphaLiteral uses the palette's own stored alpha value unmodified,
-	// including at index 0. Used by RLE8/LZ5 (v2) decoded pixel data.
+	// AlphaLiteral uses the palette's own stored color and alpha value
+	// unmodified, including at index 0. Used by RLE8/LZ5 (v2) decoded
+	// pixel data.
 	AlphaLiteral
+	// AlphaOpaqueExceptIndexZero keeps the palette's own stored color
+	// (never zeroed, unlike AlphaForceTransparentAtIndexZero) but replaces
+	// alpha outright: 0 at index 0, 255 everywhere else — the palette's own
+	// stored alpha byte is never consulted, at any index. Used by PNG8 (v2)
+	// decoded pixel data (decodePNG8.mjs: `colorIndex === 0 ? 0 : 255`,
+	// commenting out the palette's own alpha read entirely).
+	AlphaOpaqueExceptIndexZero
 )
 
 // ResolvePixels resolves a row-major palette-index pixel buffer — as
 // decoded by DecodePCX or DecodeV2Sprite for an indexed pixel format
 // (BytesPerPixel: 1) — against palette into a row-major buffer of final
-// RGBA colors, one per index, applying rule to determine index 0's alpha.
+// RGBA colors, one per index, applying rule to determine index 0's
+// resolved color.
 func ResolvePixels(indices []byte, palette Palette, rule AlphaRule) []color.RGBA {
 	pixels := make([]color.RGBA, len(indices))
 	for i, idx := range indices {
 		c := palette[idx]
-		if rule == AlphaForceTransparentAtIndexZero && idx == 0 {
+		switch {
+		case rule == AlphaForceTransparentAtIndexZero && idx == 0:
 			c = color.RGBA{}
+		case rule == AlphaOpaqueExceptIndexZero:
+			if idx == 0 {
+				c.A = 0
+			} else {
+				c.A = 255
+			}
 		}
 		pixels[i] = c
 	}

@@ -84,8 +84,26 @@ func resolveSpritePixelsV2(r io.ReaderAt, group, image int, override *Palette) (
 		return nil, 0, 0, fmt.Errorf("sprite not found: no sprite at group %d, image %d", group, image)
 	}
 	e := table.Sprites[i]
+	// A sprite with no pixel data of its own (Length == 0) always copies
+	// the sprite table's own first entry (table.Sprites[0]) — its pixel
+	// data, format, color depth, and palette bank, not just the field its
+	// own LinkedIndex names. This reproduces the reference project's own
+	// extractSpritesFromSFFV2.mjs exactly (its zero-length branch spreads
+	// {...sprites[0], ...}, unconditionally, and only when LinkedIndex is
+	// itself 0 — LinkedIndex > 0 takes a separate, still-unsupported path
+	// below). See .vibe/decisions/021-v2-zero-length-sprite-always-copies-table-index-zero.md.
+	if e.Length == 0 && e.LinkedIndex > 0 {
+		return nil, 0, 0, fmt.Errorf("sff: sprite (group %d, image %d): a v2 sprite linked via a nonzero LinkedIndex is not yet supported by ResolveSpritePixels", group, image)
+	}
 	if e.Length == 0 {
-		return nil, 0, 0, fmt.Errorf("sff: sprite (group %d, image %d): linked/shared v2 sprite pixel data is not yet supported by ResolveSpritePixels", group, image)
+		if len(table.Sprites) == 0 {
+			return nil, 0, 0, fmt.Errorf("sff: sprite (group %d, image %d): zero-length pixel data with no earlier sprite to copy from", group, image)
+		}
+		donor := table.Sprites[0]
+		e.Width, e.Height = donor.Width, donor.Height
+		e.Offset, e.Length = donor.Offset, donor.Length
+		e.Format, e.ColorDepth = donor.Format, donor.ColorDepth
+		e.PaletteIndex = donor.PaletteIndex
 	}
 	if err := checkSpriteDimensions(e.Width, e.Height); err != nil {
 		return nil, 0, 0, err
@@ -112,12 +130,18 @@ func resolveSpritePixelsV2(r io.ReaderAt, group, image int, override *Palette) (
 		return nil, 0, 0, fmt.Errorf("sff: resolving sprite palette: %w", err)
 	}
 
-	// RLE8/LZ5-decoded sprites use literal alpha; every other indexed
-	// format (raw, PNG8) forces index 0 fully transparent — same rule v1's
-	// PCX-decoded sprites use. See ResolvePixels's own AlphaRule doc.
+	// RLE8/LZ5-decoded sprites use literal alpha; PNG8 keeps the palette's
+	// own color but replaces alpha outright (0 at index 0, opaque
+	// everywhere else); every other indexed format (only raw, in
+	// practice — no fixture in this package's corpus exercises it) falls
+	// back to v1 PCX's own rule, unvalidated for v2 raw specifically. See
+	// ResolvePixels's own AlphaRule doc.
 	rule := AlphaForceTransparentAtIndexZero
-	if e.Format == V2FormatRLE8 || e.Format == V2FormatLZ5 {
+	switch e.Format {
+	case V2FormatRLE8, V2FormatLZ5:
 		rule = AlphaLiteral
+	case V2FormatPNG8:
+		rule = AlphaOpaqueExceptIndexZero
 	}
 	return ResolvePixels(img.Pixels, pal, rule), img.Width, img.Height, nil
 }

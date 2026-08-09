@@ -55,13 +55,16 @@ SRC_DIR=/path/to/sff-extractor/tests/files go run ./sff/testdata/gen
 ## `files/*.act`
 
 Unmodified, standalone external-palette fixtures (`greenarrow-v1-palette1.act`,
-`cyclops-v1-palette1.act`), 768 raw bytes each — small enough to vendor
-as-is, unlike the multi-megabyte `.sff` source files. Used by item 028's
-"index == linked index" and "external palette" scenarios.
+`cyclops-v1-palette1.act`, `ruby-v2-palette1.act`, `makina-v2-palette1.act`),
+768 raw bytes each — small enough to vendor as-is, unlike the multi-megabyte
+`.sff` source files. Used by items 028/029's "external palette" scenarios.
 
-### Known caveat: `v2-loadmode1.sff`
+### Resolved caveat: `v2-loadmode1.sff`
 
-`kazuki-v2.sff`'s "on-demand" (`loadMode = 1`) sprite (item 029) is trimmed
-using `ParseV2`'s current offset resolution, which does not yet understand
-on-demand addressing (see item 029's notes). This fixture may need
-regenerating once `ParseV2` is extended to support it.
+Item 029 confirmed — by decoding the real, untrimmed `kazuki-v2.sff` end to
+end and diffing every pixel against the reference project's own expected
+PNG (zero mismatches) — that `ParseV2`'s existing offset-flag branch already
+computes the exact same absolute offset the reference project's own
+`loadMode === 1` branch does; no `ParseV2` change was needed, and this
+fixture did not need regenerating. See
+`.vibe/decisions/021-v2-zero-length-sprite-always-copies-table-index-zero.md`.

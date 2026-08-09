@@ -132,15 +132,18 @@ func TestDecodeV2Sprite_DecodesPNG24ColorData(t *testing.T) {
 }
 
 func TestDecodeV2Sprite_DecodesPNG32ColorDataWithAlpha(t *testing.T) {
-	// 2x1 image: pixel 0 opaque green (alpha premultiplication is a no-op
-	// at full alpha), pixel 1 half-transparent white (RGB scaled down by
-	// alpha) — confirmed against a real, unmodified .sff v2 file that
-	// V2FormatPNG32 pixel data is alpha-premultiplied, like V2FormatPNG24.
-	// buildPNG32 still encodes its input as a straight-alpha source PNG (a
-	// PNG file itself always stores straight alpha, per the PNG format
-	// spec), so the expected premultiplied output is derived here via the
-	// same color.RGBAModel conversion DecodeV2Sprite itself uses, rather
-	// than hand-computed bytes that could hide a rounding mistake.
+	// 2x1 image: pixel 0 opaque green, pixel 1 half-transparent white.
+	// V2FormatPNG32 pixel data is straight (non-premultiplied) alpha,
+	// matching the file's own on-disk representation (a standard PNG
+	// always stores straight alpha, per the PNG format spec) and this
+	// package's own documented contract for PNG32
+	// (.vibe/decisions/006-...md) — confirmed against a real, unmodified
+	// .sff v2 file and the reference project's own expected decoded
+	// output (backlog item 029). want is pinned to the exact input bytes
+	// rather than derived via any color-model conversion (self-referential
+	// derivation would hide a rounding or premultiplication mistake):
+	// buildPNG32 losslessly round-trips these exact straight-alpha bytes
+	// through a real PNG encode/decode.
 	rgba := []byte{0, 255, 0, 255, 255, 255, 255, 128}
 	data := buildPNG32(t, 2, 1, rgba)
 
@@ -151,14 +154,8 @@ func TestDecodeV2Sprite_DecodesPNG32ColorDataWithAlpha(t *testing.T) {
 	if img.BytesPerPixel != 4 {
 		t.Fatalf("got BytesPerPixel=%d, want 4", img.BytesPerPixel)
 	}
-	want := make([]byte, len(rgba))
-	for i := 0; i < len(rgba)/4; i++ {
-		src := color.NRGBA{R: rgba[i*4], G: rgba[i*4+1], B: rgba[i*4+2], A: rgba[i*4+3]}
-		c := color.RGBAModel.Convert(src).(color.RGBA)
-		want[i*4], want[i*4+1], want[i*4+2], want[i*4+3] = c.R, c.G, c.B, c.A
-	}
-	if !bytesEqual(img.Pixels, want) {
-		t.Fatalf("got Pixels=%v, want %v (premultiplied)", img.Pixels, want)
+	if !bytesEqual(img.Pixels, rgba) {
+		t.Fatalf("got Pixels=%v, want %v (straight alpha)", img.Pixels, rgba)
 	}
 }
 

@@ -114,8 +114,20 @@ func TestV1Fixtures_VersionStringIsReadFromHeader(t *testing.T) {
 }
 
 // decodeExpectedPNG reads and decodes one of the reference project's own
-// expected-output PNGs under testdata/sprites.
-func decodeExpectedPNG(t *testing.T, name string) image.Image {
+// expected-output PNGs under testdata/sprites. It is type-asserted to
+// *image.NRGBA (non-alpha-premultiplied) rather than returned as the
+// generic image.Image the standard decoder interface offers: the
+// reference project's own PNGs are always written with colorType 6
+// (truecolor+alpha, no premultiplication — see
+// convertSpriteDecodedBufferToPng.mjs), so Go's decoder always produces
+// *image.NRGBA for them, and reading its raw pixel struct directly (rather
+// than calling .At(x,y).RGBA(), whose interface contract always returns
+// alpha-premultiplied values) is required to compare a fully transparent
+// pixel's color channels at all: alpha-premultiplying a (R,G,B,0) pixel
+// always yields (0,0,0,0), silently destroying real color information a
+// non-black "transparent" palette entry (e.g. an applied external
+// palette's own index 0) still carries.
+func decodeExpectedPNG(t *testing.T, name string) *image.NRGBA {
 	t.Helper()
 	data, err := os.ReadFile(filepath.Join("testdata", "sprites", name))
 	if err != nil {
@@ -125,14 +137,20 @@ func decodeExpectedPNG(t *testing.T, name string) image.Image {
 	if err != nil {
 		t.Fatalf("decoding expected PNG %s: %v", name, err)
 	}
-	return img
+	nrgba, ok := img.(*image.NRGBA)
+	if !ok {
+		t.Fatalf("expected PNG %s decoded as %T, want *image.NRGBA (non-alpha-premultiplied)", name, img)
+	}
+	return nrgba
 }
 
 // assertPixelsMatch compares a resolved RGBA pixel buffer (row-major,
 // width*height entries) against an expected reference image, dimension by
 // dimension and then pixel by pixel, reporting the first handful of
-// mismatches rather than every one.
-func assertPixelsMatch(t *testing.T, got []color.RGBA, width, height int, want image.Image) {
+// mismatches rather than every one. Both sides are compared as
+// non-alpha-premultiplied color channels — see decodeExpectedPNG's doc
+// comment for why that distinction matters here.
+func assertPixelsMatch(t *testing.T, got []color.RGBA, width, height int, want *image.NRGBA) {
 	t.Helper()
 	wb := want.Bounds()
 	if width != wb.Dx() || height != wb.Dy() {
@@ -142,10 +160,9 @@ func assertPixelsMatch(t *testing.T, got []color.RGBA, width, height int, want i
 	mismatches := 0
 	for y := 0; y < height; y++ {
 		for x := 0; x < width; x++ {
-			wr, wg, wbl, wa := want.At(wb.Min.X+x, wb.Min.Y+y).RGBA()
-			wc := color.RGBA{R: uint8(wr >> 8), G: uint8(wg >> 8), B: uint8(wbl >> 8), A: uint8(wa >> 8)}
+			wc := want.NRGBAAt(wb.Min.X+x, wb.Min.Y+y)
 			gc := got[y*width+x]
-			if gc != wc {
+			if gc.R != wc.R || gc.G != wc.G || gc.B != wc.B || gc.A != wc.A {
 				mismatches++
 				if mismatches <= 5 {
 					t.Errorf("pixel (%d,%d): got %+v, want %+v", x, y, gc, wc)

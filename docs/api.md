@@ -1107,10 +1107,13 @@ Four families of `V2Format*` codes are supported:
   (`BytesPerPixel == 1`, palette index bytes, same as `V2FormatRaw` and
   `PCXImage.Pixels` — no RGB/palette resolution performed). PNG24 yields RGB
   data (`BytesPerPixel == 3`, always opaque). PNG32 yields RGBA data
-  (`BytesPerPixel == 4`, **alpha-premultiplied** — a PNG file itself always
-  stores straight alpha, but real `.sff` v2 PNG32 sprite data is
-  premultiplied, like PNG24 already is trivially at full opacity; confirmed
-  against real, unmodified files).
+  (`BytesPerPixel == 4`, **straight (non-premultiplied) alpha** — matching
+  both the PNG format's own on-disk representation and this package's
+  original documented contract; confirmed against real, unmodified files
+  and the reference project's own expected decoded output. A prior version
+  of this function alpha-premultiplied PNG32 output instead, based on a
+  since-corrected misreading of real-file behavior — see
+  [`.vibe/decisions/021-v2-zero-length-sprite-always-copies-table-index-zero.md`](../.vibe/decisions/021-v2-zero-length-sprite-always-copies-table-index-zero.md)).
 
 `V2FormatRLE5` is a real on-disk format code `ParseV2` can report in
 `V2SpriteEntry.Format`, but is not decoded by this function yet — like any
@@ -1149,8 +1152,9 @@ type Palette [256]color.RGBA
 type AlphaRule int
 
 const (
-    AlphaForceTransparentAtIndexZero AlphaRule = iota // PCX (v1), PNG8 (v2)
+    AlphaForceTransparentAtIndexZero AlphaRule = iota // PCX (v1)
     AlphaLiteral                                      // RLE8, LZ5 (v2)
+    AlphaOpaqueExceptIndexZero                         // PNG8 (v2)
 )
 
 func ResolvePixels(indices []byte, palette Palette, rule AlphaRule) []color.RGBA
@@ -1180,12 +1184,19 @@ pixel buffer allocation sized from untrusted data.
 
 `ResolvePixels` turns a decoded index buffer (`PCXImage.Pixels` or
 `V2Image.Pixels` with `BytesPerPixel: 1`) into final on-screen colors, given
-a resolved `Palette`. It applies one of two alpha rules depending on how the
-sprite was encoded, not a single universal rule: PCX- and PNG8-decoded
-sprites force palette index 0 to fully transparent regardless of the
-palette's own stored value there (`AlphaForceTransparentAtIndexZero`), while
-RLE8/LZ5-decoded sprites use the palette's own stored alpha unmodified, even
-at index 0 (`AlphaLiteral`).
+a resolved `Palette`. It applies one of three alpha rules depending on how
+the sprite was encoded, not a single universal rule — confirmed against
+real files and the reference project's own expected output (two of the
+three were found to differ from what had originally been assumed):
+- `AlphaForceTransparentAtIndexZero` — PCX-decoded (v1) sprites: index 0
+  resolves to fully transparent `(0,0,0,0)`, every channel zeroed,
+  regardless of the palette's own stored value there.
+- `AlphaLiteral` — RLE8/LZ5-decoded (v2) sprites: the palette's own stored
+  color and alpha are used unmodified, including at index 0.
+- `AlphaOpaqueExceptIndexZero` — PNG8-decoded (v2) sprites: the palette's
+  own stored *color* is kept (never zeroed), but alpha is replaced outright
+  — `0` at index 0, `255` everywhere else — the palette's own stored alpha
+  byte is never consulted, at any index.
 
 Getting a `Palette` differs by `.sff` version, since each stores its color
 data differently:
@@ -1298,10 +1309,18 @@ broken" without parsing the rest of the message). A declared sprite size
 beyond `SpritePixelDimensionLimit` (4096) per axis returns an error instead
 of attempting to allocate a pixel buffer sized from untrusted data — this
 function, unlike the rest of the package, is reachable directly from
-untrusted caller-supplied bytes via the WASM boundary. A v2 sprite that
-shares (rather than owns) its pixel data is not yet supported and also
-returns a descriptive error — see
+untrusted caller-supplied bytes via the WASM boundary. See
 [`.vibe/decisions/020-wasm-sprite-pixel-resolution-batched-stateless-contract.md`](../.vibe/decisions/020-wasm-sprite-pixel-resolution-batched-stateless-contract.md).
+
+A v2 sprite with no pixel data of its own (`Length == 0`) resolves to the
+sprite table's own first entry's image (pixel data, format, color depth,
+*and* palette bank — not just the field its `LinkedIndex` names), matching
+how real files use this to mean "reuse the character's very first sprite" —
+confirmed against a real, unmodified file and the reference project's own
+expected output. A v2 sprite linked via a *nonzero* `LinkedIndex` instead
+(a distinct, rarer case) is not yet supported and returns a descriptive
+error — see
+[`.vibe/decisions/021-v2-zero-length-sprite-always-copies-table-index-zero.md`](../.vibe/decisions/021-v2-zero-length-sprite-always-copies-table-index-zero.md).
 
 ```go
 pixels, width, height, err := sff.ResolveSpritePixels(f, 0, 0, nil)
@@ -1329,13 +1348,10 @@ formats' output is prefixed with the same 4-byte declared-length header
 synthetic palette (its actual colors are never round-tripped —
 `DecodeV2Sprite` only reads index bytes back); PNG24 encodes through an
 opaque `image.RGBA` (alpha fixed at 255, so RGB values survive unchanged);
-PNG32 treats its input as alpha-premultiplied (matching `DecodeV2Sprite`'s
-own output) and un-premultiplies each pixel via `color.NRGBAModel` before
-writing it into the PNG, which always stores straight alpha — the exact
-inverse of `DecodeV2Sprite`'s `color.RGBAModel` premultiplication step. This
-un-premultiply/premultiply round trip is not byte-exact (8-bit integer
-rounding can drift by ±1 per channel), unlike every other format's exact
-round trip.
+PNG32 treats its input as straight (non-premultiplied) alpha (matching
+`DecodeV2Sprite`'s own output) and writes it directly via `image.NRGBA`,
+with no premultiply/un-premultiply conversion in either direction — a
+byte-exact round trip, like every other format.
 See
 [`.vibe/decisions/007-sff-v2-serialize-shape-and-scope.md`](../.vibe/decisions/007-sff-v2-serialize-shape-and-scope.md).
 

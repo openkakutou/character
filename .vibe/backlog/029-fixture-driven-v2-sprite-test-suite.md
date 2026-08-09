@@ -1,5 +1,5 @@
 ---
-status: todo
+status: in_progress
 depends_on: [023, 024, 025, 026, 027]
 ---
 # Fixture-Driven v2 Sprite Test Suite
