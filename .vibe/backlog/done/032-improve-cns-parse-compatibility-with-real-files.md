@@ -1,5 +1,5 @@
 ---
-status: in_progress
+status: done
 ---
 # Improve .cns Parse Compatibility With Real Files
 
@@ -10,10 +10,10 @@ status: in_progress
 2. **Statedef header fields holding expressions instead of literal integers.** Numeric header fields such as `anim` or `poweradd` sometimes hold MUGEN trigger/expression syntax (e.g. `anim = IfElse(ceil(lifemax/2) < life ,181,182)`, `poweradd = ifelse(PrevStateNo = 9000, 0, 20)`) rather than a plain integer. `cns.Parse` currently requires `strconv.Atoi` to succeed on these fields and errors otherwise.
 
 ## Acceptance Criteria
-- [ ] A design decision is made (and recorded as an ADR) on how far `cns.Controller`'s existing "unevaluated data" philosophy should extend to `StateDef`'s typed header fields, to resolve root cause 2 — this needs a real design conversation, not a quick patch: it directly affects the shape of `StateDef`'s public fields
-- [ ] A decision is made on `cns.Parse`'s header-detection strategy for a `[State <label>]` header with no number, to resolve root cause 1, consistent with (or superseding) `.vibe/decisions/012-cns-parse-header-detection-strategy.md`
-- [ ] Once decided: real-world `.cns` files exhibiting either pattern parse successfully
-- [ ] A file that is genuinely malformed in some other way still returns a descriptive, line-numbered error
+- [x] A design decision is made (and recorded as an ADR) on how far `cns.Controller`'s existing "unevaluated data" philosophy should extend to `StateDef`'s typed header fields, to resolve root cause 2 — this needs a real design conversation, not a quick patch: it directly affects the shape of `StateDef`'s public fields — see `.vibe/decisions/023-statedef-numeric-header-fields-unevaluated-expression-escape-hatch.md` (new `StateDef.HeaderExprs map[string]string` escape hatch)
+- [x] A decision is made on `cns.Parse`'s header-detection strategy for a `[State <label>]` header with no number, to resolve root cause 1, consistent with (or superseding) `.vibe/decisions/012-cns-parse-header-detection-strategy.md` — see `.vibe/decisions/022-cns-parse-state-header-accepts-any-label.md` (supersedes ADR 012 for `[State ...]` only, not `[Statedef ...]`)
+- [x] Once decided: real-world `.cns` files exhibiting either pattern parse successfully
+- [x] A file that is genuinely malformed in some other way still returns a descriptive, line-numbered error
 
 ## Notes
 No need to vendor real fixtures for this — the corpus scan already establishes this is common; synthetic snippets reproducing each pattern are enough to write tests against. Flag both root causes for the design conversation up front; don't presuppose the fix for either. See the real-corpus findings recorded in backlog item 022 (now in `.vibe/backlog/done/`) for the original scan results.
