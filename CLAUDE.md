@@ -47,6 +47,17 @@ Sprite (`.sff`) files are handled by the separate `sff` repo, a dependency of th
 
 3. **Formats are interdependent, not independent.** `.air` references sprite groups resolved via the `sff` dependency — there's essentially no real use case for reading animation data without also loading the sprites it points to.
 
+## WASM release propagation <!-- keep -->
+
+This repo's WASM build (`character.wasm` + `wasm_exec.js`) is consumed by pinned-version downstream apps — currently `character-viewer-web`, which pins an exact tag in `.github/workflows/deploy-pages.yml` (`npm run wasm:download -- vX.Y.Z`). See `roadmap`'s `.vibe/decisions/016-wasm-version-pinning-push-based-propagation.md` for the org-wide policy this implements: **exact pins, propagated by the producer's own release step — no scheduled job.**
+
+**After `/vibe:release` tags a new version here**, as a follow-up in the same session:
+1. For each known consumer (currently just `character-viewer-web`; check `roadmap/repos.md` if this list may be stale), open it and read its `CLAUDE.md`'s WASM-dependency section for the exact pin location.
+2. Bump the pin there to the new tag.
+3. Run that consumer's own test suite. If green: commit (`chore: bump character WASM to vX.Y.Z`) and push. If red: stop, do **not** force the bump through, and flag the incompatibility to the user instead — it means this release has a breaking change for that consumer.
+
+Skip this if the release has no user-visible/behavioral change consumers would care about (e.g. docs-only, internal refactor with no CHANGELOG entry).
+
 ## Architecture
 
 ```
