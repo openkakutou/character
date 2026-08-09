@@ -321,27 +321,35 @@ func TestParse_FrameLineMissingFields_ReturnsError(t *testing.T) {
 	}
 }
 
-func TestParse_GroupIndexBelowSentinel_ReturnsDescriptiveError(t *testing.T) {
+func TestParse_GroupIndexMoreNegativeThanMinusOne_ParsedAsBlankSentinel(t *testing.T) {
 	src := "[Begin Action 0]\n-2,0, 0,0, 5\n"
 
-	_, err := Parse(strings.NewReader(src))
-	if err == nil {
-		t.Fatal("expected an error for a group index more negative than the -1 sentinel, got nil")
+	animations, err := Parse(strings.NewReader(src))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
-	if !strings.Contains(err.Error(), "group") {
-		t.Errorf("expected the error to mention the group index, got: %v", err)
+	f := animations[0].Frames[0]
+	if f.Group != -2 || f.Image != 0 {
+		t.Errorf("expected Group -2 and Image 0, got Group %d Image %d", f.Group, f.Image)
+	}
+	if !f.IsBlank() {
+		t.Errorf("expected IsBlank true for a negative Group, got false")
 	}
 }
 
-func TestParse_ImageIndexBelowSentinel_ReturnsDescriptiveError(t *testing.T) {
+func TestParse_ImageIndexMoreNegativeThanMinusOne_ParsedAsBlankSentinel(t *testing.T) {
 	src := "[Begin Action 0]\n0,-2, 0,0, 5\n"
 
-	_, err := Parse(strings.NewReader(src))
-	if err == nil {
-		t.Fatal("expected an error for an image index more negative than the -1 sentinel, got nil")
+	animations, err := Parse(strings.NewReader(src))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
-	if !strings.Contains(err.Error(), "image") {
-		t.Errorf("expected the error to mention the image index, got: %v", err)
+	f := animations[0].Frames[0]
+	if f.Group != 0 || f.Image != -2 {
+		t.Errorf("expected Group 0 and Image -2, got Group %d Image %d", f.Group, f.Image)
+	}
+	if !f.IsBlank() {
+		t.Errorf("expected IsBlank true for a negative Image, got false")
 	}
 }
 
@@ -403,5 +411,39 @@ func TestParse_NegativeXYAndTime_AreStillAccepted(t *testing.T) {
 	f := animations[0].Frames[0]
 	if f.X != -5 || f.Y != -10 || f.Time != -1 {
 		t.Errorf("expected negative X/Y/Time to be accepted, got %+v", f)
+	}
+}
+
+// Reproduces a real .air file (Bardock, from a community MUGEN character)
+// which widely uses Group -1 with a varying, more-negative-than -1 Image
+// (-1,0 / -1,-1 / -1,-2 / -1,-3 / -1,-4 / -1,-5, one per frame in the same
+// action) as its blank-frame convention. Real MUGEN/Ikemen engines treat
+// any negative Group as "no sprite shown", regardless of Image's value.
+func TestParse_RealBardockBlankFrameSequence_ParsedSuccessfully(t *testing.T) {
+	src := "[Begin Action 5900]\n" +
+		"-1,0, 0,0, 2\n" +
+		"-1,-1, 0,0, 1\n" +
+		"-1,-2, 0,0, 1\n" +
+		"-1,-3, 0,0, 1\n" +
+		"-1,-4, 0,0, 1,, A\n" +
+		"-1,-5, 0,0, 1,, A\n"
+
+	animations, err := Parse(strings.NewReader(src))
+	if err != nil {
+		t.Fatalf("unexpected error parsing a real-world blank-frame sequence: %v", err)
+	}
+	frames := animations[0].Frames
+	if len(frames) != 6 {
+		t.Fatalf("expected 6 frames, got %d", len(frames))
+	}
+	wantImages := []int{0, -1, -2, -3, -4, -5}
+	for i, want := range wantImages {
+		f := frames[i]
+		if f.Group != -1 || f.Image != want {
+			t.Errorf("frame %d: expected Group -1 Image %d, got Group %d Image %d", i, want, f.Group, f.Image)
+		}
+		if !f.IsBlank() {
+			t.Errorf("frame %d: expected IsBlank true for Group -1 Image %d", i, want)
+		}
 	}
 }

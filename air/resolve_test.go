@@ -124,6 +124,21 @@ func TestSpriteResolver_Resolve_TreatsPartialSentinelAsBlankToo(t *testing.T) {
 	}
 }
 
+func TestSpriteResolver_Resolve_TreatsAnyNegativeGroupAsBlankNotJustMinusOne(t *testing.T) {
+	// Real .air files (e.g. a community Bardock character) use varying
+	// negative Image values (-1, -2, -3, ...) alongside Group -1 as the
+	// blank-frame convention, not just the -1,-1 pair.
+	resolver := NewSpriteResolver(sampleSpriteGroups())
+
+	got, err := resolver.Resolve(Frame{Group: -1, Image: -2, X: 0, Y: 0, Time: 1})
+	if err != nil {
+		t.Fatalf("expected no error resolving a Group -1 Image -2 blank frame, got: %v", err)
+	}
+	if got != (sff.Sprite{}) {
+		t.Errorf("expected a zero-value Sprite, got %+v", got)
+	}
+}
+
 func TestSpriteResolver_Resolve_WorksTheSameRegardlessOfSFFVersionOrigin(t *testing.T) {
 	// sff.Sprite/sff.SpriteGroup are already version-agnostic (populated
 	// identically by ParseV1+DecodePCX and ParseV2+DecodeV2Sprite), so the

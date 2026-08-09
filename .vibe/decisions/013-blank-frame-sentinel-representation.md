@@ -1,6 +1,6 @@
 ---
 date: 2026-08-07
-status: accepted
+status: superseded by 024
 ---
 # Blank-frame sentinel is represented as -1 on Frame.Group/Image, not a separate field
 

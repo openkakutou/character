@@ -189,19 +189,20 @@ func parseFrameLine(line string) (Frame, error) {
 		return Frame{}, fmt.Errorf("malformed frame line %q: expected at least 5 comma-separated fields", line)
 	}
 
+	// Group/Image are not range-checked beyond being valid integers: real
+	// MUGEN/Ikemen engines treat *any* negative Group as "no sprite shown
+	// this frame" regardless of Image's value, and real-world .air files
+	// use varying negative values (-1, -2, -3, ...), not just the -1,-1
+	// convention. Frame.IsBlank() (Group < 0 || Image < 0) is the single
+	// recognition point for this state — see
+	// .vibe/decisions/014-blank-frame-sentinel-accepts-any-negative-value.md.
 	group, err := strconv.Atoi(strings.TrimSpace(fields[0]))
 	if err != nil {
 		return Frame{}, fmt.Errorf("malformed frame line %q: invalid group: %w", line, err)
 	}
-	if group < -1 {
-		return Frame{}, fmt.Errorf("malformed frame line %q: group index must not be negative (except the -1 \"no sprite\" sentinel), got %d", line, group)
-	}
 	image, err := strconv.Atoi(strings.TrimSpace(fields[1]))
 	if err != nil {
 		return Frame{}, fmt.Errorf("malformed frame line %q: invalid image: %w", line, err)
-	}
-	if image < -1 {
-		return Frame{}, fmt.Errorf("malformed frame line %q: image index must not be negative (except the -1 \"no sprite\" sentinel), got %d", line, image)
 	}
 	x, err := strconv.Atoi(strings.TrimSpace(fields[2]))
 	if err != nil {

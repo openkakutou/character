@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Fixed animation files being rejected entirely when they use a real-world MUGEN/Ikemen convention for "show no sprite on this frame" (any negative value, not just exactly `-1`, on the frame's group or image field). Some existing characters distributed in the community (e.g. Bardock) use this pattern and previously failed to load at all.
+
 ## [0.4.0] - 2026-08-09
 
 ### Added
