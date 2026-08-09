@@ -115,12 +115,12 @@ rather than panicking or silently producing incorrect data, when:
   non-numeric action number, or any other unrecognized `[...]` line)
 - a frame line has fewer than the required fields, or a
   missing/non-numeric group, image, X, Y, or time value
-- a frame line's group or image index is more negative than `-1`
 - the underlying reader itself fails
 
-A frame line's group or image field may be exactly `-1` — the `.air`
-convention (most commonly `-1,-1`) for "show no sprite on this frame" — which
-`Parse` accepts, not rejects; see `Frame.IsBlank`, below.
+A frame line's group or image field may hold any negative value — the
+`.air` convention (e.g. `-1,-1`, but real files also use `-1,-2`, `-1,-3`,
+and so on) for "show no sprite on this frame" — which `Parse` accepts, not
+rejects, with no lower bound; see `Frame.IsBlank`, below.
 
 An empty input is not an error: `Parse` returns an empty, `nil`-error
 result.
@@ -209,11 +209,11 @@ pure-data surface a library consumer (editor, engine) is meant to depend
 on. See [`docs/architecture.md`](architecture.md) for how the read and
 write paths are kept apart.
 
-`IsBlank` reports whether `Group` or `Image` is `-1`, the `.air` "no sprite
-shown" sentinel — a `Frame` that is intentionally not tied to any sprite,
-distinct from a frame whose sprite reference is simply absent from the
-loaded sprite collection. See
-[`.vibe/decisions/013-blank-frame-sentinel-representation.md`](../.vibe/decisions/013-blank-frame-sentinel-representation.md).
+`IsBlank` reports whether `Group` or `Image` is negative, the `.air` "no
+sprite shown" sentinel — a `Frame` that is intentionally not tied to any
+sprite, distinct from a frame whose sprite reference is simply absent from
+the loaded sprite collection. See
+[`.vibe/decisions/024-blank-frame-sentinel-accepts-any-negative-value.md`](../.vibe/decisions/024-blank-frame-sentinel-accepts-any-negative-value.md).
 
 ### Example
 
@@ -299,11 +299,12 @@ shape whether they came from `sff.ParseV1`+`sff.DecodePCX` or
 version-specific branching. See
 [`.vibe/decisions/008-air-sprite-resolution-lives-in-air-package.md`](../.vibe/decisions/008-air-sprite-resolution-lives-in-air-package.md).
 
-When `frame.IsBlank()` is true (the `.air` `-1` "no sprite" sentinel),
-`Resolve` recognizes it directly and returns a zero `sff.Sprite` with a
-`nil` error, without touching the sprite index — this is a normal,
-intentional outcome, not the same "missing reference" failure as above. See
-[`.vibe/decisions/013-blank-frame-sentinel-representation.md`](../.vibe/decisions/013-blank-frame-sentinel-representation.md).
+When `frame.IsBlank()` is true (the `.air` "no sprite" sentinel — any
+negative `Group`/`Image`), `Resolve` recognizes it directly and returns a
+zero `sff.Sprite` with a `nil` error, without touching the sprite index —
+this is a normal, intentional outcome, not the same "missing reference"
+failure as above. See
+[`.vibe/decisions/024-blank-frame-sentinel-accepts-any-negative-value.md`](../.vibe/decisions/024-blank-frame-sentinel-accepts-any-negative-value.md).
 
 ### Example
 
