@@ -1,5 +1,5 @@
 ---
-status: todo
+status: blocked
 ---
 # Decode v2 RLE5 Pixel Format
 
@@ -16,3 +16,6 @@ status: todo
 
 ## Notes
 Source (for whenever this is picked up): `https://github.com/ikemen-engine/Ikemen-GO/blob/develop/src/image.go` (`Rle5Decode`, plus `Rle8Decode`/`Lz5Decode` as cross-validation that the file's algorithms match `sff-extractor`'s, and `readV2`'s format dispatch confirming format codes 2/3/4 and the 4-byte length-prefix convention).
+
+## Blocked
+2026-08-09: Ran `/vibe:feature 030 --auto`. Re-scanned the local real-character corpus (`~/workspace/ikemen-quick-versus/chars/`, 562 `.sff` files) for any v2 sprite entry with `Format == 3` (RLE5) using the existing `sff.ParseV2` reader — still **0** RLE5 sprites found, same result as when this item was written. The trigger condition ("a real RLE5-encoded sprite is found") has not occurred, so per this item's own acceptance criteria, implementation was not started. No code changes made. Re-run this item once a genuine RLE5-encoded character file turns up.
