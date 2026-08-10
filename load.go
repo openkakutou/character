@@ -36,6 +36,10 @@ func Load(path string) (*Character, error) {
 		return nil, fmt.Errorf("character: parsing character definition file %q: %w", path, err)
 	}
 
+	if err := validateFilesSection(path, info); err != nil {
+		return nil, err
+	}
+
 	dir := filepath.Dir(path)
 
 	animations, err := loadAnimations(dir, info.AnimationFile)
@@ -59,6 +63,28 @@ func Load(path string) (*Character, error) {
 		Sprites:    sprites,
 		StateDefs:  stateDefs,
 	}, nil
+}
+
+// validateFilesSection returns a descriptive error naming path when info's
+// referenced file fields are all empty, which happens when a .def file has
+// no [Files] section at all — most commonly an Ikemen GO
+// storyboard/intro/ending screen definition (a [SceneDef]/[Scene N]-based
+// file, an entirely different sub-format) that happens to sit inside a
+// character's own folder alongside the real character .def. def.Parse
+// correctly returns a zero-value CharacterInfo for these per its own
+// documented "skip unrecognized sections" behavior, but leaving that
+// unchecked means an empty referenced path later resolves to the .def's own
+// containing directory (filepath.Join(dir, "")), which fails with an
+// opaque "is a directory" filesystem error instead of naming the real
+// problem. A .def with at least one populated [Files] entry is left
+// untouched: a file missing only some entries (e.g. no cns) still gets the
+// existing per-file "opening ... file" error further down the load path.
+// See backlog item 051.
+func validateFilesSection(path string, info def.CharacterInfo) error {
+	if info.AnimationFile != "" || info.SpriteFile != "" || info.ConstantsFile != "" {
+		return nil
+	}
+	return fmt.Errorf("character: %q doesn't look like a character definition: no [Files] section (or it has no recognized entries)", path)
 }
 
 // resolveReferencedPath joins dir with a file path referenced from inside a

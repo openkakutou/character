@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/openkakutou/character/cns"
@@ -340,5 +341,45 @@ func TestLoad_DefFileItselfMissing_ReturnsDescriptiveErrorNotPanic(t *testing.T)
 	_, err := Load(filepath.Join(t.TempDir(), "does-not-exist.def"))
 	if err == nil {
 		t.Fatal("expected an error when the .def file itself does not exist, got nil")
+	}
+}
+
+// TestLoad_DefWithoutFilesSection_ReturnsClearDiagnosticNotFilesystemError
+// covers backlog item 051: an Ikemen GO storyboard/intro/ending screen .def
+// (a [SceneDef]/[Scene N]-based file, an entirely different sub-format) has
+// no [Files] section at all. def.Parse correctly skips those unrecognized
+// sections per its own documented contract, leaving CharacterInfo's file
+// fields empty — Load must catch that before attempting to open an empty
+// referenced path (which resolves to the containing directory itself) and
+// name the real problem, instead of surfacing a raw, confusing
+// "is a directory" filesystem error.
+func TestLoad_DefWithoutFilesSection_ReturnsClearDiagnosticNotFilesystemError(t *testing.T) {
+	dir := t.TempDir()
+
+	defContent := `[SceneDef]
+spr = system.sff
+fadein.time = 30
+fadeout.time = 30
+
+[Scene 0]
+type = layerinfo
+`
+	defPath := filepath.Join(dir, "Ending.def")
+	if err := os.WriteFile(defPath, []byte(defContent), 0o644); err != nil {
+		t.Fatalf("test setup: writing .def fixture: %v", err)
+	}
+
+	_, err := Load(defPath)
+	if err == nil {
+		t.Fatal("expected an error when the .def file has no [Files] section, got nil")
+	}
+	if !strings.Contains(err.Error(), defPath) {
+		t.Errorf("expected error to name the .def path %q, got: %v", defPath, err)
+	}
+	if strings.Contains(err.Error(), "is a directory") {
+		t.Errorf("expected a clear diagnostic instead of a raw filesystem error, got: %v", err)
+	}
+	if !strings.Contains(err.Error(), "[Files]") {
+		t.Errorf("expected error to mention the missing [Files] section, got: %v", err)
 	}
 }

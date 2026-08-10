@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed loading a character whose file references (sprite/animation/combat-logic file) use Windows-style backslash-separated paths (e.g. `states\constants.cns`) — these were treated as one literal filename instead of a path into a subfolder, causing a spurious "file not found" error on Linux and in the browser; this was the single largest cause of character loading failures found in a real-character corpus scan.
 - Fixed animation files being rejected when a collision box line has a space before its `[index]` bracket (e.g. `Clsn2 [0] = -17, -97, 18, 2`), a real-world authoring style found in several real characters (e.g. King of Fighters "Mai (98)") that real MUGEN/Ikemen engines tolerate.
 - Fixed animation files being rejected when a frame line's numeric field has extra content after a valid number (e.g. `143 0` instead of `143`), or is left blank — a broken value copy-pasted across several unrelated real characters (e.g. Dragon Ball "Goku", Guilty Gear "Axl" and "Baiken") that real MUGEN/Ikemen engines tolerate.
+- Fixed loading a `.def` file that has no `[Files]` section — most often an Ikemen GO storyboard/intro/ending screen definition sitting inside a character's own folder alongside the real character `.def` — producing a confusing, low-level "is a directory" error instead of clearly stating the file doesn't look like a character definition.
 
 ## [0.6.0] - 2026-08-10
 
