@@ -16,22 +16,25 @@ graph TD
     def["character/def<br/>CharacterInfo (data model)<br/>+ Parse/Serialize(.def text)"]
     sff["github.com/openkakutou/sff (external module)<br/>Sprite, SpriteGroup<br/>+ Load (.sff read, either version)<br/>+ ResolveSpritePixels"]
     cns["character/cns<br/>StateDef, Controller (data model)<br/>+ Parse/Serialize(.cns text)<br/>+ Document (comment-preserving round trip)"]
+    cmd["character/cmd<br/>CommandFile, Command (data model)<br/>+ Parse/Serialize(.cmd text)"]
 
     root -->|assembles| air
     root -->|assembles| def
     root -->|assembles| cns
     root -->|depends on| sff
     air -->|SpriteResolver resolves frame references against| sff
+    cmd -->|delegates its Statedef -1/State block to| cns
 ```
 
 ## Modules
 
 | Package | Responsibility | Status |
 |---|---|---|
-| `character` (root) | Assembles the sub-packages into a single `Character{}` struct, resolves an animation frame to its actual sprite (`ResolveSprite`), and loads a full `Character` directly from a `.def` file path (`Load`) | `Animations []air.Animation`, `Sprites []sff.SpriteGroup`, and `StateDefs []cns.StateDef` all wired in, via a `.def`-driven top-level loader — completing the full read surface across all four formats |
+| `character` (root) | Assembles the sub-packages into a single `Character{}` struct, resolves an animation frame to its actual sprite (`ResolveSprite`), and loads a full `Character` directly from a `.def` file path (`Load`) | `Animations []air.Animation`, `Sprites []sff.SpriteGroup`, and `StateDefs []cns.StateDef` all wired in, via a `.def`-driven top-level loader — completing the full read surface across all four formats; `character/cmd` is implemented but not yet wired in |
 | `character/air` | MUGEN/Ikemen GO animation (`.air`) files: the `Animation`/`Frame`/`ClsnBox` data model, a parser that reads `.air` text into that model, a serializer that writes it back out, a `Document` type for comment-preserving round trips, and a `SpriteResolver` that resolves a `Frame`'s sprite reference against sprites loaded via `github.com/openkakutou/sff` | Data model + read path implemented; `Serialize` produces valid, re-readable output (not a byte-exact round-trip of an original file's formatting); `Document`/`ParseDocument` round-trip unmodified files byte-for-byte, comments included; `SpriteResolver` resolves every `Frame` reference to its `sff.Sprite`, or a descriptive error for a missing one, regardless of `.sff` version |
 | `character/def` | Character definition (`.def`) files — the entry point referencing the other formats: the `CharacterInfo` data model, a text parser (`Parse`), a serializer (`Serialize`), and a `Document` type for comment-preserving round trips | Data model and read+write cycle implemented (`CharacterInfo`; `Parse` reads `[Info]`/`[Files]` text into it, skipping unrecognized sections; `Serialize` writes it back out to valid, re-readable text; `Document`/`ParseDocument` round-trip unmodified files byte-for-byte, comments and unrecognized sections included); wired into the root `Character` struct via `character.Load` |
 | `character/cns` | Combat logic / state machine (`.cns`, text) files: the `StateDef`/`Controller` data model, a text parser (`Parse`) that reads `[Statedef N]`/`[State ...]` blocks into it, keeping trigger conditions and parameters as unevaluated data (and, for `StateDef`'s own numeric and boolean header fields, an unevaluated-expression fallback via `HeaderExprs`), a serializer (`Serialize`) that writes it back out, and a `Document` type for comment-preserving round trips | Data model and read+write cycle implemented; unrecognized sections are skipped by `Parse` rather than aborting the read, matching `def.Parse`'s tolerance; a `[State ...]` header's content is unconstrained (no state number required, matching real-world files) since `Parse` never stores it; `Document`/`ParseDocument` round-trip unmodified files byte-for-byte, comments and unrelated sections included; wired into the root `Character` struct via `character.Load` |
+| `character/cmd` | Input command (`.cmd`, text) files: the `CommandFile`/`Command` data model, a text parser (`Parse`) that reads `[Remap]`/`[Defaults]`/`[Command]` sections while delegating the shared `[Statedef -1]`/`[State ...]` block to `cns.Parse`, a serializer (`Serialize`), and a `Document` type for comment-preserving round trips | Data model and read+write cycle implemented; validated against a 520-file real-character corpus (99.8% parse successfully, one pre-existing `cns.Parse` gap tracked separately as item 053); not yet wired into the root `Character` struct |
 
 Sprite (`.sff`, binary) file support is no longer a sub-package of this
 repo — it now comes from the separate, independently published
@@ -101,6 +104,29 @@ matching the dependency this diagram already showed. `sff` itself stays free
 of any dependency on `air`, so a consumer that only needs sprite data never
 pulls in animation types. See
 [`.vibe/decisions/008-air-sprite-resolution-lives-in-air-package.md`](../.vibe/decisions/008-air-sprite-resolution-lives-in-air-package.md).
+
+## Cross-format resolution: cmd delegates to cns
+
+`.cmd` and `.cns` share one part of their syntax byte-for-byte: a `.cmd`
+file's `[Statedef -1]`/`[State ...]` block — the "always" state that reacts
+to a recognized command — is structurally identical to any `.cns`
+`[Statedef N]`/`[State N]` block. Rather than reimplementing that parsing a
+second time, `character/cmd` calls `cns.Parse`/`cns.Serialize` directly
+against the same source text for that part, decoding only its own
+`[Remap]`/`[Defaults]`/`[Command]` sections itself. See
+[`.vibe/decisions/025-cmd-package-reuses-cns-for-state-triggering-block.md`](../.vibe/decisions/025-cmd-package-reuses-cns-for-state-triggering-block.md).
+
+The command-to-state link itself needs no dedicated modeling: it already
+flows through `cns.Controller.Triggers`'s existing unevaluated strings
+(e.g. `command = "holdback"`), the same "read-path model can't hold
+everything yet" pattern this repo applies throughout.
+
+A real-world corpus scan surfaced one more wrinkle: some `.cmd` files omit
+the `[Statedef -1]` header entirely, since `-1` is the only Statedef number
+a `.cmd` "always" section can ever use — `cns.Parse` alone has no such
+implicit-numbering convention (a bare `.cns` file always requires an
+explicit header), so `cmd.Parse` synthesizes it before delegating. See
+[`.vibe/decisions/026-cmd-parse-synthesizes-implicit-statedef-minus-1-header.md`](../.vibe/decisions/026-cmd-parse-synthesizes-implicit-statedef-minus-1-header.md).
 
 ## Root package assembly
 

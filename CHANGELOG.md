@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Characters' input command files (`.cmd`) can now be read and written: motion/button commands, their name and input-recognition timing, button remapping, and their link to the state changes they trigger — supporting both MUGEN and Ikemen GO authoring styles, validated against a corpus of real character files.
+
 ## [0.4.6] - 2026-08-10
 
 ### Fixed

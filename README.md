@@ -33,6 +33,10 @@ This project is in early-stage development. Shipped so far:
 - Reading real-world `.cns` files that write a state header with its closing bracket missing — a common authoring typo — instead of rejecting them, while a bracket line unrelated to a state header is still caught with a clear, line-numbered error
 - Reading real-world `.cns` files that contain a stray line inside a state (a leftover bit of text, a decorative separator, a comment missing its marker) instead of rejecting them — that line is simply skipped, the same way an unrecognized setting already is
 - Reading real-world `.cns` files that give a state's yes/no settings (control, facing the opponent, and related persistence settings) a formula instead of a plain yes/no value (its original formula text is kept alongside the state) instead of failing to load
+- Reading MUGEN/Ikemen GO input command (`.cmd`) files into structured command data — named input sequences (motion + button combos), their recognition timing, optional button remapping, and their link to the state changes they trigger; sections the library doesn't recognize are skipped instead of aborting the read, and a malformed command section header is caught with a clear, line-numbered error instead of crashing
+- Writing command data back out to valid `.cmd` text, ready to be read by MUGEN/Ikemen GO or read back in by this library
+- Loading a `.cmd` file and saving it back out unchanged reproduces the original file exactly, including comments and section ordering — so re-saving a file you haven't edited never creates a noisy diff
+- Reading real-world `.cmd` files whose command-linked state section leaves out its header line entirely (a common authoring shortcut, since a `.cmd` file's linked section can only ever be that one state) instead of rejecting them
 - Resolving a decoded sprite's pixel data into its actual on-screen colors using the sprite's palette — including reading a `.sff` v1 sprite's own embedded palette and following `.sff` v2 palette bank sharing/linking — with the correct transparency rule applied depending on how the sprite was originally encoded
 - Recoloring a sprite with an external `.act` palette file instead of its own — reading the `.act` file's colors in the correct order with the correct transparency, and using it in place of the sprite's own palette when resolving its on-screen colors; a wrongly-sized `.act` file is caught with a descriptive error instead of crashing
 - Resolving a `.sff` v1 sprite's actual decoded pixel data through the same public interface as its palette, validated against real, unmodified MUGEN/Ikemen character files rather than only hand-built test data — this caught and fixed two decoding inaccuracies affecting some real sprites: a sprite whose stored "linked sprite" reference points at itself or a later sprite now correctly falls back to its own image, and a sprite's own color palette is now located correctly for every real file layout, not just the common case; a sprite with a corrupted or nonsensical declared size falls back to a blank placeholder image instead of risking a crash
@@ -44,7 +48,7 @@ This project is in early-stage development. Shipped so far:
 
 Planned:
 
-- Preserving comments and ordering when the saved `.def`/`.air`/`.cns` file actually differs from the original (today this is guaranteed only when nothing changed)
+- Preserving comments and ordering when the saved `.def`/`.air`/`.cns`/`.cmd` file actually differs from the original (today this is guaranteed only when nothing changed)
 <!-- vibe:end:features -->
 
 <!-- vibe:begin:install -->
@@ -769,7 +773,102 @@ func main() {
 }
 ```
 
-Wiring `.cns` into `Character`, and decoding/encoding the remaining `.sff` v2 compressed pixel formats (RLE-based), are not implemented yet — this API surface will grow as those pieces are added.
+Read a `.cmd` input command file into a `CommandFile` with `cmd.Parse` — this also decodes the command-linked state section (the same section `cns.Parse` reads from a `.cns` file) into `CommandFile.States`:
+
+```go
+package main
+
+import (
+	"fmt"
+	"os"
+
+	"github.com/openkakutou/character/cmd"
+)
+
+func main() {
+	f, err := os.Open("kfm.cmd")
+	if err != nil {
+		panic(err)
+	}
+	defer f.Close()
+
+	file, err := cmd.Parse(f)
+	if err != nil {
+		panic(err)
+	}
+
+	for _, c := range file.Commands {
+		fmt.Printf("%s: %s\n", c.Name, c.Input)
+	}
+}
+```
+
+Write a `CommandFile` back out to `.cmd` text with `cmd.Serialize`:
+
+```go
+package main
+
+import (
+	"os"
+
+	"github.com/openkakutou/character/cmd"
+)
+
+func main() {
+	file := cmd.CommandFile{
+		Commands: []cmd.Command{
+			{Name: "QCF_a", Input: "~D, DF, F, a"},
+		},
+	}
+
+	f, err := os.Create("kfm.cmd")
+	if err != nil {
+		panic(err)
+	}
+	defer f.Close()
+
+	if err := cmd.Serialize(f, file); err != nil {
+		panic(err)
+	}
+}
+```
+
+If you just want to load a `.cmd` file and save it back out unchanged (no data edits), use `cmd.ParseDocument`/`Document.Serialize` instead of `Parse`/`Serialize` — it keeps the file's comments and section ordering intact:
+
+```go
+package main
+
+import (
+	"os"
+
+	"github.com/openkakutou/character/cmd"
+)
+
+func main() {
+	f, err := os.Open("kfm.cmd")
+	if err != nil {
+		panic(err)
+	}
+	doc, err := cmd.ParseDocument(f)
+	f.Close()
+	if err != nil {
+		panic(err)
+	}
+
+	out, err := os.Create("kfm-copy.cmd")
+	if err != nil {
+		panic(err)
+	}
+	defer out.Close()
+
+	// Reproduces kfm.cmd exactly, including its comments.
+	if err := doc.Serialize(out); err != nil {
+		panic(err)
+	}
+}
+```
+
+Wiring `.cmd` into `Character`, and decoding/encoding the remaining `.sff` v2 compressed pixel formats (RLE-based), are not implemented yet — this API surface will grow as those pieces are added.
 
 ### Loading a character in a web browser (WebAssembly)
 

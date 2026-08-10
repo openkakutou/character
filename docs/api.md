@@ -714,8 +714,194 @@ if err := doc.Serialize(out); err != nil {
 }
 ```
 
-Wiring `cns` into `character.Load` is not implemented yet (tracked by
-backlog item 022).
+## `character/cmd` — input command (`.cmd`) files
+
+### Data model
+
+```go
+type CommandFile struct {
+    Remap    map[string]string // physical button -> remapped button; nil if the file has none
+    Defaults CommandDefaults
+    Commands []Command
+    States   []cns.StateDef // the linked "always" state (Statedef -1), parsed via cns.Parse
+}
+
+type CommandDefaults struct {
+    Time       int // "command.time" — recognition buffer window, in ticks
+    BufferTime int // "command.buffer.time" — recognized-command duration, in ticks
+}
+
+type Command struct {
+    Name       string // referenced by a linked state controller's trigger, e.g. `command = "holdback"`
+    Input      string // raw, unevaluated MUGEN/Ikemen input-sequence expression, e.g. "~D, DF, F, a"
+    Time       int    // per-command override; 0 means "use CommandFile.Defaults.Time"
+    BufferTime int    // per-command override; 0 means "use CommandFile.Defaults.BufferTime"
+}
+```
+
+`CommandFile` is the pure-data vocabulary for a MUGEN/Ikemen `.cmd` file:
+optional button remapping, file-level recognition defaults, the named input
+commands themselves, and the state-controller block that reacts to them.
+`Command.Input` is stored verbatim, unevaluated — this package has no
+input-sequence grammar to decompose modifiers like `~` (release), `$` (any
+direction of travel), `/` (no time restriction), or `+` (simultaneous
+buttons) into, mirroring `cns.Controller`'s own unevaluated
+`Triggers`/`Parameters`. `CommandFile.States` is not a new concept: a
+`.cmd` file's `[Statedef -1]`/`[State ...]` block shares `.cns`'s syntax
+byte-for-byte, so it is parsed by `cns.Parse` (run against the same source
+text) rather than reimplemented — the command-to-state link itself already
+flows through `cns.Controller.Triggers`'s existing unevaluated strings
+(e.g. `command = "holdback"`), needing no dedicated field. See
+[`.vibe/decisions/025-cmd-package-reuses-cns-for-state-triggering-block.md`](../.vibe/decisions/025-cmd-package-reuses-cns-for-state-triggering-block.md).
+
+### Reading
+
+```go
+func Parse(r io.Reader) (CommandFile, error)
+```
+
+Reads MUGEN/Ikemen GO `.cmd` input-command text from `r` and returns the
+`CommandFile` it describes.
+
+The `[Remap]`, `[Defaults]`, and `[Command]` sections (matched
+case-insensitively, as are their keys) populate
+`Remap`/`Defaults`/`Commands`; any other section — including
+`[Statedef -1]` and its `[State ...]` controllers — is left for a delegated
+`cns.Parse` call to decode into `States`. Within `[Defaults]`/`[Command]`,
+`command.time`/`time` and `command.buffer.time`/`buffer.time` set the
+numeric fields; a value that isn't a literal integer is ignored, leaving
+the field at zero (this package has no `cns.StateDef.HeaderExprs`-style
+expression escape hatch for these two fields — real `.cmd` files don't
+appear to need one).
+
+Real-world `.cmd` files sometimes omit the `[Statedef -1]` header entirely
+before their `[State ...]` controllers, since `-1` is the only Statedef
+number a `.cmd` "always" section can ever use. `Parse` compensates by
+synthesizing that header before delegating to `cns.Parse`, only when the
+file never declares one explicitly — found via a real-character corpus
+scan (Marvel's "Jean Grey" and "Nova"). See
+[`.vibe/decisions/026-cmd-parse-synthesizes-implicit-statedef-minus-1-header.md`](../.vibe/decisions/026-cmd-parse-synthesizes-implicit-statedef-minus-1-header.md).
+
+### Error handling
+
+`Parse` returns a descriptive error identifying the offending line number,
+rather than panicking or silently producing incorrect data, when:
+- a `[Remap]`/`[Defaults]`/`[Command]` section header line is missing its
+  closing `]` (a bracket line missing `]` that isn't an attempt at one of
+  those three — e.g. a `[State ...]` header — is left for `cns.Parse`'s own
+  recovery instead)
+- the delegated `cns.Parse` call itself returns an error (a malformed
+  `[Statedef -1]`/`[State ...]` block)
+- the underlying reader itself fails
+
+A content line inside a known section that isn't a valid `key=value` pair
+is ignored rather than erroring, the same tolerance `def.Parse`/`cns.Parse`
+already apply. An empty input is not an error: `Parse` returns a zero-value
+`CommandFile` and a `nil` error.
+
+### Writing
+
+```go
+func Serialize(w io.Writer, file CommandFile) error
+```
+
+Writes `file` to `w` as MUGEN/Ikemen GO `.cmd` text: a `[Remap]` section
+(only if `Remap` is non-empty), a `[Defaults]` section (only if `Defaults`
+is not the zero value), one `[Command]` block per `Commands` entry in
+order, then the linked state via `cns.Serialize`.
+
+This produces valid, readable `.cmd` text that `Parse` reads back into an
+equivalent `CommandFile`, but it does not attempt a byte-exact round-trip
+of an original file's formatting or comments — it always writes fresh
+output (see `Document`, below, for that case). `Remap` is written sorted by
+key for deterministic output. A `Command`'s `Time`/`BufferTime` is only
+written when non-zero — writing an explicit `0` would round-trip into a
+real override instead of staying "unset, use `Defaults`". `Serialize`
+returns an error rather than panicking if the underlying writer fails.
+
+### Comment-preserving round trip
+
+```go
+type Document struct {
+    File CommandFile
+    // unexported: the original source bytes
+}
+
+func ParseDocument(r io.Reader) (*Document, error)
+func (d *Document) Serialize(w io.Writer) error
+```
+
+`ParseDocument` decodes `.cmd` text the same way `Parse` does (into
+`Document.File`) while also retaining the exact source bytes it read.
+`Document.Serialize` writes those retained bytes back out verbatim, so a
+`ParseDocument` → `Serialize` round trip on **unmodified** content
+reproduces the original file byte-for-byte — comments, section ordering,
+and unrecognized sections included.
+
+Mutating `Document.File` has no effect on `Serialize`'s output: this type
+guarantees a faithful round trip for the "load, don't touch, save" case
+only, mirroring `air.Document`/`def.Document`/`cns.Document`.
+
+### Example
+
+```go
+f, err := os.Open("kfm.cmd")
+if err != nil {
+    log.Fatal(err)
+}
+defer f.Close()
+
+file, err := cmd.Parse(f)
+if err != nil {
+    log.Fatal(err)
+}
+
+for _, c := range file.Commands {
+    fmt.Printf("%s: %s\n", c.Name, c.Input)
+}
+```
+
+Writing a `CommandFile` back out:
+
+```go
+f, err := os.Create("kfm.cmd")
+if err != nil {
+    log.Fatal(err)
+}
+defer f.Close()
+
+if err := cmd.Serialize(f, file); err != nil {
+    log.Fatal(err)
+}
+```
+
+Loading a file and saving it back out unchanged, preserving comments and
+section ordering:
+
+```go
+f, err := os.Open("kfm.cmd")
+if err != nil {
+    log.Fatal(err)
+}
+doc, err := cmd.ParseDocument(f)
+f.Close()
+if err != nil {
+    log.Fatal(err)
+}
+
+out, err := os.Create("kfm-copy.cmd")
+if err != nil {
+    log.Fatal(err)
+}
+defer out.Close()
+
+if err := doc.Serialize(out); err != nil {
+    log.Fatal(err)
+}
+```
+
+Wiring `cns` and `cmd` into `character.Load` — `cns` is already wired (see
+`Character.StateDefs`, above); `cmd` is not yet.
 
 
 ## Sprite (`.sff`) files — external dependency

@@ -55,3 +55,8 @@ _Sources: `cns/statedef.go`, `cns/parser.go`, `.vibe/decisions/011-cns-controlle
 A condition expression attached to a State controller (e.g. `"Time = 0"`) that determines whether the controller runs. A State controller with no triggers runs unconditionally whenever its State is active.
 **Do not confuse with:** State controller, which owns triggers rather than being one.
 _Sources: `cns/statedef.go`, `cns/parser.go`_
+
+## Command
+A named input sequence (a motion and/or button combination, e.g. `"~D, DF, F, a"`) a player can perform, defined by a `.cmd [Command]` section. A Command's name is referenced by a Trigger on a linked State controller (e.g. `command = "holdback"`) to make performing it change the character's State — the actual sequence text itself is stored verbatim, not evaluated against MUGEN/Ikemen's input-matching rules.
+**Do not confuse with:** Trigger, which is the condition expression that reads a Command's name to decide whether a State controller runs; a Command is the input sequence being named, not the condition that reacts to it.
+_Sources: `cmd/command.go`, `cmd/parser.go`_

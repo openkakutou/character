@@ -1,5 +1,5 @@
 ---
-status: todo
+status: in_progress
 ---
 # Add `.cmd` File Parsing (Commands & Triggers)
 

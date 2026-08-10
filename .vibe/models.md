@@ -196,3 +196,49 @@ Defined in: `cns/statedef.go`
 `[256]color.RGBA` — a resolved color table, indexed by a decoded sprite's palette index bytes. Produced by `DecodeV1Palette`/`ResolveV1Palette`, `DecodeV2Palette`/`ResolveV2Palette`, or `DecodeExternalPalette` (an external `.act` file, used as an optional `override` argument in place of a sprite's own).
 
 Defined by the external `github.com/openkakutou/sff` module (item 035); consumed in: `cmd/wasm/main.go` (palette-override support)
+
+## CommandFile
+| Field | Type | Notes |
+|---|---|---|
+| Remap | map[string]string | Physical button -> remapped button (`.cmd [Remap]`); nil/empty means no remapping is defined (an Ikemen GO extension not present in every MUGEN 1.0/1.1 `.cmd` file) |
+| Defaults | CommandDefaults | File-level command-recognition defaults a Command falls back to |
+| Commands | []Command | Input command definitions (`.cmd [Command]` sections), in file order |
+| States | []cns.StateDef | The linked "always" state (`[Statedef -1]`/`[State ...]`), parsed via `cns.Parse` against the same source text rather than reimplemented |
+
+`json:"..."`-tagged (`remap`, `defaults`, `commands`, `states`).
+
+Populated by `Parse(r io.Reader) (CommandFile, error)`, which reads `[Remap]`/`[Defaults]`/`[Command]` `.cmd` text into this shape while delegating the shared state-controller block to `cns.Parse` (synthesizing an implicit `[Statedef -1]` header first when the source omits one entirely, per real-world files). Written back out by `Serialize(w io.Writer, file CommandFile) error`. Not yet wired into the root `Character` struct. See `.vibe/decisions/025-cmd-package-reuses-cns-for-state-triggering-block.md` and `.vibe/decisions/026-cmd-parse-synthesizes-implicit-statedef-minus-1-header.md`.
+
+Defined in: `cmd/command.go`, `cmd/parser.go`, `cmd/serializer.go`
+
+## CommandDefaults
+| Field | Type | Notes |
+|---|---|---|
+| Time | int | Default input-recognition buffer window, in ticks (`.cmd` "command.time") |
+| BufferTime | int | Default recognized-command duration, in ticks (`.cmd` "command.buffer.time") |
+
+`json:"..."`-tagged (`time`, `bufferTime`).
+
+Defined in: `cmd/command.go`
+
+## Command
+| Field | Type | Notes |
+|---|---|---|
+| Name | string | Identifies this command (`.cmd` "name"); referenced by a linked state controller's trigger, e.g. `command = "holdback"` |
+| Input | string | Raw, unevaluated MUGEN/Ikemen input-sequence expression (`.cmd` "command", e.g. `"~D, DF, F, a"`), stored verbatim rather than decomposed — mirrors `cns.Controller`'s own unevaluated Triggers/Parameters |
+| Time | int | Per-command override of CommandDefaults.Time; 0 means "not set" |
+| BufferTime | int | Per-command override of CommandDefaults.BufferTime; 0 means "not set" |
+
+`json:"..."`-tagged (`name`, `input`, `time`, `bufferTime`).
+
+Defined in: `cmd/command.go`
+
+## Document (cmd)
+| Field | Type | Notes |
+|---|---|---|
+| File | CommandFile | Decoded the same way `Parse`'s return value is |
+| source | []byte | Unexported; the exact bytes `ParseDocument` read, replayed verbatim by `Serialize` |
+
+Write-path type: `ParseDocument`/`Document.Serialize` round-trip an unmodified `.cmd` file byte-for-byte, including comments and section ordering. Mutating `File` does not change what `Serialize` writes. Mirrors `air`'s/`def`'s/`cns`'s own `Document`.
+
+Defined in: `cmd/document.go`
