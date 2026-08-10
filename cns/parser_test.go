@@ -166,9 +166,15 @@ type = C
 	}
 }
 
+// A bracket line missing its closing "]" that isn't a recognizable
+// Statedef/State header attempt (no "statedef"/"state" keyword) is genuinely
+// unrelated content, not a recoverable typo — it still returns a
+// line-numbered error, per .vibe/decisions/012-cns-parse-header-detection-strategy.md's
+// "genuinely unrelated vs. a typo in the two header shapes this parser is
+// responsible for" distinction.
 func TestParse_MalformedSectionHeader_ReturnsErrorNamingTheLine(t *testing.T) {
-	src := `[Statedef 0
-type = S
+	src := `[Clsn1Default
+Clsn1: 1
 `
 
 	_, err := Parse(strings.NewReader(src))
@@ -177,6 +183,73 @@ type = S
 	}
 	if !strings.Contains(err.Error(), "line 1") {
 		t.Errorf("expected error to identify line 1, got: %v", err)
+	}
+}
+
+// Real MUGEN/Ikemen .cns files widely omit a "[Statedef N]" header's closing
+// "]" (a typo real engines tolerate) — a full corpus scan found this is the
+// single most common character.Load failure (~15% of a 717-file corpus).
+// Parse now recovers it, producing the same StateDef data a correctly
+// bracketed header would have.
+func TestParse_StatedefHeaderMissingClosingBracket_RecoversSameAsClosedHeader(t *testing.T) {
+	src := `[Statedef 0, Standing
+type = S
+movetype = I
+`
+
+	states, err := Parse(strings.NewReader(src))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(states) != 1 {
+		t.Fatalf("expected 1 StateDef, got %d", len(states))
+	}
+	if states[0].Number != 0 {
+		t.Errorf("expected Number 0, got %d", states[0].Number)
+	}
+	if states[0].Type != StateTypeStanding {
+		t.Errorf("expected Type %q, got %q", StateTypeStanding, states[0].Type)
+	}
+	if states[0].MoveType != MoveTypeIdle {
+		t.Errorf("expected MoveType %q, got %q", MoveTypeIdle, states[0].MoveType)
+	}
+}
+
+// The real-world case backlog item 042 was filed from: a real character file
+// ("Bardock", surfaced via character-viewer-web) has "[State 110, 1"
+// (missing "]") instead of "[State 110, 1]", and the whole file failed to
+// load because of it. Also matches a second real fixture (Capcom's
+// "Commando (CVS)": "[State -2, Blocking-12" in cvscommando.cns) — same root
+// cause, not scoped to one character's file.
+func TestParse_StateHeaderMissingClosingBracket_RecoversAndAttachesController(t *testing.T) {
+	src := `[Statedef 110]
+type = S
+
+[State 110, 1
+type = ChangeState
+trigger1 = Time = 0
+value = 100
+`
+
+	states, err := Parse(strings.NewReader(src))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(states) != 1 {
+		t.Fatalf("expected 1 StateDef, got %d", len(states))
+	}
+	if len(states[0].Controllers) != 1 {
+		t.Fatalf("expected 1 controller, got %d", len(states[0].Controllers))
+	}
+	c := states[0].Controllers[0]
+	if c.Type != "ChangeState" {
+		t.Errorf("expected controller Type %q, got %q", "ChangeState", c.Type)
+	}
+	if len(c.Triggers) != 1 || c.Triggers[0] != "Time = 0" {
+		t.Errorf("expected triggers [%q], got %v", "Time = 0", c.Triggers)
+	}
+	if c.Parameters["value"] != "100" {
+		t.Errorf("expected Parameters[\"value\"] = %q, got %q", "100", c.Parameters["value"])
 	}
 }
 
@@ -233,7 +306,11 @@ trigger1 = Time = 0
 // brackets themselves are well-formed (already covered generically by
 // TestParse_MalformedSectionHeader_ReturnsErrorNamingTheLine, exercised here
 // specifically for a "[State" line to guard the relaxation above).
-func TestParse_UnclosedStateHeader_ReturnsErrorNamingTheLine(t *testing.T) {
+// A bare-label "[State <label>]" header (no state number, see
+// .vibe/decisions/022) missing its closing "]" is recovered the same way a
+// numbered "[State N]" header is (backlog item 042) — the label shape isn't
+// special-cased differently by the recovery.
+func TestParse_UnclosedStateHeaderWithoutNumber_RecoversAndAttachesController(t *testing.T) {
 	src := `[Statedef 0]
 type = S
 
@@ -241,12 +318,15 @@ type = S
 type = RemoveExplod
 `
 
-	_, err := Parse(strings.NewReader(src))
-	if err == nil {
-		t.Fatal("expected an error for the unclosed State header, got nil")
+	states, err := Parse(strings.NewReader(src))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
-	if !strings.Contains(err.Error(), "line 4") {
-		t.Errorf("expected error to identify line 4, got: %v", err)
+	if len(states) != 1 || len(states[0].Controllers) != 1 {
+		t.Fatalf("expected 1 StateDef with 1 controller, got %+v", states)
+	}
+	if got := states[0].Controllers[0].Type; got != "RemoveExplod" {
+		t.Errorf("expected controller Type %q, got %q", "RemoveExplod", got)
 	}
 }
 

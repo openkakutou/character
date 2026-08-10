@@ -34,6 +34,15 @@ var statedefAttemptPattern = regexp.MustCompile(`(?i)^\[\s*statedef(\s|\])`)
 // See .vibe/decisions/022-cns-parse-state-header-accepts-any-label.md.
 var stateHeaderPattern = regexp.MustCompile(`(?i)^\[\s*state(\s.*)?\]$`)
 
+// stateAttemptPattern recognizes any bracket line that starts with the
+// "state" keyword (but not "statedef" — see stateHeaderPattern's own note),
+// whether or not it goes on to match stateHeaderPattern. Used only to detect
+// a "[State ...]" header missing its closing "]" (see
+// recoverMissingClosingBracket) — unlike statedefAttemptPattern, it plays no
+// role in error reporting once a header has a closing bracket, since
+// stateHeaderPattern already accepts any bracketed content after "state".
+var stateAttemptPattern = regexp.MustCompile(`(?i)^\[\s*state(\s|\])`)
+
 // Parse reads .cns text from r and returns the StateDefs ("[Statedef N]"
 // blocks) it describes, in file order, each carrying its state controllers
 // ("[State N]" blocks) in file order.
@@ -47,10 +56,14 @@ var stateHeaderPattern = regexp.MustCompile(`(?i)^\[\s*state(\s.*)?\]$`)
 // content, matching def.Parse's tolerance for sections outside this
 // package's scope — but a bracket line that looks like an attempted
 // Statedef/State header yet fails to parse (a non-numeric or missing state
-// number, or a missing closing bracket) returns a descriptive,
-// line-numbered error rather than being silently skipped, as does a
-// "[State N]" block with no enclosing Statedef and a reader that fails
-// outright. See .vibe/decisions/012-cns-parse-header-detection-strategy.md.
+// number) returns a descriptive, line-numbered error rather than being
+// silently skipped, as does a "[State N]" block with no enclosing Statedef
+// and a reader that fails outright. A missing closing bracket on an
+// otherwise-recognizable Statedef/State header attempt is recovered rather
+// than treated as an error (see recoverMissingClosingBracket); only a
+// bracket line missing "]" that isn't recognizable as either header attempt
+// returns the "malformed section header" error. See
+// .vibe/decisions/012-cns-parse-header-detection-strategy.md.
 // Comment lines (';', whole-line or trailing) are ignored. An empty input
 // returns an empty, nil-error result.
 func Parse(r io.Reader) ([]StateDef, error) {
@@ -70,7 +83,11 @@ func Parse(r io.Reader) ([]StateDef, error) {
 
 		if strings.HasPrefix(line, "[") {
 			if !strings.HasSuffix(line, "]") {
-				return nil, fmt.Errorf("cns: line %d: malformed section header %q", lineNumber, line)
+				recovered, ok := recoverMissingClosingBracket(line)
+				if !ok {
+					return nil, fmt.Errorf("cns: line %d: malformed section header %q", lineNumber, line)
+				}
+				line = recovered
 			}
 
 			if m := statedefHeaderPattern.FindStringSubmatch(line); m != nil {
@@ -130,6 +147,28 @@ func Parse(r io.Reader) ([]StateDef, error) {
 	}
 
 	return states, nil
+}
+
+// recoverMissingClosingBracket handles a bracket line with no closing "]" —
+// a real-world .cns authoring typo (see backlog item 042: a full corpus scan
+// found "[State N, label"/"[Statedef N, label" missing their closing
+// bracket is the single most common character.Load failure, ~15% of a
+// 717-file corpus) that real MUGEN/Ikemen engines tolerate. When line looks
+// like an attempt at a "[Statedef ...]" or "[State ...]" header (matches
+// statedefAttemptPattern/stateAttemptPattern), the missing "]" is appended
+// so the normal header-matching logic below runs exactly as it would on a
+// correctly bracketed line, producing equivalent StateDef/Controller data —
+// including still returning a "malformed Statedef header" error for a
+// recognizable-but-invalid attempt (e.g. a non-numeric Statedef number).
+// Any other bracket line missing "]" is genuinely unrelated content, not a
+// typo in either header shape this parser is responsible for, and is left
+// unrecovered — the caller then returns the "malformed section header"
+// error, matching .vibe/decisions/012's distinction.
+func recoverMissingClosingBracket(line string) (string, bool) {
+	if statedefAttemptPattern.MatchString(line) || stateAttemptPattern.MatchString(line) {
+		return line + "]", true
+	}
+	return line, false
 }
 
 // applyControllerField applies a single key=value line to a Controller

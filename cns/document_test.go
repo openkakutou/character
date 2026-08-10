@@ -95,9 +95,13 @@ func TestParseDocument_EmptyInput_SerializeReproducesEmptySource(t *testing.T) {
 	}
 }
 
+// ParseDocument delegates to Parse (see its own tests for the recovery
+// behavior on a Statedef/State header missing its closing "]" — backlog
+// item 042); this only needs to confirm genuinely malformed source, unrelated
+// to either header shape, still surfaces as an error here too.
 func TestParseDocument_MalformedSource_ReturnsError(t *testing.T) {
-	src := `[Statedef 0
-type = S
+	src := `[Clsn1Default
+Clsn1: 1
 `
 	_, err := ParseDocument(strings.NewReader(src))
 	if err == nil {

@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Fixed character files being rejected entirely when their combat logic (`.cns`) has a state header line missing its closing `]` — a common real-world authoring typo (found in ~15% of a real-file corpus, e.g. the Bardock and Commando characters) that real MUGEN/Ikemen engines tolerate.
+
 ## [0.4.1] - 2026-08-10
 
 ### Fixed

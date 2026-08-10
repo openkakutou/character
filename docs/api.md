@@ -561,7 +561,10 @@ controller that follows always attaches to whichever `Statedef` is currently
 open. Bracket sections that don't start with the `statedef`/`state` keyword
 at all — `[Data]`, `[Clsn1Default]`, and the like — are skipped without
 validating their content, the same tolerance `def.Parse` applies to sections
-outside its own scope. See
+outside its own scope. A `[Statedef ...]`/`[State ...]` header missing its
+closing `]` — a common real-world authoring typo — is recovered as if the
+bracket were present, producing the same `StateDef`/`Controller` data a
+correctly closed header would have. See
 [`.vibe/decisions/012-cns-parse-header-detection-strategy.md`](../.vibe/decisions/012-cns-parse-header-detection-strategy.md)
 and
 [`.vibe/decisions/022-cns-parse-state-header-accepts-any-label.md`](../.vibe/decisions/022-cns-parse-state-header-accepts-any-label.md).
@@ -575,7 +578,8 @@ isn't a valid integer is never an error either: it's stored verbatim in
 
 `Parse` returns a descriptive error identifying the offending line number,
 rather than panicking or silently producing incorrect data, when:
-- a `[...]` section header line is missing its closing `]`
+- a `[...]` section header line is missing its closing `]` and isn't
+  recognizable as a `[Statedef ...]`/`[State ...]` header attempt (see above)
 - a bracket line starts with the `statedef` keyword but its state number is
   missing or non-numeric
 - a `[State ...]` block appears with no enclosing `[Statedef ...]` block
