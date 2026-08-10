@@ -97,15 +97,30 @@ func TestParseDocument_EmptyInput_SerializeReproducesEmptySource(t *testing.T) {
 
 // ParseDocument delegates to Parse (see its own tests for the recovery
 // behavior on a Statedef/State header missing its closing "]" — backlog
-// item 042); this only needs to confirm genuinely malformed source, unrelated
-// to either header shape, still surfaces as an error here too.
-func TestParseDocument_MalformedSource_ReturnsError(t *testing.T) {
+// item 042; and for the tolerance of an unclosed bracket line that isn't a
+// header attempt at all — backlog item 053); this only needs to confirm a
+// genuine typo in one of this package's own two known headers still
+// surfaces as an error here too.
+func TestParseDocument_MalformedHeaderSource_ReturnsError(t *testing.T) {
+	src := `[Statedef abc]
+type = S
+`
+	_, err := ParseDocument(strings.NewReader(src))
+	if err == nil {
+		t.Fatal("expected an error for a malformed Statedef header, got nil")
+	}
+}
+
+// An unclosed bracket line that isn't a Statedef/State header attempt (e.g.
+// a decorative section banner) is tolerated by Parse (backlog item 053);
+// ParseDocument, which delegates to Parse, must not error on it either.
+func TestParseDocument_UnclosedBracketLineNotAHeaderAttempt_DoesNotError(t *testing.T) {
 	src := `[Clsn1Default
 Clsn1: 1
 `
 	_, err := ParseDocument(strings.NewReader(src))
-	if err == nil {
-		t.Fatal("expected an error for malformed source, got nil")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 

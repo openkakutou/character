@@ -19,11 +19,15 @@ import (
 // "defaults", "command"), whether or not it goes on to be a validly closed
 // header — used to tell a malformed attempt at one of them apart from a
 // genuinely unrelated section (including a "[Statedef ...]"/"[State ...]"
-// block, which belongs to the cns package instead). Mirrors
+// block, which belongs to the cns package instead). The keyword must be
+// immediately followed by whitespace, "]", or end of line, so a bare
+// "[Command" with nothing else on the line is still recognized as an
+// attempt rather than being left for cns.Parse's own (now silently
+// tolerant, see backlog item 053) unrelated-content handling. Mirrors
 // cns.statedefAttemptPattern/stateAttemptPattern (see
 // .vibe/decisions/012-cns-parse-header-detection-strategy.md in this
 // repo's history for the pattern this follows).
-var commandSectionAttemptPattern = regexp.MustCompile(`(?i)^\[\s*(remap|defaults|command)(\s|\])`)
+var commandSectionAttemptPattern = regexp.MustCompile(`(?i)^\[\s*(remap|defaults|command)(\s|\]|$)`)
 
 // statedefHeaderAttemptPattern and stateHeaderAttemptPattern recognize an
 // attempted "[Statedef ...]"/"[State ...]" header the same way cns
@@ -33,8 +37,8 @@ var commandSectionAttemptPattern = regexp.MustCompile(`(?i)^\[\s*(remap|defaults
 // cns, since this is the minimum needed to detect whether a .cmd file
 // declares its own "[Statedef -1]" header at all; see
 // ensureImplicitStatedef.
-var statedefHeaderAttemptPattern = regexp.MustCompile(`(?i)^\[\s*statedef(\s|\])`)
-var stateHeaderAttemptPattern = regexp.MustCompile(`(?i)^\[\s*state(\s|\])`)
+var statedefHeaderAttemptPattern = regexp.MustCompile(`(?i)^\[\s*statedef(\s|\]|$)`)
+var stateHeaderAttemptPattern = regexp.MustCompile(`(?i)^\[\s*state(\s|\]|$)`)
 
 // Parse reads MUGEN/Ikemen GO .cmd input-command text from r and returns the
 // CommandFile it describes.

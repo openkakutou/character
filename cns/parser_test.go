@@ -168,21 +168,55 @@ type = C
 
 // A bracket line missing its closing "]" that isn't a recognizable
 // Statedef/State header attempt (no "statedef"/"state" keyword) is genuinely
-// unrelated content, not a recoverable typo — it still returns a
-// line-numbered error, per .vibe/decisions/012-cns-parse-header-detection-strategy.md's
-// "genuinely unrelated vs. a typo in the two header shapes this parser is
-// responsible for" distinction.
-func TestParse_MalformedSectionHeader_ReturnsErrorNamingTheLine(t *testing.T) {
+// unrelated content, not a typo in either of this package's own two known
+// headers — it is skipped without erroring, the same way a *closed*
+// unrecognized bracket line (e.g. "[foo]") already is. See backlog item 053.
+func TestParse_UnclosedBracketLineNotAHeaderAttempt_IsSkippedWithoutError(t *testing.T) {
 	src := `[Clsn1Default
 Clsn1: 1
 `
 
-	_, err := Parse(strings.NewReader(src))
-	if err == nil {
-		t.Fatal("expected an error for the malformed section header, got nil")
+	states, err := Parse(strings.NewReader(src))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
-	if !strings.Contains(err.Error(), "line 1") {
-		t.Errorf("expected error to identify line 1, got: %v", err)
+	if len(states) != 0 {
+		t.Errorf("expected no StateDefs (no Statedef header present), got %d", len(states))
+	}
+}
+
+// The real-world case backlog item 053 was filed from: King of Fighters'
+// "Shun Ei" character's Command.cmd has a lone "[" on its own line, used
+// purely as a section-banner decoration (surrounded by ";===..." comment
+// lines), with no closing "]" anywhere nearby, ahead of the file's
+// "[Statedef -1]" block. Real MUGEN/Ikemen engines tolerate this; it must
+// not abort parsing of the Statedef that follows it. (cns.Parse runs
+// against a .cmd file's entire source — see cmd.Parse — so it encounters
+// banner lines like this one even though they aren't its own concern.)
+func TestParse_LoneUnclosedBracketBannerLine_IsSkippedAndParsingContinues(t *testing.T) {
+	src := `;===============================================================
+[
+;===============================================================
+
+[Statedef -1]
+[State -1]
+type = ChangeState
+trigger1 = command = "holdback"
+value = 100
+`
+
+	states, err := Parse(strings.NewReader(src))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(states) != 1 {
+		t.Fatalf("expected 1 StateDef, got %d", len(states))
+	}
+	if len(states[0].Controllers) != 1 {
+		t.Fatalf("expected 1 controller in the Statedef following the decorative banner line, got %d", len(states[0].Controllers))
+	}
+	if got := states[0].Controllers[0].Type; got != "ChangeState" {
+		t.Errorf("expected controller Type %q, got %q", "ChangeState", got)
 	}
 }
 
@@ -300,12 +334,6 @@ trigger1 = Time = 0
 	}
 }
 
-// A bracket line that starts with the "state" keyword but has no closing
-// bracket is still a genuine error — the label-only relaxation only widens
-// what counts as valid content between the brackets, not whether the
-// brackets themselves are well-formed (already covered generically by
-// TestParse_MalformedSectionHeader_ReturnsErrorNamingTheLine, exercised here
-// specifically for a "[State" line to guard the relaxation above).
 // A bare-label "[State <label>]" header (no state number, see
 // .vibe/decisions/022) missing its closing "]" is recovered the same way a
 // numbered "[State N]" header is (backlog item 042) — the label shape isn't

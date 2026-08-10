@@ -19,9 +19,13 @@ var statedefHeaderPattern = regexp.MustCompile(`(?i)^\[\s*statedef\s+(-?\d+)\s*(
 // statedefAttemptPattern recognizes any bracket line that starts with the
 // "statedef" keyword, whether or not it goes on to match
 // statedefHeaderPattern — used to tell a malformed Statedef header apart
-// from a genuinely unrelated section. See
+// from a genuinely unrelated section. The keyword must be immediately
+// followed by whitespace, "]", or end of line (not just whitespace/"]") so
+// a bare "[Statedef" with nothing else on the line — a typo missing both
+// its state number and closing bracket — is still recognized as an attempt
+// rather than falling through to the "genuinely unrelated" tolerance. See
 // .vibe/decisions/012-cns-parse-header-detection-strategy.md.
-var statedefAttemptPattern = regexp.MustCompile(`(?i)^\[\s*statedef(\s|\])`)
+var statedefAttemptPattern = regexp.MustCompile(`(?i)^\[\s*statedef(\s|\]|$)`)
 
 // stateHeaderPattern matches any "[State ...]" line — a numbered
 // "[State N]"/"[State N, label]" header, or a bare label with no number at
@@ -41,7 +45,9 @@ var stateHeaderPattern = regexp.MustCompile(`(?i)^\[\s*state(\s.*)?\]$`)
 // recoverMissingClosingBracket) — unlike statedefAttemptPattern, it plays no
 // role in error reporting once a header has a closing bracket, since
 // stateHeaderPattern already accepts any bracketed content after "state".
-var stateAttemptPattern = regexp.MustCompile(`(?i)^\[\s*state(\s|\])`)
+// Mirrors statedefAttemptPattern's end-of-line allowance for a bare
+// "[State" with nothing else on the line.
+var stateAttemptPattern = regexp.MustCompile(`(?i)^\[\s*state(\s|\]|$)`)
 
 // Parse reads .cns text from r and returns the StateDefs ("[Statedef N]"
 // blocks) it describes, in file order, each carrying its state controllers
@@ -60,9 +66,11 @@ var stateAttemptPattern = regexp.MustCompile(`(?i)^\[\s*state(\s|\])`)
 // silently skipped, as does a "[State N]" block with no enclosing Statedef
 // and a reader that fails outright. A missing closing bracket on an
 // otherwise-recognizable Statedef/State header attempt is recovered rather
-// than treated as an error (see recoverMissingClosingBracket); only a
-// bracket line missing "]" that isn't recognizable as either header attempt
-// returns the "malformed section header" error. See
+// than treated as an error (see recoverMissingClosingBracket); a bracket
+// line missing "]" that isn't recognizable as either header attempt is
+// genuinely unrelated content (e.g. a decorative banner line) and is
+// skipped without erroring, the same way a *closed* unrecognized section
+// already is (see backlog item 053). See
 // .vibe/decisions/012-cns-parse-header-detection-strategy.md.
 // A content line inside a block that isn't a valid "key=value" pair (no "="
 // character) is ignored rather than erroring, the same way an unrecognized
@@ -88,7 +96,14 @@ func Parse(r io.Reader) ([]StateDef, error) {
 			if !strings.HasSuffix(line, "]") {
 				recovered, ok := recoverMissingClosingBracket(line)
 				if !ok {
-					return nil, fmt.Errorf("cns: line %d: malformed section header %q", lineNumber, line)
+					// Not a recognizable attempt at either header shape this
+					// package is responsible for — genuinely unrelated
+					// content (e.g. a decorative banner line), tolerated the
+					// same way a *closed* unrecognized section already is.
+					// See backlog item 053.
+					current = nil
+					currentCtrl = nil
+					continue
 				}
 				line = recovered
 			}
@@ -170,8 +185,8 @@ func Parse(r io.Reader) ([]StateDef, error) {
 // recognizable-but-invalid attempt (e.g. a non-numeric Statedef number).
 // Any other bracket line missing "]" is genuinely unrelated content, not a
 // typo in either header shape this parser is responsible for, and is left
-// unrecovered — the caller then returns the "malformed section header"
-// error, matching .vibe/decisions/012's distinction.
+// unrecovered — the caller then skips it without erroring, matching
+// .vibe/decisions/012's distinction and backlog item 053.
 func recoverMissingClosingBracket(line string) (string, bool) {
 	if statedefAttemptPattern.MatchString(line) || stateAttemptPattern.MatchString(line) {
 		return line + "]", true
