@@ -64,6 +64,9 @@ var stateAttemptPattern = regexp.MustCompile(`(?i)^\[\s*state(\s|\])`)
 // bracket line missing "]" that isn't recognizable as either header attempt
 // returns the "malformed section header" error. See
 // .vibe/decisions/012-cns-parse-header-detection-strategy.md.
+// A content line inside a block that isn't a valid "key=value" pair (no "="
+// character) is ignored rather than erroring, the same way an unrecognized
+// key already is (see backlog item 043).
 // Comment lines (';', whole-line or trailing) are ignored. An empty input
 // returns an empty, nil-error result.
 func Parse(r io.Reader) ([]StateDef, error) {
@@ -129,7 +132,12 @@ func Parse(r io.Reader) ([]StateDef, error) {
 
 		key, value, ok := parseKeyValueLine(line)
 		if !ok {
-			return nil, fmt.Errorf("cns: line %d: malformed key=value line %q", lineNumber, line)
+			// A content line inside a block that isn't a valid key=value pair
+			// (a truncated leftover key, a decorative separator, a comment
+			// missing its leading ";") is ignored, the same way an
+			// unrecognized key already is — real MUGEN/Ikemen engines
+			// tolerate it. See backlog item 043.
+			continue
 		}
 
 		if currentCtrl != nil {

@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Fixed character files being rejected entirely when their combat logic (`.cns`) contains a stray content line inside a state block that isn't a real `key=value` pair (a leftover truncated key, a decorative separator, or a comment missing its leading `;`) — a common real-world authoring pattern (the largest failure class after the missing-`]` typo, ~7% of a real-file corpus, e.g. the Arcana Heart "Aino 2" character) that real MUGEN/Ikemen engines tolerate.
+
 ## [0.4.2] - 2026-08-10
 
 ### Fixed

@@ -344,18 +344,68 @@ type = VelSet
 	}
 }
 
-func TestParse_MalformedKeyValueLine_ReturnsErrorNamingTheLine(t *testing.T) {
+// A non-header content line inside a Statedef/State block that has no "="
+// (and thus isn't a valid key=value pair) used to be a hard error. Item 043's
+// corpus scan found this is the largest failure class after item 042 (49 of
+// 717 real characters): a truncated leftover key, a decorative separator, or
+// a comment missing its leading ";" all produce such a line, and real
+// engines tolerate it the same way Parse already tolerates an unrecognized
+// key. Parse now ignores it instead, and keeps reading the rest of the block
+// normally.
+func TestParse_NonKeyValueLineInsideBlock_IsIgnoredAndParsingContinues(t *testing.T) {
 	src := `[Statedef 0]
 type = S
 ctrl 1
+
+[State 0]
+type = VelSet
+getpower
+trigger1 = 1
 `
 
-	_, err := Parse(strings.NewReader(src))
-	if err == nil {
-		t.Fatal("expected an error for the malformed key=value line, got nil")
+	states, err := Parse(strings.NewReader(src))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
-	if !strings.Contains(err.Error(), "line 3") {
-		t.Errorf("expected error to identify line 3, got: %v", err)
+	if len(states) != 1 {
+		t.Fatalf("expected 1 StateDef, got %d", len(states))
+	}
+	if states[0].Type != StateTypeStanding {
+		t.Errorf("expected Type %q, got %q", StateTypeStanding, states[0].Type)
+	}
+	if len(states[0].Controllers) != 1 {
+		t.Fatalf("expected 1 Controller, got %d", len(states[0].Controllers))
+	}
+	ctrl := states[0].Controllers[0]
+	if ctrl.Type != "VelSet" {
+		t.Errorf("expected Controller Type %q, got %q", "VelSet", ctrl.Type)
+	}
+	if len(ctrl.Triggers) != 1 || ctrl.Triggers[0] != "1" {
+		t.Errorf("expected Triggers [%q], got %v — the line after the ignored one was not parsed", "1", ctrl.Triggers)
+	}
+}
+
+// The real-world case backlog item 043 was filed from: a real character file
+// ("Aino 2", from Arcana Heart, surfaced via a 717-file corpus scan) has a
+// bare "getpower" line (no "=") inside a [State ...] block, and the whole
+// file failed to load because of it.
+func TestParse_BareWordLineInsideStateBlock_IsIgnored(t *testing.T) {
+	src := `[Statedef 0]
+type = S
+
+[State 0]
+type = VarSet
+getpower
+v = 50
+`
+
+	states, err := Parse(strings.NewReader(src))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	ctrl := states[0].Controllers[0]
+	if ctrl.Parameters["v"] != "50" {
+		t.Errorf("expected Parameters[%q] = %q, got %q", "v", "50", ctrl.Parameters["v"])
 	}
 }
 
