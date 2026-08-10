@@ -1,5 +1,5 @@
 ---
-status: in_progress
+status: done
 ---
 # `cns.Parse` Errors On An Unclosed Bracket Line That Isn't A Header Attempt
 
