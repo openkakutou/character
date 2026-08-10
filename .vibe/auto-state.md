@@ -1,7 +1,9 @@
 ---
-status: idle
-started: 2026-08-09T16:56
-limit: 1
+status: running
+started: 2026-08-10T00:00
+limit: none
+current: 047
+attempt: 1
 ---
 # Auto run journal
 
@@ -36,3 +38,6 @@ limit: 1
 
 ## 2026-08-09T16:56 — resumed via /vibe:next-task auto 1 (limit: 1, driven by /loop 3h)
 - 035 — feature — done (aabc409)
+
+## 2026-08-10T00:00 — run started (limit: none)
+- 047 — fix — in_progress
