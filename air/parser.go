@@ -220,6 +220,38 @@ func readClsnBoxes(scanner *bufio.Scanner, lineNumber *int, count int) ([]ClsnBo
 	return boxes, n, nil
 }
 
+// leadingIntPattern matches an optionally-signed run of digits at the start
+// of a string, after leading whitespace.
+var leadingIntPattern = regexp.MustCompile(`^\s*[+-]?\d+`)
+
+// parseLeadingInt parses the leading integer of field, tolerating trailing
+// non-numeric content after it (e.g. "143 0" parses as 143). This mirrors
+// real MUGEN/Ikemen engines' own number parsing (Ikemen GO's Atoi, in
+// src/common.go, scans a leading digit run and stops at the first
+// non-digit character rather than requiring the whole field to be
+// numeric) — see item 048. A field with no usable leading digits at all
+// (e.g. "abc") still returns an error, distinguishing "trailing garbage
+// after a real number" from "not a number".
+func parseLeadingInt(field string) (int, error) {
+	if strings.TrimSpace(field) == "" {
+		// Ikemen GO's own Atoi (src/common.go) returns 0 for an empty/
+		// blank field rather than erroring. A required field can end up
+		// blank in a real-world file that is missing a comma, which
+		// shifts a later field's content into an earlier one and leaves
+		// this one empty (item 048's exact Goku/axl-kofa/baiken-kofa
+		// fixture: the shared frame line is missing the comma between
+		// Image and X, leaving Time blank).
+		return 0, nil
+	}
+	m := leadingIntPattern.FindString(field)
+	if m == "" {
+		return 0, fmt.Errorf("strconv.Atoi: parsing %q: invalid syntax", field)
+	}
+	// m is a valid integer literal (optional sign + digits only), so this
+	// Atoi cannot fail.
+	return strconv.Atoi(strings.TrimSpace(m))
+}
+
 // parseFrameLine parses a frame line: "Group,Image, X,Y, Time[, Flip][,
 // Blend]". Flip and Blend are optional; a blank Flip field (e.g. an empty
 // token between two commas) is treated as FlipNone.
@@ -236,23 +268,27 @@ func parseFrameLine(line string) (Frame, error) {
 	// convention. Frame.IsBlank() (Group < 0 || Image < 0) is the single
 	// recognition point for this state — see
 	// .vibe/decisions/014-blank-frame-sentinel-accepts-any-negative-value.md.
-	group, err := strconv.Atoi(strings.TrimSpace(fields[0]))
+	//
+	// Each field's leading integer is used even if non-numeric content
+	// trails it (item 048) — a field with no usable leading digits at all
+	// still returns the descriptive error below.
+	group, err := parseLeadingInt(fields[0])
 	if err != nil {
 		return Frame{}, fmt.Errorf("malformed frame line %q: invalid group: %w", line, err)
 	}
-	image, err := strconv.Atoi(strings.TrimSpace(fields[1]))
+	image, err := parseLeadingInt(fields[1])
 	if err != nil {
 		return Frame{}, fmt.Errorf("malformed frame line %q: invalid image: %w", line, err)
 	}
-	x, err := strconv.Atoi(strings.TrimSpace(fields[2]))
+	x, err := parseLeadingInt(fields[2])
 	if err != nil {
 		return Frame{}, fmt.Errorf("malformed frame line %q: invalid x: %w", line, err)
 	}
-	y, err := strconv.Atoi(strings.TrimSpace(fields[3]))
+	y, err := parseLeadingInt(fields[3])
 	if err != nil {
 		return Frame{}, fmt.Errorf("malformed frame line %q: invalid y: %w", line, err)
 	}
-	timeVal, err := strconv.Atoi(strings.TrimSpace(fields[4]))
+	timeVal, err := parseLeadingInt(fields[4])
 	if err != nil {
 		return Frame{}, fmt.Errorf("malformed frame line %q: invalid time: %w", line, err)
 	}

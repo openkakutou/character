@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Fixed animation files being rejected when a collision box line has a space before its `[index]` bracket (e.g. `Clsn2 [0] = -17, -97, 18, 2`), a real-world authoring style found in several real characters (e.g. King of Fighters "Mai (98)") that real MUGEN/Ikemen engines tolerate.
+- Fixed animation files being rejected when a frame line's numeric field has extra content after a valid number (e.g. `143 0` instead of `143`), or is left blank — a broken value copy-pasted across several unrelated real characters (e.g. Dragon Ball "Goku", Guilty Gear "Axl" and "Baiken") that real MUGEN/Ikemen engines tolerate.
 
 ## [0.6.0] - 2026-08-10
 

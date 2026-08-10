@@ -321,6 +321,45 @@ func TestParse_FrameLineMissingFields_ReturnsError(t *testing.T) {
 	}
 }
 
+func TestParse_FrameLineFieldWithTrailingGarbageAfterLeadingInteger_UsesLeadingInteger(t *testing.T) {
+	// Real-world value found verbatim, copy-pasted across 14 otherwise
+	// unrelated real characters (item 048): the Image field has a valid
+	// leading integer (143) followed by non-numeric trailing content ("
+	// 0"). Real MUGEN/Ikemen engines tolerate this via a C-style
+	// leading-integer-prefix scan rather than strict whole-field parsing.
+	src := "[Begin Action 0]\n18765, 143 0, 0, 2 ,,A\n"
+
+	animations, err := Parse(strings.NewReader(src))
+	if err != nil {
+		t.Fatalf("unexpected error parsing a frame line with trailing garbage after a leading integer: %v", err)
+	}
+	if len(animations[0].Frames) != 1 {
+		t.Fatalf("expected 1 frame, got %d", len(animations[0].Frames))
+	}
+	f := animations[0].Frames[0]
+	if f.Group != 18765 || f.Image != 143 {
+		t.Errorf("expected Group 18765 and Image 143 (leading integer only), got Group %d Image %d", f.Group, f.Image)
+	}
+	if f.X != 0 || f.Y != 2 {
+		t.Errorf("expected X 0 and Y 2, got X %d Y %d", f.X, f.Y)
+	}
+}
+
+func TestParse_FrameLineFieldWithNoUsableLeadingDigits_StillReturnsError(t *testing.T) {
+	// A field that isn't a valid integer at all (no usable leading digits)
+	// must still be rejected, not silently treated as 0 — this is what
+	// distinguishes the fix from a blanket "ignore invalid fields" change.
+	src := "[Begin Action 0]\nabc def,0, 0,0, 5\n"
+
+	_, err := Parse(strings.NewReader(src))
+	if err == nil {
+		t.Fatal("expected an error for a field with no usable leading digits, got nil")
+	}
+	if !strings.Contains(err.Error(), "line 2") {
+		t.Errorf("expected the error to name line 2, got: %v", err)
+	}
+}
+
 func TestParse_GroupIndexMoreNegativeThanMinusOne_ParsedAsBlankSentinel(t *testing.T) {
 	src := "[Begin Action 0]\n-2,0, 0,0, 5\n"
 
