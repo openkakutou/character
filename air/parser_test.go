@@ -414,6 +414,68 @@ func TestParse_NegativeXYAndTime_AreStillAccepted(t *testing.T) {
 	}
 }
 
+// Reproduces the real .air file layout found in Ragna (BlazBlue, an Ikemen
+// GO character): "Interpolate Blend"/"Interpolate Scale"/"Interpolate
+// Angle" marker lines sit between two frame lines, describing a smooth
+// transition of that property across the animation. air.Parse must
+// recognize and skip them rather than misreading them as a malformed frame
+// line (see item 045).
+func TestParse_RealRagnaInterpolateSequence_ParsedSuccessfully(t *testing.T) {
+	src := "[Begin Action 6009]\n" +
+		"6010,50,0,0,12,,A, 0.5,0.5, 1\n" +
+		"Interpolate Blend\n" +
+		"Interpolate Scale\n" +
+		"Interpolate Angle\n" +
+		"6010,50,0,0,1,,AS0D256, 1.5,1.5, -4\n"
+
+	animations, err := Parse(strings.NewReader(src))
+	if err != nil {
+		t.Fatalf("unexpected error parsing a real-world Interpolate directive sequence: %v", err)
+	}
+	frames := animations[0].Frames
+	if len(frames) != 2 {
+		t.Fatalf("expected 2 frames (Interpolate lines produce no frame), got %d", len(frames))
+	}
+	if frames[0].Image != 50 || frames[1].Image != 50 {
+		t.Errorf("expected both surrounding frame lines to still parse correctly, got %+v / %+v", frames[0], frames[1])
+	}
+}
+
+// Each of the four documented Ikemen GO Interpolate directive keywords must
+// be recognized on its own, standing alone between two frame lines.
+func TestParse_EachInterpolateDirectiveKeyword_IsIgnored(t *testing.T) {
+	for _, keyword := range []string{"Interpolate Offset", "Interpolate Blend", "Interpolate Scale", "Interpolate Angle"} {
+		t.Run(keyword, func(t *testing.T) {
+			src := "[Begin Action 0]\n0,0, 0,0, 5\n" + keyword + "\n0,1, 0,0, 5\n"
+
+			animations, err := Parse(strings.NewReader(src))
+			if err != nil {
+				t.Fatalf("unexpected error for directive %q: %v", keyword, err)
+			}
+			if len(animations[0].Frames) != 2 {
+				t.Fatalf("expected 2 frames, got %d", len(animations[0].Frames))
+			}
+		})
+	}
+}
+
+// A line that merely starts with "Interpolate" but isn't one of the four
+// recognized directive keywords must still be treated as a frame line and
+// rejected as malformed — the fix recognizes specific keywords, not an
+// open-ended relaxation of frame-line validation (item 045's acceptance
+// criteria).
+func TestParse_UnrecognizedInterpolateKeyword_StillReturnsError(t *testing.T) {
+	src := "[Begin Action 0]\nInterpolate Foo\n"
+
+	_, err := Parse(strings.NewReader(src))
+	if err == nil {
+		t.Fatal("expected an error for an unrecognized Interpolate keyword, got nil")
+	}
+	if !strings.Contains(err.Error(), "line 2") {
+		t.Errorf("expected the error to name line 2, got: %v", err)
+	}
+}
+
 // Reproduces a real .air file (Bardock, from a community MUGEN character)
 // which widely uses Group -1 with a varying, more-negative-than -1 Image
 // (-1,0 / -1,-1 / -1,-2 / -1,-3 / -1,-4 / -1,-5, one per frame in the same

@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Fixed animation files being rejected entirely when they use Ikemen GO's "Interpolate" directive lines (Offset/Blend/Scale/Angle) to smoothly transition a property across an animation — a real-world authoring pattern (e.g. the BlazBlue "Ragna" character) that real MUGEN/Ikemen engines support.
+
 ## [0.4.4] - 2026-08-10
 
 ### Fixed

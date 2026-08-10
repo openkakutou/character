@@ -28,8 +28,11 @@ var actionHeaderPattern = regexp.MustCompile(`(?i)^\[\s*begin\s+action\s+(-?\d+)
 // Animations it describes, in file order.
 //
 // This covers "[Begin Action N]" headers, frame lines,
-// Clsn1Default/Clsn2Default declarations, indexed Clsn[i] box lines, and the
-// Loopstart marker. Comment lines (';', whole-line or trailing) are ignored.
+// Clsn1Default/Clsn2Default declarations, indexed Clsn[i] box lines, the
+// Loopstart marker, and Ikemen GO's Interpolate Offset/Blend/Scale/Angle
+// directive lines (recognized and skipped, not yet represented on the
+// Animation/Frame model). Comment lines (';', whole-line or trailing) are
+// ignored.
 // An empty input returns an empty, non-nil-error result rather than an
 // error. A frame line's group or image field may be -1, the ".air"
 // convention for "no sprite shown on this frame" (see Frame.IsBlank).
@@ -88,6 +91,17 @@ func Parse(r io.Reader) ([]Animation, error) {
 			continue
 		}
 
+		if isInterpolateDirective(line) {
+			// Ikemen GO's Interpolate directive lines (Offset/Blend/Scale/
+			// Angle) tell the engine to smoothly transition that property
+			// across the animation. They carry no data of their own on this
+			// line and aren't represented on the Animation/Frame model yet
+			// (same "read-path model can't hold everything yet" pattern
+			// already applied to Loopstart, which also isn't stored beyond
+			// LoopStart) — recognizing and skipping the line is enough.
+			continue
+		}
+
 		if declType, count, ok := parseClsnDeclarationHeader(line); ok {
 			boxes, newLineNumber, err := readClsnBoxes(scanner, &lineNumber, count)
 			if err != nil {
@@ -133,6 +147,30 @@ func Parse(r io.Reader) ([]Animation, error) {
 	}
 
 	return animations, nil
+}
+
+// interpolateDirectives lists the Ikemen GO ".air" Interpolate directive
+// keywords: a standalone line (no trailing data) telling the engine to
+// smoothly transition that property across the animation.
+var interpolateDirectives = []string{
+	"Interpolate Offset",
+	"Interpolate Blend",
+	"Interpolate Scale",
+	"Interpolate Angle",
+}
+
+// isInterpolateDirective reports whether line is exactly one of the
+// recognized Interpolate directive keywords (case-insensitive). A line that
+// merely starts with "Interpolate" but isn't one of these is not
+// recognized, and falls through to frame-line parsing (and its error) as
+// before.
+func isInterpolateDirective(line string) bool {
+	for _, keyword := range interpolateDirectives {
+		if strings.EqualFold(line, keyword) {
+			return true
+		}
+	}
+	return false
 }
 
 // parseClsnDeclarationHeader recognizes a "Clsn1Default: N", "Clsn2Default:

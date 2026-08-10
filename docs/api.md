@@ -105,6 +105,9 @@ Covers:
   line only, then are consumed)
 - Indexed `Clsn[i] = L,T,R,B` box lines
 - The `Loopstart` marker
+- Ikemen GO's `Interpolate Offset` / `Interpolate Blend` / `Interpolate
+  Scale` / `Interpolate Angle` directive lines — recognized and skipped,
+  not yet represented on `Animation`/`Frame` (backlog item 045)
 - Comment lines (`;`, whole-line or trailing after real content) — ignored
 
 ### Error handling
