@@ -1,9 +1,7 @@
 ---
-status: running
+status: stopped
 started: 2026-08-10T00:00
 limit: none
-current: 038
-attempt: 1
 ---
 # Auto run journal
 
@@ -49,4 +47,4 @@ attempt: 1
 - 053 — fix — done (f232507, closed cf5c264)
 - 054 — fix — done (64ad6b0, closed 720f33f)
 - 055 — fix — done (5c8c2a3, closed c34abba) — decision 017 range + all surfaced sibling fixes now clear; only features 038/039 remain
-- 038 — feature — in_progress
+- 038 — feature — stopped by user before starting (still status: todo, no changes made)
