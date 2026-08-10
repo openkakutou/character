@@ -409,18 +409,151 @@ v = 50
 	}
 }
 
-func TestParse_InvalidBooleanFieldValue_ReturnsErrorNamingTheLine(t *testing.T) {
+// Real MUGEN/Ikemen .cns files sometimes give a boolean header field a
+// trigger expression instead of a literal true/false/0/1 (e.g. Mai's
+// "ctrl = 0&(var(0):=Cond(parent,var(51)>0,parent,var(51),58))", Avdol's
+// "facep2 = 1-(prevstateno=[100,119])"). Parse cannot tell a genuine
+// expression apart from a typo without an expression evaluator this
+// codebase deliberately doesn't have (ADR 011), so — mirroring the numeric
+// header fields' own escape hatch (ADR 023) — it stores the raw text
+// unevaluated instead of erroring. See item 046.
+func TestParse_BooleanHeaderFieldWithExpression_StoresRawTextInHeaderExprs(t *testing.T) {
+	tests := []struct {
+		name  string
+		key   string
+		value string
+		get   func(StateDef) bool
+	}{
+		{"ctrl (real Mai.cns line)", "ctrl", `0&(var(0):=Cond(parent,var(51)>0,parent,var(51),58))`, func(s StateDef) bool { return s.Ctrl }},
+		{"facep2 (real avdul.cns line)", "facep2", `1-(prevstateno=[100,119])`, func(s StateDef) bool { return s.FaceP2 }},
+		{"hitdefpersist", "hitdefpersist", `ifelse(time=0,1,0)`, func(s StateDef) bool { return s.HitDefPersist }},
+		{"movehitpersist", "movehitpersist", `var(10)=1`, func(s StateDef) bool { return s.MoveHitPersist }},
+		{"hitcountpersist", "hitcountpersist", `stateno=200`, func(s StateDef) bool { return s.HitCountPersist }},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			src := "[Statedef 0]\ntype = S\n" + tt.key + " = " + tt.value + "\n"
+
+			states, err := Parse(strings.NewReader(src))
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if len(states) != 1 {
+				t.Fatalf("expected 1 StateDef, got %d", len(states))
+			}
+
+			s := states[0]
+			if got := tt.get(s); got {
+				t.Errorf("expected the typed field to stay at its zero value (false) when the source is an expression, got %v", got)
+			}
+			if got, want := s.HeaderExprs[tt.key], tt.value; got != want {
+				t.Errorf("expected HeaderExprs[%q] = %q, got %q", tt.key, want, got)
+			}
+		})
+	}
+}
+
+// A boolean header field's source text that isn't even a plausible
+// expression (plain garbage) is stored the same way as a real expression,
+// not rejected — Parse has no expression grammar to tell the two apart, so
+// it treats anything that fails strconv.ParseBool identically. Mirrors
+// TestParse_NumericHeaderFieldWithGarbageValue_StoresRawTextInsteadOfErroring.
+func TestParse_BooleanHeaderFieldWithGarbageValue_StoresRawTextInsteadOfErroring(t *testing.T) {
 	src := `[Statedef 0]
 type = S
 ctrl = maybe
 `
 
-	_, err := Parse(strings.NewReader(src))
-	if err == nil {
-		t.Fatal("expected an error for an invalid boolean value, got nil")
+	states, err := Parse(strings.NewReader(src))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
-	if !strings.Contains(err.Error(), "line 3") {
-		t.Errorf("expected error to identify line 3, got: %v", err)
+	if len(states) != 1 {
+		t.Fatalf("expected 1 StateDef, got %d", len(states))
+	}
+	if states[0].Ctrl {
+		t.Errorf("expected Ctrl to stay at its zero value (false), got %v", states[0].Ctrl)
+	}
+	if got, want := states[0].HeaderExprs["ctrl"], "maybe"; got != want {
+		t.Errorf("expected HeaderExprs[\"ctrl\"] = %q, got %q", want, got)
+	}
+}
+
+// A literal boolean value for a boolean header field is completely
+// unaffected by the expression escape hatch: the typed field is set and no
+// HeaderExprs entry is created for it. Mirrors
+// TestParse_NumericHeaderFieldWithLiteralInteger_DoesNotPopulateHeaderExprs.
+func TestParse_BooleanHeaderFieldWithLiteralValue_DoesNotPopulateHeaderExprs(t *testing.T) {
+	src := `[Statedef 0]
+type = S
+ctrl = 1
+facep2 = 0
+`
+
+	states, err := Parse(strings.NewReader(src))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	s := states[0]
+	if !s.Ctrl {
+		t.Errorf("expected Ctrl true, got %v", s.Ctrl)
+	}
+	if s.FaceP2 {
+		t.Errorf("expected FaceP2 false, got %v", s.FaceP2)
+	}
+	if _, ok := s.HeaderExprs["ctrl"]; ok {
+		t.Errorf("expected no HeaderExprs entry for a literal boolean field, got %v", s.HeaderExprs)
+	}
+	if _, ok := s.HeaderExprs["facep2"]; ok {
+		t.Errorf("expected no HeaderExprs entry for a literal boolean field, got %v", s.HeaderExprs)
+	}
+}
+
+// Reproduces the exact real-world failures reported in backlog item 046:
+// Mai (BlazBlue) fails on a ctrl expression, Avdol (JoJo's Bizarre
+// Adventure) fails on a facep2 expression — both real community character
+// files.
+func TestParse_RealMaiAndAvdolBooleanHeaderExpressions_ParsedSuccessfully(t *testing.T) {
+	src := `[Statedef 9000]
+type = A
+movetype = I
+physics = N
+anim = 9999
+ctrl = 0&(var(0):=Cond(parent,var(51)>0,parent,var(51),58))
+
+[Statedef 200]
+type = S
+movetype = A
+physics = N
+ctrl = 0
+anim = ifelse((prevstateno=[100,105]),210,200)
+poweradd = 0
+sprpriority = 1-(var(0)>0)*2
+facep2 = 1-(prevstateno=[100,119])
+`
+
+	states, err := Parse(strings.NewReader(src))
+	if err != nil {
+		t.Fatalf("unexpected error parsing real Mai/Avdol boolean header expressions: %v", err)
+	}
+	if len(states) != 2 {
+		t.Fatalf("expected 2 StateDefs, got %d", len(states))
+	}
+
+	mai := states[0]
+	if got, want := mai.HeaderExprs["ctrl"], "0&(var(0):=Cond(parent,var(51)>0,parent,var(51),58))"; got != want {
+		t.Errorf("expected Mai HeaderExprs[\"ctrl\"] = %q, got %q", want, got)
+	}
+
+	avdol := states[1]
+	if got, want := avdol.HeaderExprs["facep2"], "1-(prevstateno=[100,119])"; got != want {
+		t.Errorf("expected Avdol HeaderExprs[\"facep2\"] = %q, got %q", want, got)
+	}
+	// Avdol's ctrl and sprpriority are also expressions on the same block —
+	// confirm they coexist fine alongside a boolean-field expression.
+	if got, want := avdol.HeaderExprs["sprpriority"], "1-(var(0)>0)*2"; got != want {
+		t.Errorf("expected Avdol HeaderExprs[\"sprpriority\"] = %q, got %q", want, got)
 	}
 }
 

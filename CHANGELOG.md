@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Fixed character files being rejected entirely when a combat logic (`.cns`) boolean setting (control, facing the opponent, and three related persistence settings) contains a trigger expression instead of a plain yes/no value — a real-world authoring pattern (e.g. the BlazBlue "Mai" and JoJo's Bizarre Adventure "Avdol" characters) that real MUGEN/Ikemen engines tolerate.
+
 ## [0.4.5] - 2026-08-10
 
 ### Fixed

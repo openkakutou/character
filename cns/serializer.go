@@ -45,11 +45,11 @@ func Serialize(w io.Writer, states []StateDef) error {
 
 // writeStatedefHeader writes a "[Statedef N]" line followed by every
 // recognized header field, then a blank line separating it from what
-// follows (the first controller block, or the next Statedef). A numeric
-// field with a HeaderExprs entry (see
-// .vibe/decisions/023-statedef-numeric-header-fields-unevaluated-expression-escape-hatch.md)
-// writes that raw, unevaluated text verbatim instead of the typed field's
-// (necessarily zero) formatted value.
+// follows (the first controller block, or the next Statedef). A numeric or
+// boolean field with a HeaderExprs entry (see
+// .vibe/decisions/023-statedef-numeric-header-fields-unevaluated-expression-escape-hatch.md
+// and item 046) writes that raw, unevaluated text verbatim instead of the
+// typed field's (necessarily zero) formatted value.
 func writeStatedefHeader(w io.Writer, state StateDef) error {
 	if _, err := fmt.Fprintf(w, "[Statedef %d]\n", state.Number); err != nil {
 		return fmt.Errorf("cns: writing Statedef %d header: %w", state.Number, err)
@@ -63,13 +63,13 @@ func writeStatedefHeader(w io.Writer, state StateDef) error {
 		{"movetype", string(state.MoveType)},
 		{"physics", string(state.Physics)},
 		{"anim", intOrExprValue(state, "anim", state.Anim)},
-		{"ctrl", boolToStr(state.Ctrl)},
+		{"ctrl", boolOrExprValue(state, "ctrl", state.Ctrl)},
 		{"poweradd", intOrExprValue(state, "poweradd", state.PowerAdd)},
 		{"juggle", intOrExprValue(state, "juggle", state.Juggle)},
-		{"facep2", boolToStr(state.FaceP2)},
-		{"hitdefpersist", boolToStr(state.HitDefPersist)},
-		{"movehitpersist", boolToStr(state.MoveHitPersist)},
-		{"hitcountpersist", boolToStr(state.HitCountPersist)},
+		{"facep2", boolOrExprValue(state, "facep2", state.FaceP2)},
+		{"hitdefpersist", boolOrExprValue(state, "hitdefpersist", state.HitDefPersist)},
+		{"movehitpersist", boolOrExprValue(state, "movehitpersist", state.MoveHitPersist)},
+		{"hitcountpersist", boolOrExprValue(state, "hitcountpersist", state.HitCountPersist)},
 		{"sprpriority", intOrExprValue(state, "sprpriority", state.SprPriority)},
 	}
 	for _, f := range fields {
@@ -92,6 +92,16 @@ func intOrExprValue(state StateDef, name string, literal int) string {
 		return expr
 	}
 	return fmt.Sprintf("%d", literal)
+}
+
+// boolOrExprValue returns state.HeaderExprs[name] when present (a boolean
+// header field parsed as an unevaluated expression rather than a literal
+// bool, see item 046), otherwise literal's conventional "1"/"0" text.
+func boolOrExprValue(state StateDef, name string, literal bool) string {
+	if expr, ok := state.HeaderExprs[name]; ok {
+		return expr
+	}
+	return boolToStr(literal)
 }
 
 // writeController writes a "[State statedefNumber]" block for ctrl: its

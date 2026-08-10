@@ -156,6 +156,46 @@ func TestSerialize_NumericHeaderFieldExpression_RoundTripsThroughParse(t *testin
 	}
 }
 
+// A StateDef carrying a boolean header field's unevaluated expression text
+// (HeaderExprs) round-trips through Serialize/Parse the same way a numeric
+// one does: the raw expression is written out verbatim in place of the
+// typed field's "1"/"0" formatted value, and re-parsing recovers the same
+// HeaderExprs entry with the typed field left at its zero value (false).
+// Mirrors TestSerialize_NumericHeaderFieldExpression_RoundTripsThroughParse.
+// See item 046.
+func TestSerialize_BooleanHeaderFieldExpression_RoundTripsThroughParse(t *testing.T) {
+	states := []StateDef{
+		{
+			Number: 9000,
+			Type:   StateTypeStanding,
+			HeaderExprs: map[string]string{
+				"ctrl":   "0&(var(0):=Cond(parent,var(51)>0,parent,var(51),58))",
+				"facep2": "1-(prevstateno=[100,119])",
+			},
+		},
+	}
+
+	var buf bytes.Buffer
+	if err := Serialize(&buf, states); err != nil {
+		t.Fatalf("unexpected error serializing: %v", err)
+	}
+
+	if !strings.Contains(buf.String(), "ctrl = 0&(var(0):=Cond(parent,var(51)>0,parent,var(51),58))") {
+		t.Errorf("expected the raw ctrl expression to be written verbatim, got:\n%s", buf.String())
+	}
+	if !strings.Contains(buf.String(), "facep2 = 1-(prevstateno=[100,119])") {
+		t.Errorf("expected the raw facep2 expression to be written verbatim, got:\n%s", buf.String())
+	}
+
+	reparsed, err := Parse(bytes.NewReader(buf.Bytes()))
+	if err != nil {
+		t.Fatalf("unexpected error re-parsing serialized output: %v\n--- output ---\n%s", err, buf.String())
+	}
+	if !reflect.DeepEqual(reparsed, states) {
+		t.Errorf("round trip did not produce an equivalent structure.\n--- original ---\n%+v\n--- reparsed ---\n%+v", states, reparsed)
+	}
+}
+
 func TestSerialize_StatedefWithNoControllers_OmitsStateSections(t *testing.T) {
 	states := []StateDef{
 		{Number: 5, Type: StateTypeStanding},

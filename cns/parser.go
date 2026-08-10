@@ -198,12 +198,13 @@ func applyControllerField(c *Controller, key, value string) {
 }
 
 // applyStatedefField applies a single key=value line to a StateDef header
-// being built. An unrecognized key is ignored. A recognized boolean field
-// with a value that doesn't parse as a bool returns a descriptive error. A
-// recognized numeric field with a value that doesn't parse as a literal
-// integer never errors: it is treated as an unevaluated MUGEN/Ikemen trigger
-// expression and stored in HeaderExprs instead — see
-// .vibe/decisions/023-statedef-numeric-header-fields-unevaluated-expression-escape-hatch.md.
+// being built. An unrecognized key is ignored. A recognized boolean or
+// numeric field whose value doesn't parse as a literal bool/integer never
+// errors: it is treated as an unevaluated MUGEN/Ikemen trigger expression
+// and stored in HeaderExprs instead — see
+// .vibe/decisions/023-statedef-numeric-header-fields-unevaluated-expression-escape-hatch.md
+// (numeric fields) and item 046 (boolean fields, extending the same
+// pattern).
 func applyStatedefField(s *StateDef, key, value string) error {
 	switch strings.ToLower(key) {
 	case "type":
@@ -215,39 +216,19 @@ func applyStatedefField(s *StateDef, key, value string) error {
 	case "anim":
 		applyIntOrExprField(s, "anim", value, &s.Anim)
 	case "ctrl":
-		b, err := parseBoolField("ctrl", value)
-		if err != nil {
-			return err
-		}
-		s.Ctrl = b
+		applyBoolOrExprField(s, "ctrl", value, &s.Ctrl)
 	case "poweradd":
 		applyIntOrExprField(s, "poweradd", value, &s.PowerAdd)
 	case "juggle":
 		applyIntOrExprField(s, "juggle", value, &s.Juggle)
 	case "facep2":
-		b, err := parseBoolField("facep2", value)
-		if err != nil {
-			return err
-		}
-		s.FaceP2 = b
+		applyBoolOrExprField(s, "facep2", value, &s.FaceP2)
 	case "hitdefpersist":
-		b, err := parseBoolField("hitdefpersist", value)
-		if err != nil {
-			return err
-		}
-		s.HitDefPersist = b
+		applyBoolOrExprField(s, "hitdefpersist", value, &s.HitDefPersist)
 	case "movehitpersist":
-		b, err := parseBoolField("movehitpersist", value)
-		if err != nil {
-			return err
-		}
-		s.MoveHitPersist = b
+		applyBoolOrExprField(s, "movehitpersist", value, &s.MoveHitPersist)
 	case "hitcountpersist":
-		b, err := parseBoolField("hitcountpersist", value)
-		if err != nil {
-			return err
-		}
-		s.HitCountPersist = b
+		applyBoolOrExprField(s, "hitcountpersist", value, &s.HitCountPersist)
 	case "sprpriority":
 		applyIntOrExprField(s, "sprpriority", value, &s.SprPriority)
 	}
@@ -274,14 +255,21 @@ func applyIntOrExprField(s *StateDef, name, value string, dst *int) {
 	*dst = n
 }
 
-// parseBoolField parses value as a bool for the Statedef header field named
-// name, returning a descriptive error on failure.
-func parseBoolField(name, value string) (bool, error) {
+// applyBoolOrExprField sets *dst from value when value parses as a literal
+// bool. Otherwise it leaves *dst untouched (at its zero value, false) and
+// records value verbatim in s.HeaderExprs under name instead — value is
+// treated as an unevaluated MUGEN/Ikemen trigger expression, mirroring
+// applyIntOrExprField for the numeric header fields. See item 046.
+func applyBoolOrExprField(s *StateDef, name, value string, dst *bool) {
 	b, err := strconv.ParseBool(value)
 	if err != nil {
-		return false, fmt.Errorf("invalid %s %q: %w", name, value, err)
+		if s.HeaderExprs == nil {
+			s.HeaderExprs = make(map[string]string)
+		}
+		s.HeaderExprs[name] = value
+		return
 	}
-	return b, nil
+	*dst = b
 }
 
 // stripComment removes a ".cns" comment from line — everything from the

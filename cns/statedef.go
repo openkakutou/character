@@ -119,15 +119,21 @@ type StateDef struct {
 	// this state ("sprpriority" parameter).
 	SprPriority int `json:"sprPriority"`
 	// HeaderExprs holds the raw, unevaluated source text of a numeric
-	// header field ("anim", "poweradd", "juggle", "sprpriority") whose
-	// value did not parse as a plain literal integer — real MUGEN/Ikemen
-	// .cns files sometimes give these fields a trigger expression instead
-	// (e.g. "anim = IfElse(ceil(lifemax/2) < life ,181,182)"). Keyed by
-	// lowercase field name. A field with an entry here has its
-	// corresponding typed field (Anim, PowerAdd, Juggle, SprPriority)
-	// left at its zero value; a field without an entry here was a literal
-	// integer and its typed field holds it as usual. See
-	// .vibe/decisions/023-statedef-numeric-header-fields-unevaluated-expression-escape-hatch.md.
+	// header field ("anim", "poweradd", "juggle", "sprpriority") or
+	// boolean header field ("ctrl", "facep2", "hitdefpersist",
+	// "movehitpersist", "hitcountpersist") whose value did not parse as a
+	// plain literal integer/bool — real MUGEN/Ikemen .cns files sometimes
+	// give these fields a trigger expression instead (e.g.
+	// "anim = IfElse(ceil(lifemax/2) < life ,181,182)",
+	// "facep2 = 1-(prevstateno=[100,119])"). Keyed by lowercase field
+	// name. A field with an entry here has its corresponding typed field
+	// (Anim, PowerAdd, Juggle, SprPriority, Ctrl, FaceP2, HitDefPersist,
+	// MoveHitPersist, HitCountPersist) left at its zero value; a field
+	// without an entry here was a literal value and its typed field holds
+	// it as usual. See
+	// .vibe/decisions/023-statedef-numeric-header-fields-unevaluated-expression-escape-hatch.md
+	// (numeric fields) and item 046 (boolean fields, extending the same
+	// pattern).
 	HeaderExprs map[string]string `json:"headerExprs"`
 	// Controllers are the state controllers ([State N] blocks) that run
 	// while this state is active, in file order.
