@@ -568,6 +568,10 @@ correctly closed header would have. See
 [`.vibe/decisions/012-cns-parse-header-detection-strategy.md`](../.vibe/decisions/012-cns-parse-header-detection-strategy.md)
 and
 [`.vibe/decisions/022-cns-parse-state-header-accepts-any-label.md`](../.vibe/decisions/022-cns-parse-state-header-accepts-any-label.md).
+A line inside a `Statedef` header or `State` block that has no `=` (and thus
+isn't a valid key=value pair — a truncated leftover key, a decorative
+separator, a comment missing its leading `;`) is ignored rather than
+erroring, the same way an unrecognized key already is (backlog item 043).
 
 A `Statedef` header's `anim`/`poweradd`/`juggle`/`sprpriority` value that
 isn't a valid integer is never an error either: it's stored verbatim in
@@ -583,8 +587,6 @@ rather than panicking or silently producing incorrect data, when:
 - a bracket line starts with the `statedef` keyword but its state number is
   missing or non-numeric
 - a `[State ...]` block appears with no enclosing `[Statedef ...]` block
-- a line inside a `Statedef` header or `State` block has no `=` (or an empty
-  key before it)
 - a `Statedef` header's `ctrl`/`facep2`/`hitdefpersist`/`movehitpersist`/
   `hitcountpersist` value isn't a valid boolean
 - the underlying reader itself fails
