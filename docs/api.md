@@ -369,14 +369,16 @@ order; `Palettes` is collected and then sorted by its numeric suffix
 palette number order" contract regardless of the order those keys appeared
 in the file. See
 [`.vibe/decisions/009-def-parse-ignores-unknown-sections.md`](../.vibe/decisions/009-def-parse-ignores-unknown-sections.md).
+A line inside `[Info]` or `[Files]` that has no `=` (and thus isn't a valid
+key=value pair — a truncated leftover key, a decorative separator) is
+ignored rather than erroring, the same way an unrecognized key already is
+(backlog item 044).
 
 ### Error handling
 
 `Parse` returns a descriptive error identifying the offending line number,
 rather than panicking or silently producing incorrect data, when:
 - a `[...]` section header line is missing its closing `]`
-- a line inside `[Info]` or `[Files]` has no `=` (or an empty key before
-  it)
 - the underlying reader itself fails
 
 An empty input is not an error: `Parse` returns a zero-value `CharacterInfo`

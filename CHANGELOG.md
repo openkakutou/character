@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Fixed character definition files (`.def`) being rejected entirely when a recognized section (`[Info]`/`[Files]`) contains a stray content line that isn't a real `key=value` pair (a decorative separator line or a truncated leftover key) — found in a real-file corpus (e.g. the Disgaea "Etna" and King of Fighters "K" characters) that real MUGEN/Ikemen engines tolerate.
+
 ## [0.4.3] - 2026-08-10
 
 ### Fixed

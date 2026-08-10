@@ -33,9 +33,11 @@ var paletteKeyPattern = regexp.MustCompile(`(?i)^pal(\d+)$`)
 // in file-appearance order; Palettes are collected and then sorted by their
 // numeric suffix, per CharacterInfo's documented field order. An empty input
 // returns a zero-value CharacterInfo and a nil error. A malformed section
-// header or a key=value line missing "=" inside a known section returns a
-// descriptive error naming the offending line, as does a reader that fails
-// outright.
+// header still returns a descriptive error naming the offending line, as
+// does a reader that fails outright. A content line inside a known section
+// that isn't a valid key=value pair (missing "=") is ignored rather than
+// erroring, the same way an unrecognized key already is — real MUGEN/Ikemen
+// engines tolerate it.
 func Parse(r io.Reader) (CharacterInfo, error) {
 	scanner := bufio.NewScanner(r)
 
@@ -72,7 +74,11 @@ func Parse(r io.Reader) (CharacterInfo, error) {
 
 		key, value, ok := parseKeyValueLine(line)
 		if !ok {
-			return CharacterInfo{}, fmt.Errorf("def: line %d: malformed key=value line %q", lineNumber, line)
+			// A content line inside a known section that isn't a valid
+			// key=value pair (a decorative separator, a truncated leftover
+			// key) is ignored, the same way an unrecognized key already is —
+			// real MUGEN/Ikemen engines tolerate it. See backlog item 044.
+			continue
 		}
 
 		switch currentSection {

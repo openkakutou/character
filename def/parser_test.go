@@ -159,21 +159,77 @@ func TestParse_EmptyInput_ReturnsZeroValueCharacterInfoWithoutError(t *testing.T
 	}
 }
 
-func TestParse_MalformedKeyValueLine_ReturnsErrorNamingTheLine(t *testing.T) {
+// A non-header content line inside a recognized section that has no "="
+// (and thus isn't a valid key=value pair) used to be a hard error. A corpus
+// scan (item 044) found this in 4 of 717 real characters: a decorative
+// separator line or a truncated leftover key, both of which real MUGEN/
+// Ikemen engines tolerate the same way Parse already tolerates an
+// unrecognized key. Parse now ignores it instead, and keeps reading the
+// rest of the section normally — mirroring cns.Parse's identical item 043
+// fix.
+func TestParse_NonKeyValueLineInsideSection_IsIgnoredAndParsingContinues(t *testing.T) {
 	src := `[Info]
 name = "Kung Fu Man"
 author World
+displayname = "Kung Fu Man"
 `
 
-	_, err := Parse(strings.NewReader(src))
-	if err == nil {
-		t.Fatal("expected an error for the malformed line, got nil")
+	info, err := Parse(strings.NewReader(src))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
-	if !strings.Contains(err.Error(), "line 3") {
-		t.Errorf("expected error to identify line 3, got: %v", err)
+	if info.Name != "Kung Fu Man" {
+		t.Errorf("expected Name %q, got %q", "Kung Fu Man", info.Name)
 	}
-	if !strings.Contains(err.Error(), "author World") {
-		t.Errorf("expected error to quote the offending line, got: %v", err)
+}
+
+// The real-world case backlog item 044 was filed from: a real character file
+// (Disgaea's "Etna", surfaced via a 717-file corpus scan) has a bare
+// "------------------------------------------------" separator line (no "=")
+// right under [Files], and the whole file failed to load because of it.
+func TestParse_BareSeparatorLineInsideFilesSection_IsIgnored(t *testing.T) {
+	src := `[Files]
+Cmd = etna.cmd
+Cns = etna.cns
+------------------------------------------------
+St0 = assist.cns
+`
+
+	info, err := Parse(strings.NewReader(src))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if info.CommandFile != "etna.cmd" {
+		t.Errorf("expected CommandFile %q, got %q", "etna.cmd", info.CommandFile)
+	}
+	if info.ConstantsFile != "etna.cns" {
+		t.Errorf("expected ConstantsFile %q, got %q", "etna.cns", info.ConstantsFile)
+	}
+	if len(info.StateFiles) != 1 || info.StateFiles[0] != "assist.cns" {
+		t.Errorf("expected StateFiles [%q], got %v — the line after the ignored one was not parsed", "assist.cns", info.StateFiles)
+	}
+}
+
+// The second real-world case backlog item 044 was filed from: a real
+// character file ("King of Fighters"/K (XIII)) has a bare, truncated
+// "MugenVersion" key (no "=") under [Info], the same pattern also seen in
+// Samurai Shodown's "Suija".
+func TestParse_BareTruncatedKeyLineInsideInfoSection_IsIgnored(t *testing.T) {
+	src := `[Info]
+Name = "K"
+MugenVersion
+Author = "TightRiam"
+`
+
+	info, err := Parse(strings.NewReader(src))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if info.Name != "K" {
+		t.Errorf("expected Name %q, got %q", "K", info.Name)
+	}
+	if info.Author != "TightRiam" {
+		t.Errorf("expected Author %q, got %q — the line after the ignored one was not parsed", "TightRiam", info.Author)
 	}
 }
 
