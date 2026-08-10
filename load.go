@@ -38,17 +38,17 @@ func Load(path string) (*Character, error) {
 
 	dir := filepath.Dir(path)
 
-	animations, err := loadAnimations(resolveReferencedPath(dir, info.AnimationFile))
+	animations, err := loadAnimations(dir, info.AnimationFile)
 	if err != nil {
 		return nil, err
 	}
 
-	sprites, err := loadSprites(resolveReferencedPath(dir, info.SpriteFile))
+	sprites, err := loadSprites(dir, info.SpriteFile)
 	if err != nil {
 		return nil, err
 	}
 
-	stateDefs, err := loadStateDefs(resolveReferencedPath(dir, info.ConstantsFile))
+	stateDefs, err := loadStateDefs(dir, info.ConstantsFile)
 	if err != nil {
 		return nil, err
 	}
@@ -76,9 +76,78 @@ func resolveReferencedPath(dir, referenced string) string {
 	return filepath.Join(dir, strings.ReplaceAll(referenced, "\\", "/"))
 }
 
-// loadAnimations opens and parses the .air file at path.
-func loadAnimations(path string) ([]air.Animation, error) {
+// openReferencedFile opens the file a .def references (dir + referenced,
+// resolved via resolveReferencedPath) and, if no file exists under that
+// exact casing, falls back to a case-insensitive match against the actual
+// on-disk directory entries, one path component at a time, before giving
+// up. Real .def files are authored on Windows, where filesystem paths are
+// case-insensitive, and many reference a file under different letter
+// casing than its actual on-disk name — a mismatch Linux and the
+// browser/WASM target this library must also support do not tolerate. The
+// exact-case path is always tried first via a direct os.Open, so a
+// correctly-cased reference never pays for a directory listing. When no
+// case-insensitive match exists either, the original os.Open error against
+// the exact-case path is returned unchanged, preserving the existing
+// descriptive "no such file or directory"-style error. See backlog item
+// 050.
+func openReferencedFile(dir, referenced string) (*os.File, error) {
+	path := resolveReferencedPath(dir, referenced)
 	f, err := os.Open(path)
+	if err == nil {
+		return f, nil
+	}
+	if !os.IsNotExist(err) {
+		return nil, err
+	}
+	if resolvedPath, ok := resolveCaseInsensitive(dir, strings.ReplaceAll(referenced, "\\", "/")); ok {
+		if f, ferr := os.Open(resolvedPath); ferr == nil {
+			return f, nil
+		}
+	}
+	return nil, err
+}
+
+// resolveCaseInsensitive walks relPath component by component starting at
+// base, matching each component against the actual directory entries at
+// that level case-insensitively when no exact match exists. It returns the
+// fully resolved on-disk path and true once every component (including the
+// final file) has been matched, or ("", false) as soon as any component
+// has no match under either casing.
+func resolveCaseInsensitive(base, relPath string) (string, bool) {
+	current := base
+	for _, component := range strings.Split(relPath, "/") {
+		if component == "" || component == "." {
+			continue
+		}
+		candidate := filepath.Join(current, component)
+		if _, err := os.Stat(candidate); err == nil {
+			current = candidate
+			continue
+		}
+
+		entries, err := os.ReadDir(current)
+		if err != nil {
+			return "", false
+		}
+		match := ""
+		for _, entry := range entries {
+			if strings.EqualFold(entry.Name(), component) {
+				match = entry.Name()
+				break
+			}
+		}
+		if match == "" {
+			return "", false
+		}
+		current = filepath.Join(current, match)
+	}
+	return current, true
+}
+
+// loadAnimations opens and parses the .air file dir+referenced points to.
+func loadAnimations(dir, referenced string) ([]air.Animation, error) {
+	path := resolveReferencedPath(dir, referenced)
+	f, err := openReferencedFile(dir, referenced)
 	if err != nil {
 		return nil, fmt.Errorf("character: opening animation file %q: %w", path, err)
 	}
@@ -91,9 +160,10 @@ func loadAnimations(path string) ([]air.Animation, error) {
 	return animations, nil
 }
 
-// loadSprites opens and loads the .sff file at path.
-func loadSprites(path string) ([]sff.SpriteGroup, error) {
-	f, err := os.Open(path)
+// loadSprites opens and loads the .sff file dir+referenced points to.
+func loadSprites(dir, referenced string) ([]sff.SpriteGroup, error) {
+	path := resolveReferencedPath(dir, referenced)
+	f, err := openReferencedFile(dir, referenced)
 	if err != nil {
 		return nil, fmt.Errorf("character: opening sprite file %q: %w", path, err)
 	}
@@ -106,9 +176,10 @@ func loadSprites(path string) ([]sff.SpriteGroup, error) {
 	return sprites, nil
 }
 
-// loadStateDefs opens and parses the .cns file at path.
-func loadStateDefs(path string) ([]cns.StateDef, error) {
-	f, err := os.Open(path)
+// loadStateDefs opens and parses the .cns file dir+referenced points to.
+func loadStateDefs(dir, referenced string) ([]cns.StateDef, error) {
+	path := resolveReferencedPath(dir, referenced)
+	f, err := openReferencedFile(dir, referenced)
 	if err != nil {
 		return nil, fmt.Errorf("character: opening combat logic file %q: %w", path, err)
 	}

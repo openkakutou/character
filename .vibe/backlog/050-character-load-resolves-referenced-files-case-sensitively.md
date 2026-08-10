@@ -1,5 +1,5 @@
 ---
-status: todo
+status: in_progress
 ---
 # Character Load Resolves Referenced Files Case-Sensitively
 
