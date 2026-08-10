@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Fixed animation files being rejected when a collision box line has a space before its `[index]` bracket (e.g. `Clsn2 [0] = -17, -97, 18, 2`), a real-world authoring style found in several real characters (e.g. King of Fighters "Mai (98)") that real MUGEN/Ikemen engines tolerate.
+
 ## [0.6.0] - 2026-08-10
 
 ### Added

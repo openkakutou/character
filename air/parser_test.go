@@ -509,3 +509,42 @@ func TestParse_RealBardockBlankFrameSequence_ParsedSuccessfully(t *testing.T) {
 		}
 	}
 }
+
+// Reproduces a real .air file (King of Fighters "Mai (98)", from a real
+// character corpus) which has a space between the Clsn1/Clsn2 keyword and
+// its "[index]" bracket. Real MUGEN/Ikemen engines tolerate this; this
+// parser previously rejected it as a malformed Clsn box line.
+func TestParse_ClsnBoxLineWithSpaceBeforeBracket_ParsedSuccessfully(t *testing.T) {
+	src := "[Begin Action 0]\n" +
+		"Clsn2: 1\n" +
+		" Clsn2 [0] = -17, -97, 18, 2\n" +
+		"0,0, 0,0, 5\n"
+
+	animations, err := Parse(strings.NewReader(src))
+	if err != nil {
+		t.Fatalf("unexpected error parsing a Clsn box line with a space before the bracket: %v", err)
+	}
+	want := ClsnBox{Left: -17, Top: -97, Right: 18, Bottom: 2}
+	got := animations[0].Frames[0].Clsn2
+	if len(got) != 1 || got[0] != want {
+		t.Errorf("expected Clsn2 box %+v, got %+v", want, got)
+	}
+}
+
+// A Clsn box line that is missing a coordinate is a genuine error, not a
+// tolerated formatting quirk, and must still be reported as such after
+// loosening the pattern to accept a space before the bracket.
+func TestParse_ClsnBoxLineWithMissingCoordinate_ReturnsError(t *testing.T) {
+	src := "[Begin Action 0]\n" +
+		"Clsn2: 1\n" +
+		" Clsn2[0] = -17, -97, 18\n" +
+		"0,0, 0,0, 5\n"
+
+	_, err := Parse(strings.NewReader(src))
+	if err == nil {
+		t.Fatal("expected an error for a Clsn box line with a missing coordinate, got nil")
+	}
+	if !strings.Contains(err.Error(), "line 3") {
+		t.Errorf("expected the error to name line 3, got: %v", err)
+	}
+}

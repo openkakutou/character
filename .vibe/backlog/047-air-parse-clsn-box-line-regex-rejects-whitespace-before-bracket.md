@@ -1,5 +1,5 @@
 ---
-status: todo
+status: in_progress
 ---
 # Air Parse Clsn Box Line Regex Rejects Whitespace Before Bracket
 

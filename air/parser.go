@@ -191,8 +191,10 @@ func parseClsnDeclarationHeader(line string) (declType string, count int, ok boo
 }
 
 // clsnBoxLinePattern matches a "Clsn1[0] = L,T,R,B" (or Clsn2) line and
-// captures the four coordinates.
-var clsnBoxLinePattern = regexp.MustCompile(`(?i)^Clsn[12]\[\d+\]\s*=\s*(-?\d+)\s*,\s*(-?\d+)\s*,\s*(-?\d+)\s*,\s*(-?\d+)\s*$`)
+// captures the four coordinates. Whitespace between the keyword and the
+// "[index]" bracket is optional: real MUGEN/Ikemen engines tolerate a line
+// like "Clsn2 [0] = ...", which some real-world .air files use.
+var clsnBoxLinePattern = regexp.MustCompile(`(?i)^Clsn[12]\s*\[\d+\]\s*=\s*(-?\d+)\s*,\s*(-?\d+)\s*,\s*(-?\d+)\s*,\s*(-?\d+)\s*$`)
 
 // readClsnBoxes reads the next count Clsn[i] box lines from scanner.
 // lineNumber is updated as lines are consumed for error reporting.
