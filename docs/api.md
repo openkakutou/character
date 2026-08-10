@@ -535,15 +535,20 @@ line, keyed by lowercase parameter name. See
 [`.vibe/decisions/011-cns-controller-parameters-are-untyped-key-value-data.md`](../.vibe/decisions/011-cns-controller-parameters-are-untyped-key-value-data.md).
 
 `StateDef.HeaderExprs` extends that same philosophy one layer up, to
-`StateDef`'s own typed numeric header fields: real `.cns` files sometimes
-give `anim`/`poweradd`/`juggle`/`sprpriority` a MUGEN trigger expression
-(e.g. `anim = IfElse(ceil(lifemax/2) < life ,181,182)`) instead of a literal
-integer. When that happens, the corresponding typed field (`Anim`, etc.)
-stays at its zero value and `HeaderExprs` gets an entry keyed by lowercase
-field name (`"anim"`, `"poweradd"`, `"juggle"`, `"sprpriority"`) holding the
-raw source text verbatim. A field absent from `HeaderExprs` was a literal
-integer, held in its typed field as usual. See
-[`.vibe/decisions/023-statedef-numeric-header-fields-unevaluated-expression-escape-hatch.md`](../.vibe/decisions/023-statedef-numeric-header-fields-unevaluated-expression-escape-hatch.md).
+`StateDef`'s own typed numeric and boolean header fields: real `.cns` files
+sometimes give `anim`/`poweradd`/`juggle`/`sprpriority` a MUGEN trigger
+expression (e.g. `anim = IfElse(ceil(lifemax/2) < life ,181,182)`) instead
+of a literal integer, and just as often give `ctrl`/`facep2`/
+`hitdefpersist`/`movehitpersist`/`hitcountpersist` one (e.g.
+`facep2 = 1-(prevstateno=[100,119])`) instead of a literal bool. When that
+happens, the corresponding typed field (`Anim`, `Ctrl`, etc.) stays at its
+zero value and `HeaderExprs` gets an entry keyed by lowercase field name
+(`"anim"`, `"poweradd"`, `"juggle"`, `"sprpriority"`, `"ctrl"`, `"facep2"`,
+`"hitdefpersist"`, `"movehitpersist"`, `"hitcountpersist"`) holding the raw
+source text verbatim. A field absent from `HeaderExprs` was a literal
+value, held in its typed field as usual. See
+[`.vibe/decisions/023-statedef-numeric-header-fields-unevaluated-expression-escape-hatch.md`](../.vibe/decisions/023-statedef-numeric-header-fields-unevaluated-expression-escape-hatch.md)
+(numeric fields; boolean fields extend the same pattern, backlog item 046).
 
 ### Reading
 
@@ -579,8 +584,10 @@ separator, a comment missing its leading `;`) is ignored rather than
 erroring, the same way an unrecognized key already is (backlog item 043).
 
 A `Statedef` header's `anim`/`poweradd`/`juggle`/`sprpriority` value that
-isn't a valid integer is never an error either: it's stored verbatim in
-`StateDef.HeaderExprs` instead (see the data model section above and
+isn't a valid integer, or its `ctrl`/`facep2`/`hitdefpersist`/
+`movehitpersist`/`hitcountpersist` value that isn't a valid boolean, is
+never an error either: it's stored verbatim in `StateDef.HeaderExprs`
+instead (see the data model section above and
 [`.vibe/decisions/023-statedef-numeric-header-fields-unevaluated-expression-escape-hatch.md`](../.vibe/decisions/023-statedef-numeric-header-fields-unevaluated-expression-escape-hatch.md)).
 
 ### Error handling
@@ -592,8 +599,6 @@ rather than panicking or silently producing incorrect data, when:
 - a bracket line starts with the `statedef` keyword but its state number is
   missing or non-numeric
 - a `[State ...]` block appears with no enclosing `[Statedef ...]` block
-- a `Statedef` header's `ctrl`/`facep2`/`hitdefpersist`/`movehitpersist`/
-  `hitcountpersist` value isn't a valid boolean
 - the underlying reader itself fails
 
 An empty input is not an error: `Parse` returns an empty `[]StateDef` and a
