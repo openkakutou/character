@@ -11,7 +11,7 @@ with, rather than raw per-format structs.
 
 ```mermaid
 graph TD
-    root["character (root package)<br/>Character struct<br/>+ ResolveSprite(frame)<br/>+ Load(defPath)"]
+    root["character (root package)<br/>Character struct<br/>+ ResolveSprite(frame)<br/>+ Load(defPath)<br/>+ SerializeDef/Air/Cns/Cmd/Zss"]
     air["character/air<br/>Animation, Frame, ClsnBox<br/>+ Parse/Serialize(.air text)"]
     def["character/def<br/>CharacterInfo (data model)<br/>+ Parse/Serialize(.def text)"]
     sff["github.com/openkakutou/sff (external module)<br/>Sprite, SpriteGroup<br/>+ Load (.sff read, either version)<br/>+ ResolveSpritePixels"]
@@ -25,6 +25,11 @@ graph TD
     root -->|depends on| sff
     air -->|SpriteResolver resolves frame references against| sff
     cmd -->|delegates its Statedef -1/State block to| cns
+    root -->|saves via Document/Serialize of| def
+    root -->|saves via Document/Serialize of| air
+    root -->|saves via Document/Serialize of| cns
+    root -->|saves via Document/Serialize of| cmd
+    root -->|saves via Document/Serialize of| zss
 ```
 
 `character/zss` is not connected to any other package in the diagram: unlike `cmd`, it shares no syntax with `cns` (a `.zss` block header is its own shape, and its script body is kept fully opaque — see the package's own module doc) — a character uses either `.cns` or `.zss`, never both.
@@ -33,7 +38,7 @@ graph TD
 
 | Package | Responsibility | Status |
 |---|---|---|
-| `character` (root) | Assembles the sub-packages into a single `Character{}` struct, resolves an animation frame to its actual sprite (`ResolveSprite`), and loads a full `Character` directly from a `.def` file path (`Load`) | `Animations []air.Animation`, `Sprites []sff.SpriteGroup`, and `StateDefs []cns.StateDef` all wired in, via a `.def`-driven top-level loader — completing the full read surface across all four formats; `character/cmd` is implemented but not yet wired in |
+| `character` (root) | Assembles the sub-packages into a single `Character{}` struct, resolves an animation frame to its actual sprite (`ResolveSprite`), loads a full `Character` directly from a `.def` file path (`Load`), and saves an edited character back out per format (`SerializeDef`/`SerializeAir`/`SerializeCns`/`SerializeCmd`/`SerializeZss`) | `Animations []air.Animation`, `Sprites []sff.SpriteGroup`, and `StateDefs []cns.StateDef` all wired in, via a `.def`-driven top-level loader — completing the full read surface across all four formats; `character/cmd`/`character/zss` are implemented but not yet wired into `Character` itself (only into the independent save functions); the write path (item 039) is byte-exact to the original when nothing changed, freshly serialized otherwise — see `.vibe/decisions/028-wasm-save-path-per-format-diff-or-serialize.md` |
 | `character/air` | MUGEN/Ikemen GO animation (`.air`) files: the `Animation`/`Frame`/`ClsnBox` data model, a parser that reads `.air` text into that model, a serializer that writes it back out, a `Document` type for comment-preserving round trips, and a `SpriteResolver` that resolves a `Frame`'s sprite reference against sprites loaded via `github.com/openkakutou/sff` | Data model + read path implemented; `Serialize` produces valid, re-readable output (not a byte-exact round-trip of an original file's formatting); `Document`/`ParseDocument` round-trip unmodified files byte-for-byte, comments included; `SpriteResolver` resolves every `Frame` reference to its `sff.Sprite`, or a descriptive error for a missing one, regardless of `.sff` version |
 | `character/def` | Character definition (`.def`) files — the entry point referencing the other formats: the `CharacterInfo` data model, a text parser (`Parse`), a serializer (`Serialize`), and a `Document` type for comment-preserving round trips | Data model and read+write cycle implemented (`CharacterInfo`; `Parse` reads `[Info]`/`[Files]` text into it, skipping unrecognized sections; `Serialize` writes it back out to valid, re-readable text; `Document`/`ParseDocument` round-trip unmodified files byte-for-byte, comments and unrecognized sections included); wired into the root `Character` struct via `character.Load` |
 | `character/cns` | Combat logic / state machine (`.cns`, text) files: the `StateDef`/`Controller` data model, a text parser (`Parse`) that reads `[Statedef N]`/`[State ...]` blocks into it, keeping trigger conditions and parameters as unevaluated data (and, for `StateDef`'s own numeric and boolean header fields, an unevaluated-expression fallback via `HeaderExprs`), a serializer (`Serialize`) that writes it back out, and a `Document` type for comment-preserving round trips | Data model and read+write cycle implemented; unrecognized sections are skipped by `Parse` rather than aborting the read, matching `def.Parse`'s tolerance; a `[State ...]` header's content is unconstrained (no state number required, matching real-world files) since `Parse` never stores it; `Document`/`ParseDocument` round-trip unmodified files byte-for-byte, comments and unrelated sections included; wired into the root `Character` struct via `character.Load` |
