@@ -179,6 +179,76 @@ func TestLoad_DefReferencesMissingCnsFile_ReturnsDescriptiveErrorNotPanic(t *tes
 	}
 }
 
+func TestLoad_DefReferencesConstantsFileWithBackslashPath_ResolvesNestedFile(t *testing.T) {
+	dir := t.TempDir()
+
+	defContent := `[Info]
+name = Test Character
+author = Test Author
+
+[Files]
+sprite = char.sff
+anim = char.air
+cns = states\constants.cns
+`
+	if err := os.WriteFile(filepath.Join(dir, "char.def"), []byte(defContent), 0o644); err != nil {
+		t.Fatalf("test setup: writing .def fixture: %v", err)
+	}
+
+	statesDir := filepath.Join(dir, "states")
+	if err := os.Mkdir(statesDir, 0o755); err != nil {
+		t.Fatalf("test setup: creating states subdirectory: %v", err)
+	}
+
+	cnsContent := `[Statedef 200, Attack]
+type = S
+movetype = A
+physics = S
+anim = 200
+ctrl = 0
+
+[State 200, ChangeState]
+type = ChangeState
+trigger1 = Time = 0
+value = 0
+`
+	if err := os.WriteFile(filepath.Join(statesDir, "constants.cns"), []byte(cnsContent), 0o644); err != nil {
+		t.Fatalf("test setup: writing .cns fixture: %v", err)
+	}
+
+	airContent := `[Begin Action 200]
+0,0, 0,0, 5
+0,1, 10,10, 5
+`
+	if err := os.WriteFile(filepath.Join(dir, "char.air"), []byte(airContent), 0o644); err != nil {
+		t.Fatalf("test setup: writing .air fixture: %v", err)
+	}
+
+	sprites := []sff.V1WriteSprite{
+		{Group: 0, Image: 0, AxisX: 32, AxisY: 128, PixelData: mustEncodePCXFixture(t, 4, 2), Palette: make([]byte, sff.V1PaletteBlockSize)},
+		{Group: 0, Image: 1, AxisX: 33, AxisY: 130, PixelData: mustEncodePCXFixture(t, 6, 3), Palette: make([]byte, sff.V1PaletteBlockSize)},
+	}
+	var sffBuf bytes.Buffer
+	if err := sff.SerializeV1(&sffBuf, [4]byte{1, 0, 0, 1}, false, sprites); err != nil {
+		t.Fatalf("test setup: SerializeV1 failed: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "char.sff"), sffBuf.Bytes(), 0o644); err != nil {
+		t.Fatalf("test setup: writing .sff fixture: %v", err)
+	}
+
+	c, err := Load(filepath.Join(dir, "char.def"))
+	if err != nil {
+		t.Fatalf("Load returned error for a backslash-separated .def path: %v", err)
+	}
+
+	if len(c.StateDefs) != 1 {
+		t.Fatalf("expected 1 state def loaded from the nested states/constants.cns file, got %d", len(c.StateDefs))
+	}
+	if c.StateDefs[0].Number != 200 {
+		t.Errorf("expected state number 200, got %d", c.StateDefs[0].Number)
+	}
+}
+
 func TestLoad_DefFileItselfMissing_ReturnsDescriptiveErrorNotPanic(t *testing.T) {
 	_, err := Load(filepath.Join(t.TempDir(), "does-not-exist.def"))
 	if err == nil {

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/openkakutou/character/air"
 	"github.com/openkakutou/character/cns"
@@ -37,17 +38,17 @@ func Load(path string) (*Character, error) {
 
 	dir := filepath.Dir(path)
 
-	animations, err := loadAnimations(filepath.Join(dir, info.AnimationFile))
+	animations, err := loadAnimations(resolveReferencedPath(dir, info.AnimationFile))
 	if err != nil {
 		return nil, err
 	}
 
-	sprites, err := loadSprites(filepath.Join(dir, info.SpriteFile))
+	sprites, err := loadSprites(resolveReferencedPath(dir, info.SpriteFile))
 	if err != nil {
 		return nil, err
 	}
 
-	stateDefs, err := loadStateDefs(filepath.Join(dir, info.ConstantsFile))
+	stateDefs, err := loadStateDefs(resolveReferencedPath(dir, info.ConstantsFile))
 	if err != nil {
 		return nil, err
 	}
@@ -58,6 +59,21 @@ func Load(path string) (*Character, error) {
 		Sprites:    sprites,
 		StateDefs:  stateDefs,
 	}, nil
+}
+
+// resolveReferencedPath joins dir with a file path referenced from inside a
+// .def file (e.g. a [Files] entry), normalizing Windows-style backslash
+// separators to forward slashes first. Real .def files are authored on
+// Windows, where a backslash in a path is unambiguously a separator (never
+// a literal filename character, which Windows itself disallows) — but
+// filepath.Join treats an unnormalized backslash-containing string as a
+// single literal path component on a forward-slash filesystem (Linux, and
+// the browser/WASM target this library must also support), so the
+// referenced subdirectory is never traversed. dir itself (derived from
+// Load's own path argument, not from .def content) is left untouched: it is
+// already in the host's native convention. See backlog item 049.
+func resolveReferencedPath(dir, referenced string) string {
+	return filepath.Join(dir, strings.ReplaceAll(referenced, "\\", "/"))
 }
 
 // loadAnimations opens and parses the .air file at path.
