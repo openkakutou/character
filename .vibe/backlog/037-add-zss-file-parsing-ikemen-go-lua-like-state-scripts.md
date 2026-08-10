@@ -1,5 +1,5 @@
 ---
-status: todo
+status: in_progress
 ---
 # Add `.zss` File Parsing (Ikemen GO Lua-Like State Scripts)
 

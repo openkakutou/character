@@ -45,10 +45,13 @@ This project is in early-stage development. Shipped so far:
 - A sprite's actual image can now be resolved directly in the browser via that same WebAssembly build — not just its dimensions and metadata — including recoloring it with an external palette file; multiple sprites can be resolved in a single call so browsing a whole sprite sheet doesn't require one round trip per sprite
 - `.sff` v2 sprites that carry no image data of their own — a shorthand some real character files use to mean "reuse the character's very first sprite" — now resolve to that actual image instead of reporting an error, validated against real, unmodified MUGEN/Ikemen character files rather than only hand-built test data; that same validation also caught and fixed two color-accuracy bugs affecting some real sprites: `.sff` v2 sprites using the 32-bit PNG format now show correct colors wherever they're partially see-through, and `.sff` v2 sprites using the 8-bit indexed PNG format now always show fully opaque colors outside their transparent areas
 - `.sff` v2 sprites using the less common "RLE5" compressed pixel format can now be resolved too, alongside the other supported encodings — unlike those, this one hasn't yet been validated against a real character file (none using it has been found so far), so treat it as unproven until one turns up
+- Reading Ikemen GO's Lua-like state script (`.zss`) files — an alternative way of writing a character's combat logic — into structured data: each state or helper script's own identifying details, with its scripted behavior kept intact as-is (this library reads and writes `.zss` files, it does not run the scripts themselves); a malformed file is caught with a clear, line-numbered error instead of crashing
+- Writing `.zss` data back out to valid text, ready to be read by Ikemen GO or read back in by this library
+- Loading a `.zss` file and saving it back out unchanged reproduces the original file exactly — so re-saving a file you haven't edited never creates a noisy diff
 
 Planned:
 
-- Preserving comments and ordering when the saved `.def`/`.air`/`.cns`/`.cmd` file actually differs from the original (today this is guaranteed only when nothing changed)
+- Preserving comments and ordering when the saved `.def`/`.air`/`.cns`/`.cmd`/`.zss` file actually differs from the original (today this is guaranteed only when nothing changed)
 <!-- vibe:end:features -->
 
 <!-- vibe:begin:install -->
@@ -868,7 +871,39 @@ func main() {
 }
 ```
 
-Wiring `.cmd` into `Character`, and decoding/encoding the remaining `.sff` v2 compressed pixel formats (RLE-based), are not implemented yet — this API surface will grow as those pieces are added.
+Read a `.zss` Lua-like state script file into a `Script` with `zss.Parse` — each state or function block's own header is parsed, while its scripted behavior is kept as-is (this library reads and writes `.zss` files, it does not run the scripts themselves):
+
+```go
+package main
+
+import (
+	"fmt"
+	"os"
+
+	"github.com/openkakutou/character/zss"
+)
+
+func main() {
+	f, err := os.Open("kfm.zss")
+	if err != nil {
+		panic(err)
+	}
+	defer f.Close()
+
+	script, err := zss.Parse(f)
+	if err != nil {
+		panic(err)
+	}
+
+	for _, b := range script.Blocks {
+		fmt.Printf("%s %d %s\n", b.Kind, b.Number, b.Name)
+	}
+}
+```
+
+Write a `Script` back out to `.zss` text with `zss.Serialize`, or use `zss.ParseDocument`/`Document.Serialize` instead to load a `.zss` file and save it back out unchanged (no data edits) — the same `Parse`/`Serialize` vs. `ParseDocument`/`Document.Serialize` split every other format in this library follows.
+
+Wiring `.cmd`/`.zss` into `Character` is not implemented yet — this API surface will grow as those pieces are added.
 
 ### Loading a character in a web browser (WebAssembly)
 

@@ -903,6 +903,139 @@ if err := doc.Serialize(out); err != nil {
 Wiring `cns` and `cmd` into `character.Load` — `cns` is already wired (see
 `Character.StateDefs`, above); `cmd` is not yet.
 
+## `character/zss` — Lua-like state script (`.zss`) files
+
+### Data model
+
+```go
+type BlockKind string
+
+const (
+    BlockKindStatedef BlockKind = "Statedef"
+    BlockKindFunction BlockKind = "Function"
+)
+
+type Block struct {
+    Kind         BlockKind
+    Number       int               // Statedef's N; unused for Function
+    HeaderParams map[string]string // Statedef's "key: value" header fields, lowercase-keyed; unused for Function
+    Name         string            // Function's name; empty for Statedef
+    Params       []string          // Function's parenthesized parameter names, in order; empty for Statedef
+    Ret          []string          // Function's declared return variable name(s), in order; empty for Statedef
+    Body         string            // the block's script text, kept verbatim as raw, unevaluated Lua-like source
+}
+
+type Script struct {
+    Preamble string // content preceding the first block header (typically a file banner/comment block)
+    Blocks   []Block
+}
+```
+
+`Script`/`Block` is the pure-data vocabulary for an Ikemen GO `.zss` file: an
+alternative to `.cns` combat logic (a character uses one or the other, never
+both). Following the same "unevaluated data" principle `cns.Controller`
+already applies to trigger conditions, a `Block`'s `Body` — the Lua-like
+statements between one block header and the next — is kept as raw,
+unevaluated text: this package parses `.zss` structure only, it does not
+execute the scripting language (that is `engine`'s responsibility). See
+[`.vibe/decisions/027-zss-block-structure-header-parsed-body-raw.md`](../.vibe/decisions/027-zss-block-structure-header-parsed-body-raw.md).
+
+### Reading
+
+```go
+func Parse(r io.Reader) (Script, error)
+```
+
+Reads Ikemen GO `.zss` text from `r` and returns the `Script` it describes:
+an ordered list of `Block`s split at each `[Statedef N; ...]`/
+`[Function Name(...) ...]` header line (matched case-insensitively — real
+files use both `Statedef`/`StateDef` and `Function`/`function`), each
+carrying its own header fields and raw script body.
+
+A Statedef header's semicolon-separated `key: value` parameters populate
+`HeaderParams`, lowercase-keyed. A Function header's parenthesized
+parameter list and declared return variable(s) populate `Params`/`Ret`. A
+real `.zss` file sometimes wraps a Statedef header's parameters across
+several physical lines, closing the bracket only on a later line — `Parse`
+recovers this, joining the continuation lines into one logical header
+before matching it, the same way it would a single-line header.
+
+### Error handling
+
+`Parse` returns a descriptive error identifying the offending line number,
+rather than panicking or silently producing incorrect data, when:
+- a line starting with `[` matches neither the Statedef nor the Function
+  header pattern (unlike `.cns` — used by both MUGEN and Ikemen GO, with
+  decades of divergent real-world authoring habits to tolerate — `.zss` is
+  Ikemen-GO-only, and a corpus scan found no top-level content other than
+  these two header shapes)
+- a multi-line header never finds its closing `]` before the input ends
+- the underlying reader itself fails
+
+An empty input is not an error: `Parse` returns a zero-value `Script` and a
+`nil` error.
+
+### Writing
+
+```go
+func Serialize(w io.Writer, script Script) error
+```
+
+Writes `script` to `w` as Ikemen GO `.zss` text: `Preamble` verbatim,
+followed by one header + `Body` pair per `Block` in order.
+
+This produces valid output that `Parse` reads back into an equivalent
+`Script`, but it does not attempt a byte-exact round-trip of an original
+file's formatting (see `Document`, below, for that case) — it always writes
+fresh output. `HeaderParams` (an unordered map) is written sorted by key for
+deterministic output; map order carries no meaning `Parse` relies on.
+`Serialize` returns an error rather than panicking if the underlying writer
+fails.
+
+### Byte-exact round trip
+
+```go
+type Document struct {
+    Script Script
+    // unexported: the original source bytes
+}
+
+func ParseDocument(r io.Reader) (*Document, error)
+func (d *Document) Serialize(w io.Writer) error
+```
+
+`ParseDocument` decodes `.zss` text the same way `Parse` does (into
+`Document.Script`) while also retaining the exact source bytes it read.
+`Document.Serialize` writes those retained bytes back out verbatim, so a
+`ParseDocument` → `Serialize` round trip on **unmodified** content
+reproduces the original file byte-for-byte.
+
+Mutating `Document.Script` has no effect on `Serialize`'s output: this type
+guarantees a faithful round trip for the "load, don't touch, save" case
+only, mirroring `air.Document`/`def.Document`/`cns.Document`/`cmd.Document`.
+
+### Example
+
+```go
+f, err := os.Open("kfm.zss")
+if err != nil {
+    log.Fatal(err)
+}
+defer f.Close()
+
+script, err := zss.Parse(f)
+if err != nil {
+    log.Fatal(err)
+}
+
+for _, b := range script.Blocks {
+    fmt.Printf("%s %d %s\n", b.Kind, b.Number, b.Name)
+}
+```
+
+`character/zss` is not yet wired into `character.Load`/`Character`, the same
+way `character/cmd` isn't (see above).
+
 
 ## Sprite (`.sff`) files — external dependency
 

@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Characters' Ikemen GO Lua-like state scripts (`.zss`) can now be read and written: state and function block boundaries, headers, and identifiers are parsed, while each block's own script logic is kept intact as-is (this library does not execute it) — an alternative to `.cns` combat logic, validated against a real Ikemen GO character's script files.
+
 ## [0.5.0] - 2026-08-10
 
 ### Added

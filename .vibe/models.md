@@ -242,3 +242,40 @@ Defined in: `cmd/command.go`
 Write-path type: `ParseDocument`/`Document.Serialize` round-trip an unmodified `.cmd` file byte-for-byte, including comments and section ordering. Mutating `File` does not change what `Serialize` writes. Mirrors `air`'s/`def`'s/`cns`'s own `Document`.
 
 Defined in: `cmd/document.go`
+
+## Script (zss)
+| Field | Type | Notes |
+|---|---|---|
+| Preamble | string | Raw content preceding the first block header (typically a file banner/comment block), preserved verbatim |
+| Blocks | []Block | This script's Statedef/Function blocks, in file order |
+
+`json:"..."`-tagged (`preamble`, `blocks`).
+
+Populated by `Parse(r io.Reader) (Script, error)`, which splits `.zss` text into blocks at each `[Statedef ...]`/`[Function ...]` header line. Written back out by `Serialize(w io.Writer, script Script) error`. Not yet wired into the root `Character` struct. See `.vibe/decisions/027-zss-block-structure-header-parsed-body-raw.md`.
+
+Defined in: `zss/script.go`
+
+## Block (zss)
+| Field | Type | Notes |
+|---|---|---|
+| Kind | BlockKind | `"Statedef"` or `"Function"` |
+| Number | int | Statedef's state number; unused (zero) for Function |
+| HeaderParams | map[string]string | Statedef's semicolon-separated `key: value` header fields, lowercase-keyed, unevaluated; unused (nil) for Function — mirrors `cns.Controller.Parameters` one format up |
+| Name | string | Function's name; empty for Statedef |
+| Params | []string | Function's parenthesized parameter names, in order; empty for Statedef or a parameterless Function |
+| Ret | []string | Function's declared return variable name(s), in order; empty for Statedef or a Function declaring no return value |
+| Body | string | The block's full script text — everything between this block's header and the next (or EOF) — kept verbatim as raw, unevaluated Lua-like source; this repo parses `.zss` structure only, it does not execute the scripting language (see `.vibe/decisions/027-zss-block-structure-header-parsed-body-raw.md`) |
+
+`json:"..."`-tagged (`kind`, `number`, `headerParams`, `name`, `params`, `ret`, `body`).
+
+Defined in: `zss/script.go`
+
+## Document (zss)
+| Field | Type | Notes |
+|---|---|---|
+| Script | Script | Decoded the same way `Parse`'s return value is |
+| source | []byte | Unexported; the exact bytes `ParseDocument` read, replayed verbatim by `Serialize` |
+
+Write-path type: `ParseDocument`/`Document.Serialize` round-trip an unmodified `.zss` file byte-for-byte. Mutating `Script` does not change what `Serialize` writes. Mirrors `air`'s/`def`'s/`cns`'s/`cmd`'s own `Document`.
+
+Defined in: `zss/document.go`
