@@ -595,6 +595,44 @@ func TestParse_ClsnBoxLineWithSpaceBeforeBracket_ParsedSuccessfully(t *testing.T
 	}
 }
 
+// Reproduces a real .air file (King of Fighters "Mai (98)", from a real
+// character corpus) which uses a line starting with ':' instead of the
+// standard ';' as an ad-hoc comment between two actions (found at 98Mai.air
+// line 2445). This parser previously misread it as an attempted, malformed
+// frame line. Real MUGEN/Ikemen engines don't treat ':' as a comment marker
+// either, but they silently ignore any content line that doesn't start with
+// a digit or '-' (the only characters that can start a real frame line)
+// rather than erroring on it — recognizing this specific ':'-prefixed
+// pattern as a comment-like line produces the same observable result (item
+// 054).
+func TestParse_ColonPrefixedLine_TreatedAsComment(t *testing.T) {
+	src := "[Begin Action 0]\n" +
+		"0,0, 0,0, 5\n" +
+		": Kagerou No Mai (RBS version)\n" +
+		"[Begin Action 1]\n" +
+		"0,1, 0,0, 4\n"
+
+	animations, err := Parse(strings.NewReader(src))
+	if err != nil {
+		t.Fatalf("unexpected error parsing a ':'-prefixed comment-like line: %v", err)
+	}
+	if len(animations) != 2 {
+		t.Fatalf("expected 2 animations, got %d", len(animations))
+	}
+	if len(animations[0].Frames) != 1 {
+		t.Fatalf("expected 1 frame in action 0, got %d", len(animations[0].Frames))
+	}
+	if animations[0].Frames[0].Image != 0 {
+		t.Errorf("expected action 0's frame to still parse correctly, got %+v", animations[0].Frames[0])
+	}
+	if len(animations[1].Frames) != 1 {
+		t.Fatalf("expected 1 frame in action 1, got %d", len(animations[1].Frames))
+	}
+	if animations[1].Frames[0].Image != 1 {
+		t.Errorf("expected action 1's frame to still parse correctly, got %+v", animations[1].Frames[0])
+	}
+}
+
 // A Clsn box line that is missing a coordinate is a genuine error, not a
 // tolerated formatting quirk, and must still be reported as such after
 // loosening the pattern to accept a space before the bracket.

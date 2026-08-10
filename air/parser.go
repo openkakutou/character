@@ -32,7 +32,8 @@ var actionHeaderPattern = regexp.MustCompile(`(?i)^\[\s*begin\s+action\s+(-?\d+)
 // Loopstart marker, and Ikemen GO's Interpolate Offset/Blend/Scale/Angle
 // directive lines (recognized and skipped, not yet represented on the
 // Animation/Frame model). Comment lines (';', whole-line or trailing) are
-// ignored.
+// ignored, as is a whole line starting with ':' — a real-world ad-hoc
+// comment marker some .air files use instead of ';' (item 054).
 // An empty input returns an empty, non-nil-error result rather than an
 // error. A frame line's group or image field may be -1, the ".air"
 // convention for "no sprite shown on this frame" (see Frame.IsBlank).
@@ -61,6 +62,20 @@ func Parse(r io.Reader) ([]Animation, error) {
 		line := stripComment(scanner.Text())
 
 		if line == "" {
+			continue
+		}
+
+		if strings.HasPrefix(line, ":") {
+			// Some real .air files (e.g. King of Fighters "Mai (98)", item
+			// 054) use a ':'-prefixed line as an ad-hoc comment instead of
+			// the standard ';' marker. Real MUGEN/Ikemen engines don't
+			// treat ':' as a comment marker either, but a genuine frame
+			// line can only ever start with a digit or '-', so a
+			// ':'-prefixed line is never mistaken for one there; it's
+			// simply an unrecognized content line, silently ignored rather
+			// than erroring. Recognizing it here as a comment-like line
+			// produces the same observable result for this specific
+			// real-world quirk.
 			continue
 		}
 
