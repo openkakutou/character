@@ -177,6 +177,31 @@ Clsn2Default: 2
 	}
 }
 
+func TestParse_MisspelledClsnDefaultKeyword_ToleratedAsDefault(t *testing.T) {
+	src := `[Begin Action 0]
+Clsn2deault: 1
+ Clsn2[0] = -38,-125,36,-14
+0,0, 0,0, 1
+`
+
+	animations, err := Parse(strings.NewReader(src))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(animations) != 1 {
+		t.Fatalf("expected 1 animation, got %d", len(animations))
+	}
+	frames := animations[0].Frames
+	if len(frames) != 1 {
+		t.Fatalf("expected 1 frame, got %d", len(frames))
+	}
+	got := frames[0].Clsn2
+	want := []ClsnBox{{Left: -38, Top: -125, Right: 36, Bottom: -14}}
+	if len(got) != 1 || got[0] != want[0] {
+		t.Errorf("expected Clsn2 boxes %+v from misspelled default declaration, got %+v", want, got)
+	}
+}
+
 func TestParse_FrameLineWithOnlyBlendField_LeavesFlipAsNone(t *testing.T) {
 	src := "[Begin Action 0]\n0,0, 0,0, 1, , S\n"
 

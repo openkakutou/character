@@ -173,18 +173,40 @@ func isInterpolateDirective(line string) bool {
 	return false
 }
 
+// clsnDeclarationKeywords maps each recognized spelling of a Clsn
+// declaration header keyword to the canonical declaration type it means.
+// Besides the four correctly spelled keywords, "Clsn1deault"/"Clsn2deault"
+// (a missing "f") are also recognized: a real-world authoring typo found in
+// at least one real character file (Darkstalkers' Donovan), tolerated here
+// the same way def.Parse/cns.Parse tolerate other specific real-world
+// authoring mistakes rather than attempting open-ended fuzzy matching.
+var clsnDeclarationKeywords = map[string]string{
+	"Clsn1Default": "Clsn1Default",
+	"Clsn2Default": "Clsn2Default",
+	"Clsn1deault":  "Clsn1Default",
+	"Clsn2deault":  "Clsn2Default",
+	"Clsn1":        "Clsn1",
+	"Clsn2":        "Clsn2",
+}
+
+// clsnDeclarationCandidates lists clsnDeclarationKeywords' keys, longest
+// first, so a longer keyword (e.g. "Clsn1Default") is matched before a
+// shorter one it starts with (e.g. "Clsn1").
+var clsnDeclarationCandidates = []string{"Clsn1Default", "Clsn2Default", "Clsn1deault", "Clsn2deault", "Clsn1", "Clsn2"}
+
 // parseClsnDeclarationHeader recognizes a "Clsn1Default: N", "Clsn2Default:
-// N", "Clsn1: N", or "Clsn2: N" line and returns its declaration type and
-// the number of Clsn[i] lines that follow it.
+// N", "Clsn1: N", or "Clsn2: N" line (or one of clsnDeclarationKeywords'
+// tolerated misspellings) and returns its declaration type and the number
+// of Clsn[i] lines that follow it.
 func parseClsnDeclarationHeader(line string) (declType string, count int, ok bool) {
-	for _, candidate := range []string{"Clsn1Default", "Clsn2Default", "Clsn1", "Clsn2"} {
+	for _, candidate := range clsnDeclarationCandidates {
 		prefix := candidate + ":"
 		if len(line) >= len(prefix) && strings.EqualFold(line[:len(prefix)], prefix) {
 			n, err := strconv.Atoi(strings.TrimSpace(line[len(prefix):]))
 			if err != nil {
 				return "", 0, false
 			}
-			return candidate, n, true
+			return clsnDeclarationKeywords[candidate], n, true
 		}
 	}
 	return "", 0, false
