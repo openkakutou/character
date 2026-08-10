@@ -120,6 +120,64 @@ for (const { pixels, width, height, error } of results) {
 }
 ```
 
+## Saving edited characters
+
+Five globals mirror the read path's `load`, one per format, letting a
+caller save what it edited back to file bytes:
+
+```js
+globalThis.OpenKakutouCharacter.saveDef(originalDefBytes, editedInfoJSON)
+globalThis.OpenKakutouCharacter.saveAir(originalAirBytes, editedAnimationsJSON)
+globalThis.OpenKakutouCharacter.saveCns(originalCnsBytes, editedStateDefsJSON)
+globalThis.OpenKakutouCharacter.saveCmd(originalCmdBytes, editedCommandFileJSON)
+globalThis.OpenKakutouCharacter.saveZss(originalZssBytes, editedScriptJSON)
+```
+
+- **Arguments**, for each: a `Uint8Array` of that file's own previously
+  loaded bytes (an empty array for a brand new file with no original yet),
+  and a JSON string of the caller's current in-memory model for that
+  format — edited or not.
+  - `saveDef`'s model matches `load`'s own `CharacterInfo` shape (`name`,
+    `author`, `spriteFile`, `animationFile`, `soundFile`, `commandFile`,
+    `constantsFile`, `stateFiles`, `palettes`).
+  - `saveAir`'s model matches the `animations` array `load` already
+    returns; `saveCns`'s matches the `stateDefs` array.
+  - `saveCmd`'s and `saveZss`'s models are **not** part of `load`'s JSON
+    contract — `.cmd`/`.zss` aren't wired into `Character` — so a caller
+    gets its baseline by parsing `originalCmdBytes`/`originalZssBytes`
+    itself (see [docs/api.md](api.md#character/cmd) /
+    [docs/api.md](api.md#character/zss) for the shape), or starts from a
+    zero value for a brand new file.
+- **Return value**: always a plain object `{ bytes, error }`, exactly one
+  field non-`null`:
+  - `bytes` — a `Uint8Array` of the serialized file. Byte-exact to the
+    original bytes when the model describes no real change (down to
+    treating an empty list the same whether it arrived as `null` or `[]`);
+    freshly generated, valid, re-loadable text otherwise, which does not
+    preserve the original's comments/ordering.
+  - `error` — a descriptive message: a malformed original, malformed JSON,
+    or a wrong argument count.
+- Same never-throws, never-broken-after-an-error guarantee as `load`.
+
+See [docs/api.md](api.md#saving-edited-characters) for the underlying
+`character.SerializeDef`/`SerializeAir`/`SerializeCns`/`SerializeCmd`/
+`SerializeZss` functions this glue calls, and
+[`.vibe/decisions/028-wasm-save-path-per-format-diff-or-serialize.md`](../.vibe/decisions/028-wasm-save-path-per-format-diff-or-serialize.md)
+for why the save path is shaped this way.
+
+### Example
+
+```js
+const info = JSON.parse(loadResult.character);
+info.name = "New Name";
+
+const saveResult = globalThis.OpenKakutouCharacter.saveDef(defBytes, JSON.stringify(info));
+if (saveResult.error) {
+  throw new Error(saveResult.error);
+}
+// saveResult.bytes is ready to offer as a browser download
+```
+
 ## Verifying a build
 
 `cmd/wasm/smoke.mjs` is a Node.js harness that loads a built module the same

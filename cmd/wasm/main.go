@@ -22,6 +22,11 @@ import (
 	"syscall/js"
 
 	character "github.com/openkakutou/character"
+	"github.com/openkakutou/character/air"
+	"github.com/openkakutou/character/cmd"
+	"github.com/openkakutou/character/cns"
+	"github.com/openkakutou/character/def"
+	"github.com/openkakutou/character/zss"
 	"github.com/openkakutou/sff"
 )
 
@@ -30,6 +35,11 @@ func main() {
 	js.Global().Set(globalName, js.ValueOf(map[string]any{
 		"load":           js.FuncOf(load),
 		"resolveSprites": js.FuncOf(resolveSprites),
+		"saveDef":        js.FuncOf(saveDef),
+		"saveAir":        js.FuncOf(saveAir),
+		"saveCns":        js.FuncOf(saveCns),
+		"saveCmd":        js.FuncOf(saveCmd),
+		"saveZss":        js.FuncOf(saveZss),
 	}))
 
 	// Registering js.FuncOf callbacks does not keep the Go runtime alive on
@@ -211,6 +221,202 @@ func spriteResult(pixels []color.RGBA, width, height int, err error) map[string]
 		return map[string]any{"pixels": nil, "width": 0, "height": 0, "error": err.Error()}
 	}
 	return map[string]any{"pixels": rgbaToJS(pixels), "width": width, "height": height, "error": nil}
+}
+
+// saveDef is OpenKakutouCharacter.saveDef(originalDefBytes, editedInfoJSON)
+// as seen from JS: originalDefBytes is a Uint8Array holding the .def
+// file's previously loaded bytes (an empty array for a brand new
+// character with no original file yet), editedInfoJSON is a JSON string
+// matching character.LoadBytes's own CharacterInfo shape (name, author,
+// spriteFile, animationFile, soundFile, commandFile, constantsFile,
+// stateFiles, palettes) — the caller's current in-memory representation,
+// edited or not. Returns { bytes, error }: on success bytes is a
+// Uint8Array of the serialized .def file — byte-exact to
+// originalDefBytes when editedInfoJSON describes no real change, freshly
+// generated text otherwise (see character.SerializeDef and
+// .vibe/decisions/028-wasm-save-path-per-format-diff-or-serialize.md) —
+// and error is null; on failure bytes is null and error is a descriptive
+// string. Never throws.
+func saveDef(this js.Value, args []js.Value) any {
+	defer func() {
+		// See load's identical recover() — a panic here would otherwise
+		// tear down the whole page's WASM instance.
+		recover()
+	}()
+
+	if len(args) != 2 {
+		return saveResult(nil, fmt.Errorf("OpenKakutouCharacter.saveDef: expected 2 arguments (originalDefBytes, editedInfoJSON), got %d", len(args)))
+	}
+
+	original, err := bytesFromJS(args[0])
+	if err != nil {
+		return saveResult(nil, fmt.Errorf("OpenKakutouCharacter.saveDef: originalDefBytes: %w", err))
+	}
+
+	var info def.CharacterInfo
+	if err := json.Unmarshal([]byte(args[1].String()), &info); err != nil {
+		return saveResult(nil, fmt.Errorf("OpenKakutouCharacter.saveDef: editedInfoJSON: %w", err))
+	}
+
+	out, err := character.SerializeDef(original, info)
+	if err != nil {
+		return saveResult(nil, err)
+	}
+	return saveResult(out, nil)
+}
+
+// saveAir is OpenKakutouCharacter.saveAir(originalAirBytes,
+// editedAnimationsJSON) as seen from JS: originalAirBytes is a Uint8Array
+// holding the .air file's previously loaded bytes (empty for a brand new
+// file), editedAnimationsJSON is a JSON string matching the array
+// character.LoadBytes's own "animations" field already exposes. Same
+// { bytes, error } contract, byte-exact-when-unmodified strategy, and
+// never-throws guarantee as saveDef — see character.SerializeAir.
+func saveAir(this js.Value, args []js.Value) any {
+	defer func() {
+		recover()
+	}()
+
+	if len(args) != 2 {
+		return saveResult(nil, fmt.Errorf("OpenKakutouCharacter.saveAir: expected 2 arguments (originalAirBytes, editedAnimationsJSON), got %d", len(args)))
+	}
+
+	original, err := bytesFromJS(args[0])
+	if err != nil {
+		return saveResult(nil, fmt.Errorf("OpenKakutouCharacter.saveAir: originalAirBytes: %w", err))
+	}
+
+	var animations []air.Animation
+	if err := json.Unmarshal([]byte(args[1].String()), &animations); err != nil {
+		return saveResult(nil, fmt.Errorf("OpenKakutouCharacter.saveAir: editedAnimationsJSON: %w", err))
+	}
+
+	out, err := character.SerializeAir(original, animations)
+	if err != nil {
+		return saveResult(nil, err)
+	}
+	return saveResult(out, nil)
+}
+
+// saveCns is OpenKakutouCharacter.saveCns(originalCnsBytes,
+// editedStateDefsJSON) as seen from JS: originalCnsBytes is a Uint8Array
+// holding the .cns file's previously loaded bytes (empty for a brand new
+// file), editedStateDefsJSON is a JSON string matching the array
+// character.LoadBytes's own "stateDefs" field already exposes. Same
+// { bytes, error } contract, byte-exact-when-unmodified strategy, and
+// never-throws guarantee as saveDef — see character.SerializeCns.
+func saveCns(this js.Value, args []js.Value) any {
+	defer func() {
+		recover()
+	}()
+
+	if len(args) != 2 {
+		return saveResult(nil, fmt.Errorf("OpenKakutouCharacter.saveCns: expected 2 arguments (originalCnsBytes, editedStateDefsJSON), got %d", len(args)))
+	}
+
+	original, err := bytesFromJS(args[0])
+	if err != nil {
+		return saveResult(nil, fmt.Errorf("OpenKakutouCharacter.saveCns: originalCnsBytes: %w", err))
+	}
+
+	var states []cns.StateDef
+	if err := json.Unmarshal([]byte(args[1].String()), &states); err != nil {
+		return saveResult(nil, fmt.Errorf("OpenKakutouCharacter.saveCns: editedStateDefsJSON: %w", err))
+	}
+
+	out, err := character.SerializeCns(original, states)
+	if err != nil {
+		return saveResult(nil, err)
+	}
+	return saveResult(out, nil)
+}
+
+// saveCmd is OpenKakutouCharacter.saveCmd(originalCmdBytes,
+// editedCommandFileJSON) as seen from JS: originalCmdBytes is a
+// Uint8Array holding the .cmd file's previously loaded bytes (empty for a
+// brand new file), editedCommandFileJSON is a JSON string matching
+// cmd.CommandFile's own JSON shape (remap, defaults, commands, states —
+// not yet exposed by load/character.LoadBytes, since .cmd isn't wired
+// into Character; a caller instead gets its baseline by parsing
+// originalCmdBytes itself, or starts from a zero value for a brand new
+// file). Same { bytes, error } contract, byte-exact-when-unmodified
+// strategy, and never-throws guarantee as saveDef — see
+// character.SerializeCmd.
+func saveCmd(this js.Value, args []js.Value) any {
+	defer func() {
+		recover()
+	}()
+
+	if len(args) != 2 {
+		return saveResult(nil, fmt.Errorf("OpenKakutouCharacter.saveCmd: expected 2 arguments (originalCmdBytes, editedCommandFileJSON), got %d", len(args)))
+	}
+
+	original, err := bytesFromJS(args[0])
+	if err != nil {
+		return saveResult(nil, fmt.Errorf("OpenKakutouCharacter.saveCmd: originalCmdBytes: %w", err))
+	}
+
+	var file cmd.CommandFile
+	if err := json.Unmarshal([]byte(args[1].String()), &file); err != nil {
+		return saveResult(nil, fmt.Errorf("OpenKakutouCharacter.saveCmd: editedCommandFileJSON: %w", err))
+	}
+
+	out, err := character.SerializeCmd(original, file)
+	if err != nil {
+		return saveResult(nil, err)
+	}
+	return saveResult(out, nil)
+}
+
+// saveZss is OpenKakutouCharacter.saveZss(originalZssBytes,
+// editedScriptJSON) as seen from JS: originalZssBytes is a Uint8Array
+// holding the .zss file's previously loaded bytes (empty for a brand new
+// file), editedScriptJSON is a JSON string matching zss.Script's own JSON
+// shape (preamble, blocks — not yet exposed by load/character.LoadBytes,
+// since a character uses .cns or .zss, never both, and only .cns is
+// currently wired into Character; a caller instead gets its baseline by
+// parsing originalZssBytes itself, or starts from a zero value for a
+// brand new file). Same { bytes, error } contract,
+// byte-exact-when-unmodified strategy, and never-throws guarantee as
+// saveDef — see character.SerializeZss.
+func saveZss(this js.Value, args []js.Value) any {
+	defer func() {
+		recover()
+	}()
+
+	if len(args) != 2 {
+		return saveResult(nil, fmt.Errorf("OpenKakutouCharacter.saveZss: expected 2 arguments (originalZssBytes, editedScriptJSON), got %d", len(args)))
+	}
+
+	original, err := bytesFromJS(args[0])
+	if err != nil {
+		return saveResult(nil, fmt.Errorf("OpenKakutouCharacter.saveZss: originalZssBytes: %w", err))
+	}
+
+	var script zss.Script
+	if err := json.Unmarshal([]byte(args[1].String()), &script); err != nil {
+		return saveResult(nil, fmt.Errorf("OpenKakutouCharacter.saveZss: editedScriptJSON: %w", err))
+	}
+
+	out, err := character.SerializeZss(original, script)
+	if err != nil {
+		return saveResult(nil, err)
+	}
+	return saveResult(out, nil)
+}
+
+// saveResult builds every save* function's shared { bytes, error } JS
+// return shape. Exactly one field is ever non-null. bytes is transferred
+// as a Uint8Array, the same convention resolveSprites's pixel buffers
+// already use, since the caller's next step is typically offering it as a
+// browser download.
+func saveResult(fileBytes []byte, err error) map[string]any {
+	if err != nil {
+		return map[string]any{"bytes": nil, "error": err.Error()}
+	}
+	arr := js.Global().Get("Uint8Array").New(len(fileBytes))
+	js.CopyBytesToJS(arr, fileBytes)
+	return map[string]any{"bytes": arr, "error": nil}
 }
 
 // rgbaToJS flattens a row-major []color.RGBA buffer into a flat, straight-

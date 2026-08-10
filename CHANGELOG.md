@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Loading a character now exposes its full metadata (author, and every referenced file: sprite, animation, sound, command, combat logic, extra state files, palettes) to WASM consumers, not just its name — e.g. `character-viewer-web`'s characteristics panel can now show a character's author.
+- Edited characters can now be saved back to `.def`/`.air`/`.cns`/`.cmd`/`.zss` from a browser: saving an unedited character reproduces the original file exactly, byte for byte, while an actual edit is written out as valid, re-loadable file content; an invalid save request reports a clear error instead of crashing.
 
 ### Fixed
 

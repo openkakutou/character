@@ -137,6 +137,101 @@ assert(typeof malformedBatchResult[0].error === "string" && malformedBatchResult
 const afterResolveErrorResult = globalThis.OpenKakutouCharacter.load(defBytes, airBytes, sffBytes, cnsBytes);
 assert(afterResolveErrorResult.error === null, "module still works after a prior resolveSprites error");
 
+// --- save*: write/serialize path (item 039) ---
+
+// saveDef: no-edits round trip is byte-exact.
+const editedInfo = { ...character, palettes: [], stateFiles: [] };
+const saveDefNoEditsResult = globalThis.OpenKakutouCharacter.saveDef(defBytes, JSON.stringify(editedInfo));
+assert(saveDefNoEditsResult.error === null, `saveDef (no edits) reports no error (got: ${saveDefNoEditsResult.error})`);
+assert(saveDefNoEditsResult.bytes instanceof Uint8Array, "saveDef (no edits) returns a Uint8Array");
+assert(
+	new TextDecoder().decode(saveDefNoEditsResult.bytes) === new TextDecoder().decode(defBytes),
+	"saveDef (no edits) is byte-identical to the original .def",
+);
+
+// saveDef: an edit is reflected in the output.
+const renamedInfo = { ...editedInfo, name: "Renamed via WASM" };
+const saveDefEditedResult = globalThis.OpenKakutouCharacter.saveDef(defBytes, JSON.stringify(renamedInfo));
+assert(saveDefEditedResult.error === null, `saveDef (edited) reports no error (got: ${saveDefEditedResult.error})`);
+const savedDefText = new TextDecoder().decode(saveDefEditedResult.bytes);
+assert(savedDefText.includes("Renamed via WASM"), "saveDef (edited) output contains the edited name");
+
+// saveDef: malformed JSON returns a descriptive error instead of throwing.
+const saveDefBadJSONResult = globalThis.OpenKakutouCharacter.saveDef(defBytes, "not json");
+assert(saveDefBadJSONResult.bytes === null, "saveDef (malformed JSON) returns null bytes");
+assert(typeof saveDefBadJSONResult.error === "string" && saveDefBadJSONResult.error.length > 0, "saveDef (malformed JSON) reports an error");
+
+// saveAir: no-edits round trip is byte-exact, an edit is reflected.
+const saveAirNoEditsResult = globalThis.OpenKakutouCharacter.saveAir(airBytes, JSON.stringify(character.animations));
+assert(saveAirNoEditsResult.error === null, `saveAir (no edits) reports no error (got: ${saveAirNoEditsResult.error})`);
+assert(
+	new TextDecoder().decode(saveAirNoEditsResult.bytes) === new TextDecoder().decode(airBytes),
+	"saveAir (no edits) is byte-identical to the original .air",
+);
+
+const editedAnimations = JSON.parse(JSON.stringify(character.animations));
+assert(editedAnimations[0].loopStart !== 0, `test fixture sanity: original loopStart isn't already 0 (got: ${editedAnimations[0].loopStart})`);
+editedAnimations[0].loopStart = 0;
+const saveAirEditedResult = globalThis.OpenKakutouCharacter.saveAir(airBytes, JSON.stringify(editedAnimations));
+assert(saveAirEditedResult.error === null, `saveAir (edited) reports no error (got: ${saveAirEditedResult.error})`);
+assert(
+	new TextDecoder().decode(saveAirEditedResult.bytes) !== new TextDecoder().decode(airBytes),
+	"saveAir (edited) output differs from the original",
+);
+
+// saveCns: no-edits round trip is byte-exact, an edit is reflected.
+const saveCnsNoEditsResult = globalThis.OpenKakutouCharacter.saveCns(cnsBytes, JSON.stringify(character.stateDefs));
+assert(saveCnsNoEditsResult.error === null, `saveCns (no edits) reports no error (got: ${saveCnsNoEditsResult.error})`);
+assert(
+	new TextDecoder().decode(saveCnsNoEditsResult.bytes) === new TextDecoder().decode(cnsBytes),
+	"saveCns (no edits) is byte-identical to the original .cns",
+);
+
+const editedStateDefs = JSON.parse(JSON.stringify(character.stateDefs));
+editedStateDefs[0].ctrl = !editedStateDefs[0].ctrl;
+const saveCnsEditedResult = globalThis.OpenKakutouCharacter.saveCns(cnsBytes, JSON.stringify(editedStateDefs));
+assert(saveCnsEditedResult.error === null, `saveCns (edited) reports no error (got: ${saveCnsEditedResult.error})`);
+assert(
+	new TextDecoder().decode(saveCnsEditedResult.bytes) !== new TextDecoder().decode(cnsBytes),
+	"saveCns (edited) output differs from the original",
+);
+
+// saveCmd: not yet wired into `load`'s Character/JSON contract (.cmd isn't
+// part of it), so the baseline comes from a fresh, empty original — a new
+// command file — rather than round-tripping character.commandFile.
+const newCommandFile = { remap: {}, defaults: { time: 0, bufferTime: 0 }, commands: [{ name: "QCF_a", input: "~D, DF, F, a", time: 0, bufferTime: 0 }], states: [] };
+const saveCmdNewResult = globalThis.OpenKakutouCharacter.saveCmd(new Uint8Array(0), JSON.stringify(newCommandFile));
+assert(saveCmdNewResult.error === null, `saveCmd (new file) reports no error (got: ${saveCmdNewResult.error})`);
+assert(new TextDecoder().decode(saveCmdNewResult.bytes).includes("QCF_a"), "saveCmd (new file) output contains the new command's name");
+
+// saveZss: same "not wired into Character" reasoning as saveCmd.
+const zssBytes = new TextEncoder().encode("[Statedef 200; type: S; ctrl: 0;]\nif AnimElem = 1 {\n\tcallSuper{}\n}\n");
+const parsedZssResult = { preamble: "", blocks: [{ kind: "Statedef", number: 200, headerParams: { type: "S", ctrl: "0" }, body: "if AnimElem = 1 {\n\tcallSuper{}\n}\n" }] };
+const saveZssNoEditsResult = globalThis.OpenKakutouCharacter.saveZss(zssBytes, JSON.stringify(parsedZssResult));
+assert(saveZssNoEditsResult.error === null, `saveZss (no edits) reports no error (got: ${saveZssNoEditsResult.error})`);
+assert(
+	new TextDecoder().decode(saveZssNoEditsResult.bytes) === new TextDecoder().decode(zssBytes),
+	"saveZss (no edits) is byte-identical to the original .zss",
+);
+
+const editedZss = JSON.parse(JSON.stringify(parsedZssResult));
+editedZss.blocks[0].headerParams.ctrl = "1";
+const saveZssEditedResult = globalThis.OpenKakutouCharacter.saveZss(zssBytes, JSON.stringify(editedZss));
+assert(saveZssEditedResult.error === null, `saveZss (edited) reports no error (got: ${saveZssEditedResult.error})`);
+assert(
+	new TextDecoder().decode(saveZssEditedResult.bytes) !== new TextDecoder().decode(zssBytes),
+	"saveZss (edited) output differs from the original",
+);
+
+// saveCns: wrong argument count, must not crash the module.
+const saveArgCountResult = globalThis.OpenKakutouCharacter.saveCns(cnsBytes);
+assert(saveArgCountResult.bytes === null, "saveCns (missing argument) returns null bytes");
+assert(typeof saveArgCountResult.error === "string" && saveArgCountResult.error.length > 0, "saveCns (missing argument) reports an error");
+
+// The module must still respond correctly after the save* calls above too.
+const afterSaveResult = globalThis.OpenKakutouCharacter.load(defBytes, airBytes, sffBytes, cnsBytes);
+assert(afterSaveResult.error === null, "module still works after the save* calls");
+
 if (process.exitCode) {
 	console.error("\nsmoke test FAILED");
 } else {

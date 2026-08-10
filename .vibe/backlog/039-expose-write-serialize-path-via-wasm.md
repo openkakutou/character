@@ -1,5 +1,5 @@
 ---
-status: todo
+status: in_progress
 depends_on: [035]
 ---
 # Expose Write/Serialize Path Via WASM (Def/Air/Cns/Cmd/Zss Round-Trip Save)

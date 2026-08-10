@@ -99,6 +99,53 @@ c := character.Character{
 }
 ```
 
+### Saving edited characters
+
+```go
+func SerializeDef(original []byte, info def.CharacterInfo) ([]byte, error)
+func SerializeAir(original []byte, animations []air.Animation) ([]byte, error)
+func SerializeCns(original []byte, states []cns.StateDef) ([]byte, error)
+func SerializeCmd(original []byte, file cmd.CommandFile) ([]byte, error)
+func SerializeZss(original []byte, script zss.Script) ([]byte, error)
+```
+
+One function per format, each the write-path counterpart to that format's
+own `Parse`/`ParseDocument`: given `original` (that file's previously
+loaded bytes, or empty for a brand new file with none yet) and the current
+in-memory model, it returns the bytes to save. When the model, once
+normalized (nil slices/maps treated the same as their non-nil empty
+equivalent — the same normalization `LoadBytes` already applies to its own
+JSON contract), is unchanged from what parsing `original` itself produces,
+the original bytes are written back out verbatim — a byte-exact round trip,
+matching each format's own `Document` guarantee. Otherwise (the model was
+edited, or `original` is empty) fresh text is generated via that format's
+own `Serialize`, reflecting the model's current values without preserving
+`original`'s comments/ordering. A malformed `original` returns a
+descriptive error rather than silently falling back to a fresh serialize.
+See
+[`.vibe/decisions/028-wasm-save-path-per-format-diff-or-serialize.md`](../.vibe/decisions/028-wasm-save-path-per-format-diff-or-serialize.md)
+for why this strategy was chosen, and why these five are independent
+functions rather than a single call taking one unified, extended
+`Character`.
+
+Exposed to a browser/JS caller as `saveDef`/`saveAir`/`saveCns`/`saveCmd`/
+`saveZss` on the WASM entrypoint — see [docs/wasm.md](wasm.md).
+
+#### Example
+
+```go
+original, _ := os.ReadFile("kfm.cns")
+states, _ := cns.Parse(bytes.NewReader(original))
+
+states[0].Ctrl = false // an edit made by, e.g., a UI layer
+
+out, err := character.SerializeCns(original, states)
+if err != nil {
+    log.Fatal(err)
+}
+os.WriteFile("kfm.cns", out, 0644)
+```
+
 ## `character/air` — animation (`.air`) files
 
 ### Reading
