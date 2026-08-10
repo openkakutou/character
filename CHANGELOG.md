@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed animation files being rejected when a collision box default declaration keyword is misspelled as `Clsn1deault`/`Clsn2deault` (missing the "f" in "Default") — a real-world authoring typo found in a real character (Darkstalkers "Donovan") that is now tolerated as the correctly spelled declaration.
 - Fixed combat logic files being rejected because of a decorative section-banner line (e.g. a lone `[` used as a divider, surrounded by comment lines) with no closing bracket anywhere nearby — a real-world authoring style found in a real character (King of Fighters "Shun Ei") that real MUGEN/Ikemen engines tolerate, now skipped the same way an unrelated but properly closed bracket line already was.
 - Fixed animation files being rejected when a comment-like line starts with `:` instead of the standard `;` marker (e.g. `: Kagerou No Mai (RBS version)`) — a real-world authoring style found in a real character (King of Fighters "Mai (98)") that is now ignored the same way a standard comment line already was.
+- Fixed animation files being rejected when a combat-logic block (`[Statedef N]` and its `[State ...]` sub-blocks) is embedded partway through the file alongside the animation data — a real-world authoring style found in a real character (One Piece "Luffy") that is now skipped, the same way an unrelated but properly recognized section already was; a genuinely malformed animation header still reports the same descriptive error as before.
 
 ## [0.6.0] - 2026-08-10
 

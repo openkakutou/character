@@ -24,6 +24,16 @@ func stripComment(line string) string {
 // action number.
 var actionHeaderPattern = regexp.MustCompile(`(?i)^\[\s*begin\s+action\s+(-?\d+)\s*\]`)
 
+// actionHeaderAttemptPattern recognizes any bracket line that starts with
+// the "begin" keyword, whether or not it goes on to match
+// actionHeaderPattern — used to tell a malformed "[Begin Action N]" header
+// apart from a genuinely unrelated bracket section (e.g. an embedded
+// "[Statedef N]"/"[State N]" block, item 055). The keyword must be
+// immediately followed by whitespace, "]", or end of line so a bare
+// "[Begin" with nothing else on the line is still recognized as an attempt,
+// mirroring cns.Parse's statedefAttemptPattern/stateAttemptPattern.
+var actionHeaderAttemptPattern = regexp.MustCompile(`(?i)^\[\s*begin(\s|\]|$)`)
+
 // Parse reads MUGEN/Ikemen GO .air animation text from r and returns the
 // Animations it describes, in file order.
 //
@@ -37,11 +47,17 @@ var actionHeaderPattern = regexp.MustCompile(`(?i)^\[\s*begin\s+action\s+(-?\d+)
 // An empty input returns an empty, non-nil-error result rather than an
 // error. A frame line's group or image field may be -1, the ".air"
 // convention for "no sprite shown on this frame" (see Frame.IsBlank).
-// Malformed input — an unrecognized action header, a frame line with
-// missing or non-numeric fields, or a group/image index more negative than
-// the -1 sentinel — returns a descriptive error naming the offending line
-// rather than panicking or silently producing incorrect data, as does a
-// reader that fails outright.
+// A bracket line that isn't even an attempt at "[Begin Action N]" — e.g. a
+// "[Statedef N]"/"[State N]" block some real-world .air files carry
+// embedded alongside their animation data — is skipped, along with the
+// content lines that follow it, rather than erroring (item 055), the same
+// tolerance cns.Parse already applies to sections outside its own scope.
+// Malformed input — a bracket line that looks like an attempted "[Begin
+// Action N]" header yet fails to parse (missing or non-numeric action
+// number), a frame line with missing or non-numeric fields, or a
+// group/image index more negative than the -1 sentinel — still returns a
+// descriptive error naming the offending line rather than panicking or
+// silently producing incorrect data, as does a reader that fails outright.
 func Parse(r io.Reader) ([]Animation, error) {
 	scanner := bufio.NewScanner(r)
 
@@ -82,7 +98,21 @@ func Parse(r io.Reader) ([]Animation, error) {
 		if strings.HasPrefix(line, "[") {
 			m := actionHeaderPattern.FindStringSubmatch(line)
 			if m == nil {
-				return nil, fmt.Errorf("air: line %d: malformed action header %q", lineNumber, line)
+				if actionHeaderAttemptPattern.MatchString(line) {
+					return nil, fmt.Errorf("air: line %d: malformed action header %q", lineNumber, line)
+				}
+				// A bracket line that isn't even an attempt at "[Begin
+				// Action N]" is genuinely unrelated content — e.g. a
+				// "[Statedef N]"/"[State N]" block some real-world .air
+				// files carry embedded alongside their animation data
+				// (item 055). It's skipped, along with whatever content
+				// lines follow it, until the next recognized action
+				// header, the same tolerance cns.Parse already applies to
+				// sections outside its own scope.
+				current = nil
+				defaultClsn1, defaultClsn2 = nil, nil
+				pendingClsn1, pendingClsn2 = nil, nil
+				continue
 			}
 			number, err := strconv.Atoi(m[1])
 			if err != nil {

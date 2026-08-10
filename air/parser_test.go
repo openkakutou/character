@@ -313,6 +313,61 @@ func TestParse_MalformedActionHeaderAsFirstLine_ReturnsErrorNamingLine(t *testin
 	}
 }
 
+func TestParse_EmbeddedStatedefBlock_IsToleratedAndSurroundingActionsAreParsed(t *testing.T) {
+	// Mirrors a real-world .air file (One Piece "Luffy") that carries a
+	// "[Statedef N]" block with its own "[State ...]" sub-blocks embedded
+	// between two normal animation actions — item 055.
+	src := "[Begin Action 0]\n" +
+		"0,0, 0,0, 8\n" +
+		"\n" +
+		";Blast Shell Explode\n" +
+		"[Statedef 1060]\n" +
+		"type    = A\n" +
+		"movetype= A\n" +
+		"\n" +
+		"[State 200, a]\n" +
+		"type = ChangeAnim\n" +
+		"triggerall = prevstateno != 9000\n" +
+		"trigger1 = time = 0\n" +
+		"value = 2018\n" +
+		"\n" +
+		"[State Destroy]\n" +
+		"type = DestroySelf\n" +
+		"trigger1 = AnimTime = 0\n" +
+		"\n" +
+		"[Begin Action 1]\n" +
+		"-1,0, 0,0, 10\n"
+
+	animations, err := Parse(strings.NewReader(src))
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	if len(animations) != 2 {
+		t.Fatalf("expected 2 animations, got %d", len(animations))
+	}
+
+	if animations[0].Number != 0 {
+		t.Errorf("expected first animation number 0, got %d", animations[0].Number)
+	}
+	if len(animations[0].Frames) != 1 {
+		t.Fatalf("expected action 0 to have 1 frame, got %d", len(animations[0].Frames))
+	}
+	if got := animations[0].Frames[0]; got.Group != 0 || got.Image != 0 || got.Time != 8 {
+		t.Errorf("unexpected frame for action 0: %+v", got)
+	}
+
+	if animations[1].Number != 1 {
+		t.Errorf("expected second animation number 1, got %d", animations[1].Number)
+	}
+	if len(animations[1].Frames) != 1 {
+		t.Fatalf("expected action 1 to have 1 frame, got %d", len(animations[1].Frames))
+	}
+	if got := animations[1].Frames[0]; !got.IsBlank() || got.Time != 10 {
+		t.Errorf("unexpected frame for action 1: %+v", got)
+	}
+}
+
 func TestParse_MalformedActionHeaderMidFile_ReturnsErrorNamingLine(t *testing.T) {
 	src := "[Begin Action 0]\n0,0, 0,0, 1\n[Begin Foo]\n"
 
