@@ -20,7 +20,26 @@ import (
 // never a write-only, format-preservation type — per CLAUDE.md's read/write
 // separation constraint.
 type Character struct {
-	Name       string            `json:"name"`
+	Name string `json:"name"`
+	// Author is the character's author/creator, from the .def [Info]
+	// section's "author" key. Empty when the source .def doesn't set it.
+	Author string `json:"author"`
+	// SpriteFile, AnimationFile, SoundFile, CommandFile, and ConstantsFile
+	// are the referenced file paths from the .def [Files] section, exactly
+	// as written there (see def.CharacterInfo). They are metadata only —
+	// LoadBytes does not use them to locate the animations/sprites/state
+	// defs it was handed directly as byte buffers, and Load already
+	// resolved them against the filesystem before returning.
+	SpriteFile    string `json:"spriteFile"`
+	AnimationFile string `json:"animationFile"`
+	SoundFile     string `json:"soundFile"`
+	CommandFile   string `json:"commandFile"`
+	ConstantsFile string `json:"constantsFile"`
+	// StateFiles lists additional state definition (.st) files beyond
+	// ConstantsFile, and Palettes lists palette (.act) files — both from
+	// the .def [Files] section, see def.CharacterInfo.
+	StateFiles []string          `json:"stateFiles"`
+	Palettes   []string          `json:"palettes"`
 	Animations []air.Animation   `json:"animations"`
 	Sprites    []sff.SpriteGroup `json:"sprites"`
 	StateDefs  []cns.StateDef    `json:"stateDefs"`

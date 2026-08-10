@@ -1,5 +1,5 @@
 ---
-status: todo
+status: in_progress
 ---
 # Thread Full CharacterInfo Fields Through LoadBytes JSON Contract
 

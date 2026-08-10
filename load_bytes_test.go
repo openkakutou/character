@@ -3,6 +3,7 @@ package character
 import (
 	"bytes"
 	"encoding/json"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -151,6 +152,100 @@ physics = S
 	}
 	if !strings.Contains(out, `"controllers":[]`) {
 		t.Errorf("expected state's controllers to marshal as an empty array, got: %s", out)
+	}
+	if !strings.Contains(out, `"stateFiles":[]`) {
+		t.Errorf("expected stateFiles to marshal as an empty array, got: %s", out)
+	}
+	if !strings.Contains(out, `"palettes":[]`) {
+		t.Errorf("expected palettes to marshal as an empty array, got: %s", out)
+	}
+}
+
+// TestLoadBytes_DefWithFullMetadata_ThreadsAllCharacterInfoFieldsToCharacter
+// pins backlog item 038: every field def.CharacterInfo already parses (not
+// just Name) must reach the Character LoadBytes returns, since that's the
+// JSON contract WASM consumers (e.g. character-viewer-web's characteristics
+// panel) read from.
+func TestLoadBytes_DefWithFullMetadata_ThreadsAllCharacterInfoFieldsToCharacter(t *testing.T) {
+	_, airBytes, sffBytes, cnsBytes := fixtureCharacterBytes(t)
+
+	defBytes := []byte(`[Info]
+name = Test Character
+author = Test Author
+
+[Files]
+sprite = char.sff
+anim = char.air
+sound = char.snd
+cmd = char.cmd
+cns = char.cns
+st1 = extra1.st
+st2 = extra2.st
+pal1 = char1.act
+pal2 = char2.act
+`)
+
+	c, err := LoadBytes(defBytes, airBytes, sffBytes, cnsBytes)
+	if err != nil {
+		t.Fatalf("LoadBytes returned error: %v", err)
+	}
+
+	if c.Author != "Test Author" {
+		t.Errorf("expected Author %q, got %q", "Test Author", c.Author)
+	}
+	if c.SpriteFile != "char.sff" {
+		t.Errorf("expected SpriteFile %q, got %q", "char.sff", c.SpriteFile)
+	}
+	if c.AnimationFile != "char.air" {
+		t.Errorf("expected AnimationFile %q, got %q", "char.air", c.AnimationFile)
+	}
+	if c.SoundFile != "char.snd" {
+		t.Errorf("expected SoundFile %q, got %q", "char.snd", c.SoundFile)
+	}
+	if c.CommandFile != "char.cmd" {
+		t.Errorf("expected CommandFile %q, got %q", "char.cmd", c.CommandFile)
+	}
+	if c.ConstantsFile != "char.cns" {
+		t.Errorf("expected ConstantsFile %q, got %q", "char.cns", c.ConstantsFile)
+	}
+	wantStateFiles := []string{"extra1.st", "extra2.st"}
+	if !reflect.DeepEqual(c.StateFiles, wantStateFiles) {
+		t.Errorf("expected StateFiles %v, got %v", wantStateFiles, c.StateFiles)
+	}
+	wantPalettes := []string{"char1.act", "char2.act"}
+	if !reflect.DeepEqual(c.Palettes, wantPalettes) {
+		t.Errorf("expected Palettes %v, got %v", wantPalettes, c.Palettes)
+	}
+}
+
+// TestLoadBytes_DefMissingOptionalMetadataFields_LoadsSuccessfullyWithEmptyFields
+// pins the acceptance criterion that a .def missing optional metadata still
+// loads successfully, with those fields empty/zero rather than erroring.
+func TestLoadBytes_DefMissingOptionalMetadataFields_LoadsSuccessfullyWithEmptyFields(t *testing.T) {
+	_, airBytes, sffBytes, cnsBytes := fixtureCharacterBytes(t)
+
+	// No "author" key, no [Files] entries beyond what LoadBytes itself
+	// needs to parse the other three buffers.
+	defBytes := []byte(`[Info]
+name = Bare Character
+`)
+
+	c, err := LoadBytes(defBytes, airBytes, sffBytes, cnsBytes)
+	if err != nil {
+		t.Fatalf("LoadBytes returned error: %v", err)
+	}
+
+	if c.Author != "" {
+		t.Errorf("expected empty Author, got %q", c.Author)
+	}
+	if c.SpriteFile != "" || c.AnimationFile != "" || c.SoundFile != "" || c.CommandFile != "" || c.ConstantsFile != "" {
+		t.Errorf("expected all optional file fields empty, got %+v", c)
+	}
+	if len(c.StateFiles) != 0 {
+		t.Errorf("expected empty StateFiles, got %v", c.StateFiles)
+	}
+	if len(c.Palettes) != 0 {
+		t.Errorf("expected empty Palettes, got %v", c.Palettes)
 	}
 }
 

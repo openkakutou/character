@@ -51,10 +51,18 @@ func LoadBytes(defBytes, airBytes, sffBytes, cnsBytes []byte) (*Character, error
 	}
 
 	c := &Character{
-		Name:       info.Name,
-		Animations: animations,
-		Sprites:    sprites,
-		StateDefs:  stateDefs,
+		Name:          info.Name,
+		Author:        info.Author,
+		SpriteFile:    info.SpriteFile,
+		AnimationFile: info.AnimationFile,
+		SoundFile:     info.SoundFile,
+		CommandFile:   info.CommandFile,
+		ConstantsFile: info.ConstantsFile,
+		StateFiles:    info.StateFiles,
+		Palettes:      info.Palettes,
+		Animations:    animations,
+		Sprites:       sprites,
+		StateDefs:     stateDefs,
 	}
 	normalizeForJSON(c)
 	return c, nil
@@ -87,6 +95,13 @@ func normalizeForJSON(c *Character) {
 	}
 	for i := range c.StateDefs {
 		normalizeStateDefForJSON(&c.StateDefs[i])
+	}
+
+	if c.StateFiles == nil {
+		c.StateFiles = []string{}
+	}
+	if c.Palettes == nil {
+		c.Palettes = []string{}
 	}
 }
 

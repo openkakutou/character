@@ -58,10 +58,18 @@ func Load(path string) (*Character, error) {
 	}
 
 	return &Character{
-		Name:       info.Name,
-		Animations: animations,
-		Sprites:    sprites,
-		StateDefs:  stateDefs,
+		Name:          info.Name,
+		Author:        info.Author,
+		SpriteFile:    info.SpriteFile,
+		AnimationFile: info.AnimationFile,
+		SoundFile:     info.SoundFile,
+		CommandFile:   info.CommandFile,
+		ConstantsFile: info.ConstantsFile,
+		StateFiles:    info.StateFiles,
+		Palettes:      info.Palettes,
+		Animations:    animations,
+		Sprites:       sprites,
+		StateDefs:     stateDefs,
 	}, nil
 }
 

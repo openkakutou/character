@@ -142,6 +142,43 @@ func TestLoad_ValidDefFile_ProducesFullyPopulatedCharacter(t *testing.T) {
 	}
 }
 
+// TestLoad_ValidDefFile_ThreadsAuthorAndReferencedFilePathsToCharacter pins
+// backlog item 038 for the filesystem-based loader too: Load and LoadBytes
+// share the same Character type, so a field threaded through one must be
+// threaded through the other, not just the WASM-facing entrypoint.
+func TestLoad_ValidDefFile_ThreadsAuthorAndReferencedFilePathsToCharacter(t *testing.T) {
+	defPath := writeFixtureCharacter(t)
+
+	c, err := Load(defPath)
+	if err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+
+	if c.Author != "Test Author" {
+		t.Errorf("expected Author %q, got %q", "Test Author", c.Author)
+	}
+	if c.SpriteFile != "char.sff" {
+		t.Errorf("expected SpriteFile %q, got %q", "char.sff", c.SpriteFile)
+	}
+	if c.AnimationFile != "char.air" {
+		t.Errorf("expected AnimationFile %q, got %q", "char.air", c.AnimationFile)
+	}
+	if c.ConstantsFile != "char.cns" {
+		t.Errorf("expected ConstantsFile %q, got %q", "char.cns", c.ConstantsFile)
+	}
+	// The fixture's .def has no sound/cmd/st/pal entries: those fields
+	// must stay empty/zero rather than erroring.
+	if c.SoundFile != "" || c.CommandFile != "" {
+		t.Errorf("expected empty SoundFile/CommandFile, got %+v", c)
+	}
+	if len(c.StateFiles) != 0 {
+		t.Errorf("expected empty StateFiles, got %v", c.StateFiles)
+	}
+	if len(c.Palettes) != 0 {
+		t.Errorf("expected empty Palettes, got %v", c.Palettes)
+	}
+}
+
 func TestLoad_DefReferencesMissingAnimationFile_ReturnsDescriptiveErrorNotPanic(t *testing.T) {
 	defPath := writeFixtureCharacter(t)
 	dir := filepath.Dir(defPath)

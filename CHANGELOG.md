@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Loading a character now exposes its full metadata (author, and every referenced file: sprite, animation, sound, command, combat logic, extra state files, palettes) to WASM consumers, not just its name — e.g. `character-viewer-web`'s characteristics panel can now show a character's author.
+
 ### Fixed
 
 - Fixed loading a character whose `.def` references a sprite/animation/combat-logic file under different letter casing than the actual file on disk (e.g. `Kyoxiii.air` referencing an actual `KyoXIII.air`) — a legacy of MUGEN/Ikemen historically running on case-insensitive Windows filesystems, which caused a spurious "file not found" error on Linux and in the browser; the second-largest cause of character loading failures found in a real-character corpus scan.

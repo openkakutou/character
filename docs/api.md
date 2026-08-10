@@ -9,10 +9,18 @@ covers what's implemented today.
 
 ```go
 type Character struct {
-    Name       string
-    Animations []air.Animation
-    Sprites    []sff.SpriteGroup
-    StateDefs  []cns.StateDef
+    Name          string
+    Author        string
+    SpriteFile    string
+    AnimationFile string
+    SoundFile     string
+    CommandFile   string
+    ConstantsFile string
+    StateFiles    []string
+    Palettes      []string
+    Animations    []air.Animation
+    Sprites       []sff.SpriteGroup
+    StateDefs     []cns.StateDef
 }
 
 func (c *Character) ResolveSprite(frame air.Frame) (sff.Sprite, error)
@@ -22,9 +30,15 @@ func LoadBytes(defBytes, airBytes, sffBytes, cnsBytes []byte) (*Character, error
 ```
 
 `Character` is the assembled unit a library consumer (editor, engine) works
-with: `Animations`/`Sprites`/`StateDefs` are exposed through the
-`air`/`sff`/`cns` read-path types only — never a write-only,
-format-preservation type. `ResolveSprite` looks up the actual `sff.Sprite` a
+with: `Name`/`Author`/`SpriteFile`/`AnimationFile`/`SoundFile`/`CommandFile`/
+`ConstantsFile`/`StateFiles`/`Palettes` are threaded straight through from
+the `.def` file's own `def.CharacterInfo` (see `character/def`) — the file
+path fields are metadata only, carried over as written in the `.def` file;
+neither `Load` nor `LoadBytes` re-derives the animations/sprites/state defs
+they've already loaded from them. `Animations`/`Sprites`/`StateDefs` are
+exposed through the `air`/`sff`/`cns` read-path types only — never a
+write-only, format-preservation type. `ResolveSprite` looks up the actual
+`sff.Sprite` a
 `Frame` (typically one of `c.Animations[i].Frames`) shows, by delegating to
 `air.NewSpriteResolver(c.Sprites)`; it returns the same kind of descriptive
 error `SpriteResolver.Resolve` does when no sprite in `c.Sprites` matches

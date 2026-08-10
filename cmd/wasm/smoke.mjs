@@ -54,10 +54,22 @@ assert(typeof okResult.character === "string", "nominal load returns a character
 
 const character = JSON.parse(okResult.character ?? "null");
 assert(character?.name === "Smoke Test", `character name is "Smoke Test" (got: ${character?.name})`);
+assert(character?.author === "Someone", `character author is "Someone" (got: ${character?.author})`);
 assert(Array.isArray(character?.animations) && character.animations.length === 2, "character has 2 animations");
 assert(Array.isArray(character?.sprites) && character.sprites.length === 1, "character has 1 sprite group");
 assert(Array.isArray(character?.stateDefs) && character.stateDefs.length === 3, "character has 3 state defs");
 assert(Array.isArray(character?.animations?.[0]?.frames?.[0]?.clsn1), "a frame's empty clsn1 is an array, not null/undefined");
+
+// --- backlog item 038: the rest of CharacterInfo's fields (unset in this
+// fixture's .def, which has no [Files] section) must still be present in
+// the JSON contract, empty/zero rather than missing or null ---
+assert(character?.spriteFile === "", `unset spriteFile is an empty string (got: ${JSON.stringify(character?.spriteFile)})`);
+assert(character?.animationFile === "", `unset animationFile is an empty string (got: ${JSON.stringify(character?.animationFile)})`);
+assert(character?.soundFile === "", `unset soundFile is an empty string (got: ${JSON.stringify(character?.soundFile)})`);
+assert(character?.commandFile === "", `unset commandFile is an empty string (got: ${JSON.stringify(character?.commandFile)})`);
+assert(character?.constantsFile === "", `unset constantsFile is an empty string (got: ${JSON.stringify(character?.constantsFile)})`);
+assert(Array.isArray(character?.stateFiles) && character.stateFiles.length === 0, "unset stateFiles is an empty array, not null");
+assert(Array.isArray(character?.palettes) && character.palettes.length === 0, "unset palettes is an empty array, not null");
 
 // --- error path: malformed sff bytes ---
 const errResult = globalThis.OpenKakutouCharacter.load(defBytes, airBytes, new TextEncoder().encode("garbage"), cnsBytes);

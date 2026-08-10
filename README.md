@@ -48,6 +48,7 @@ This project is in early-stage development. Shipped so far:
 - Reading Ikemen GO's Lua-like state script (`.zss`) files — an alternative way of writing a character's combat logic — into structured data: each state or helper script's own identifying details, with its scripted behavior kept intact as-is (this library reads and writes `.zss` files, it does not run the scripts themselves); a malformed file is caught with a clear, line-numbered error instead of crashing
 - Writing `.zss` data back out to valid text, ready to be read by Ikemen GO or read back in by this library
 - Loading a `.zss` file and saving it back out unchanged reproduces the original file exactly — so re-saving a file you haven't edited never creates a noisy diff
+- A character loaded via the WebAssembly build now also exposes its full metadata — author and every referenced file (sprite, animation, sound, commands, combat logic, additional states, palettes) — not just its name, so web apps can show a character's credits and file layout, not only its animations/sprites/combat logic
 
 Planned:
 

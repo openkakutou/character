@@ -30,12 +30,20 @@ Defined in: `def/document.go`
 ## Character
 | Field | Type | Notes |
 |---|---|---|
-| Name | string | Populated from `CharacterInfo.Name` when built via `Load` |
+| Name | string | Populated from `CharacterInfo.Name` |
+| Author | string | Populated from `CharacterInfo.Author`; empty when the `.def` doesn't set it |
+| SpriteFile | string | Populated from `CharacterInfo.SpriteFile`; metadata only — not used to locate `Sprites` |
+| AnimationFile | string | Populated from `CharacterInfo.AnimationFile`; metadata only — not used to locate `Animations` |
+| SoundFile | string | Populated from `CharacterInfo.SoundFile` |
+| CommandFile | string | Populated from `CharacterInfo.CommandFile` |
+| ConstantsFile | string | Populated from `CharacterInfo.ConstantsFile`; metadata only — not used to locate `StateDefs` |
+| StateFiles | []string | Populated from `CharacterInfo.StateFiles` |
+| Palettes | []string | Populated from `CharacterInfo.Palettes` |
 | Animations | []air.Animation | Exposed through `air`'s read-path type only |
 | Sprites | []sff.SpriteGroup | Exposed through `sff`'s read-path type only |
 | StateDefs | []cns.StateDef | Exposed through `cns`'s read-path type only |
 
-Every field carries a `json:"..."` tag (`name`, `animations`, `sprites`, `stateDefs`).
+Every field carries a `json:"..."` tag (`name`, `author`, `spriteFile`, `animationFile`, `soundFile`, `commandFile`, `constantsFile`, `stateFiles`, `palettes`, `animations`, `sprites`, `stateDefs`). Both `Load` and `LoadBytes` populate every `CharacterInfo`-derived field, not just `Name` (backlog item 038).
 
 Method: `(*Character) ResolveSprite(frame air.Frame) (sff.Sprite, error)` — resolves `frame`'s `(Group, Image)` reference against `Sprites`, by delegating to `air.NewSpriteResolver(c.Sprites)`; returns the same descriptive error `SpriteResolver.Resolve` does when no match exists, including when `Sprites` is empty (e.g. a zero-value `Character`).
 
