@@ -7,7 +7,7 @@
 
 OpenKakutou `character` is a read/write Go library for MUGEN/Ikemen GO fighting-game character files (`.def`, `.air`, `.cns`, plus `.cmd`/`.zss` planned). Sprite (`.sff`) handling itself lives in the separate [`sff`](https://github.com/openkakutou/sff) repo, which this library depends on (see backlog item 035). It is the foundation of the OpenKakutou org: the web-based character viewer/editor apps (`character-viewer-web`, `character-editor`) and the combat simulation engine (`engine`) all depend on it. It has no rendering dependency and must compile cleanly to WebAssembly.
 
-**Stack:** Go 1.26, compiled to WASM (`GOOS=js GOARCH=wasm`) for the web editor; reusable later in a desktop build via Wails. No UI code lives in this repo.
+**Stack:** Go 1.26, compiled to WASM (`GOOS=js GOARCH=wasm`) for web consumers (`character-viewer-web`, `character-editor`'s web build); imported as an ordinary native Go package by non-web consumers (`mode-quick-versus`'s native build, `character-editor`'s future desktop build) — see `roadmap`'s `.vibe/decisions/022`. No UI code lives in this repo.
 **Type:** library
 
 ## Project language
