@@ -196,6 +196,60 @@ assert(
 	"saveCns (edited) output differs from the original",
 );
 
+// --- loadCmd: read/parse path (item 056) ---
+// .cmd isn't wired into `load`'s Character/JSON contract either, so this
+// exercises cmd bytes directly rather than through `character`.
+
+// loadCmd: nominal, MUGEN-style .cmd (explicit [Statedef -1], [Remap]).
+const mugenCmdBytes = new TextEncoder().encode(
+	`[Remap]\na = a\nb = b\n\n[Defaults]\ncommand.time = 15\ncommand.buffer.time = 1\n\n[Command]\nname = "QCF_a"\ncommand = ~D, DF, F, a\n\n[Statedef -1]\n\n[State -1, QCF Special]\ntype = ChangeState\nvalue = 1000\ntrigger1 = command = "QCF_a"\n`,
+);
+const loadMugenCmdResult = globalThis.OpenKakutouCharacter.loadCmd(mugenCmdBytes);
+assert(loadMugenCmdResult.error === null, `loadCmd (MUGEN-style) reports no error (got: ${loadMugenCmdResult.error})`);
+assert(typeof loadMugenCmdResult.commandFile === "string", "loadCmd (MUGEN-style) returns a commandFile JSON string");
+const mugenCommandFile = JSON.parse(loadMugenCmdResult.commandFile ?? "null");
+assert(mugenCommandFile?.remap?.a === "a" && mugenCommandFile?.remap?.b === "b", `loadCmd (MUGEN-style) parses [Remap] (got: ${JSON.stringify(mugenCommandFile?.remap)})`);
+assert(mugenCommandFile?.defaults?.time === 15 && mugenCommandFile?.defaults?.bufferTime === 1, `loadCmd (MUGEN-style) parses [Defaults] (got: ${JSON.stringify(mugenCommandFile?.defaults)})`);
+assert(Array.isArray(mugenCommandFile?.commands) && mugenCommandFile.commands.length === 1 && mugenCommandFile.commands[0].name === "QCF_a", `loadCmd (MUGEN-style) parses the [Command] section (got: ${JSON.stringify(mugenCommandFile?.commands)})`);
+assert(Array.isArray(mugenCommandFile?.states) && mugenCommandFile.states.length === 1 && mugenCommandFile.states[0].number === -1, `loadCmd (MUGEN-style) links the Statedef -1 state (got: ${JSON.stringify(mugenCommandFile?.states)})`);
+
+// loadCmd: Ikemen GO-style .cmd — omits the "[Statedef -1]" header entirely
+// (cmd.Parse synthesizes it) and uses charge-input notation.
+const ikemenCmdBytes = new TextEncoder().encode(
+	`[Command]\nname = "charge_hs"\ncommand = ~$D, /$U, a+b~\ntime = 15\n\n[State -1, Charge Special]\ntype = ChangeState\nvalue = 2000\ntrigger1 = command = "charge_hs"\n`,
+);
+const loadIkemenCmdResult = globalThis.OpenKakutouCharacter.loadCmd(ikemenCmdBytes);
+assert(loadIkemenCmdResult.error === null, `loadCmd (Ikemen-style) reports no error (got: ${loadIkemenCmdResult.error})`);
+const ikemenCommandFile = JSON.parse(loadIkemenCmdResult.commandFile ?? "null");
+assert(ikemenCommandFile?.commands?.[0]?.input === "~$D, /$U, a+b~", `loadCmd (Ikemen-style) preserves the charge input verbatim (got: ${ikemenCommandFile?.commands?.[0]?.input})`);
+assert(Array.isArray(ikemenCommandFile?.states) && ikemenCommandFile.states.length === 1 && ikemenCommandFile.states[0].number === -1, `loadCmd (Ikemen-style) still synthesizes and links the implicit Statedef -1 (got: ${JSON.stringify(ikemenCommandFile?.states)})`);
+
+// loadCmd: malformed .cmd bytes return a descriptive error, not a throw.
+const loadCmdMalformedResult = globalThis.OpenKakutouCharacter.loadCmd(new TextEncoder().encode("[Command\nname = \"a\"\n"));
+assert(loadCmdMalformedResult.commandFile === null, "loadCmd (malformed) returns null commandFile");
+assert(typeof loadCmdMalformedResult.error === "string" && loadCmdMalformedResult.error.length > 0, `loadCmd (malformed) reports a descriptive error (got: ${loadCmdMalformedResult.error})`);
+
+// loadCmd: wrong argument count, must not crash the module.
+const loadCmdArgCountResult = globalThis.OpenKakutouCharacter.loadCmd();
+assert(loadCmdArgCountResult.commandFile === null, "loadCmd (missing argument) returns null commandFile");
+assert(typeof loadCmdArgCountResult.error === "string" && loadCmdArgCountResult.error.length > 0, "loadCmd (missing argument) reports an error");
+
+// loadCmd -> edit -> saveCmd round trip: the edited field persists, the
+// rest is unchanged.
+const roundTripEdited = JSON.parse(JSON.stringify(mugenCommandFile));
+roundTripEdited.commands[0].name = "QCF_a_renamed";
+const roundTripSaveResult = globalThis.OpenKakutouCharacter.saveCmd(mugenCmdBytes, JSON.stringify(roundTripEdited));
+assert(roundTripSaveResult.error === null, `loadCmd -> saveCmd round trip reports no error (got: ${roundTripSaveResult.error})`);
+const roundTripReloadResult = globalThis.OpenKakutouCharacter.loadCmd(roundTripSaveResult.bytes);
+assert(roundTripReloadResult.error === null, `loadCmd -> saveCmd -> loadCmd round trip reports no error (got: ${roundTripReloadResult.error})`);
+const roundTrippedCommandFile = JSON.parse(roundTripReloadResult.commandFile ?? "null");
+assert(roundTrippedCommandFile?.commands?.[0]?.name === "QCF_a_renamed", `round trip: edited command name persists (got: ${roundTrippedCommandFile?.commands?.[0]?.name})`);
+assert(roundTrippedCommandFile?.remap?.a === "a", "round trip: unedited fields (remap) are unchanged");
+
+// The module must still respond correctly after loadCmd errors too.
+const afterLoadCmdErrorResult = globalThis.OpenKakutouCharacter.load(defBytes, airBytes, sffBytes, cnsBytes);
+assert(afterLoadCmdErrorResult.error === null, "module still works after a prior loadCmd error");
+
 // saveCmd: not yet wired into `load`'s Character/JSON contract (.cmd isn't
 // part of it), so the baseline comes from a fresh, empty original — a new
 // command file — rather than round-tripping character.commandFile.

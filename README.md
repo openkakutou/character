@@ -50,6 +50,7 @@ This project is in early-stage development. Shipped so far:
 - Loading a `.zss` file and saving it back out unchanged reproduces the original file exactly — so re-saving a file you haven't edited never creates a noisy diff
 - A character loaded via the WebAssembly build now also exposes its full metadata — author and every referenced file (sprite, animation, sound, commands, combat logic, additional states, palettes) — not just its name, so web apps can show a character's credits and file layout, not only its animations/sprites/combat logic
 - Edited characters can now be saved back out from a web app via the WebAssembly build too, not just loaded — a character definition, its animations, its combat logic (either `.cns` or `.zss` style), and its command inputs can each be saved individually; saving without having made any edit reproduces the original file exactly, and an invalid save request is caught with a clear error instead of crashing the page
+- An existing character's command inputs can now be read directly in a web app via the WebAssembly build, not just saved — named input sequences, their recognition timing, optional button remapping, and their link to the state changes they trigger; a malformed command file is caught with a clear error instead of crashing the page
 
 Planned:
 

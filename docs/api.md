@@ -99,6 +99,29 @@ c := character.Character{
 }
 ```
 
+### Reading a `.cmd` file directly
+
+```go
+func ParseCmd(cmdBytes []byte) (cmd.CommandFile, error)
+```
+
+`.cmd` isn't wired into `Character`/`Load`/`LoadBytes` — a character uses it
+independently of the rest of its files, and `cmd.CommandFile`'s shape has no
+place on `Character` yet (see
+[`.vibe/decisions/028-wasm-save-path-per-format-diff-or-serialize.md`](../.vibe/decisions/028-wasm-save-path-per-format-diff-or-serialize.md)'s
+rejected alternatives). `ParseCmd` is the read-path counterpart to
+`SerializeCmd` for a caller with no filesystem access — chiefly the WASM
+entrypoint (see [docs/wasm.md](wasm.md)) — wrapping `cmd.Parse` (see
+`character/cmd` below) the same way `LoadBytes` wraps `def.Parse`/
+`air.Parse`/`cns.Parse`. Every reachable slice/map on the returned
+`cmd.CommandFile` is guaranteed non-`nil`, the same normalization
+`LoadBytes`/`SerializeCmd` already apply for their own JSON contracts. A
+malformed or truncated `cmdBytes` returns a descriptive error rather than
+panicking.
+
+Exposed to a browser/JS caller as `loadCmd` on the WASM entrypoint — see
+[docs/wasm.md](wasm.md).
+
 ### Saving edited characters
 
 ```go

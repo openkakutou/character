@@ -34,6 +34,7 @@ func main() {
 	globalName := "OpenKakutouCharacter"
 	js.Global().Set(globalName, js.ValueOf(map[string]any{
 		"load":           js.FuncOf(load),
+		"loadCmd":        js.FuncOf(loadCmd),
 		"resolveSprites": js.FuncOf(resolveSprites),
 		"saveDef":        js.FuncOf(saveDef),
 		"saveAir":        js.FuncOf(saveAir),
@@ -122,6 +123,54 @@ func result(characterJSON []byte, err error) map[string]any {
 		return map[string]any{"character": nil, "error": err.Error()}
 	}
 	return map[string]any{"character": string(characterJSON), "error": nil}
+}
+
+// loadCmd is OpenKakutouCharacter.loadCmd(cmdBytes) as seen from JS:
+// cmdBytes is a Uint8Array holding a .cmd file's raw bytes. It always
+// returns a JS object shaped { commandFile: string|null, error: string|null
+// } — exactly one of the two fields is non-null — never throws. Unlike
+// load, .cmd isn't wired into Character, so this wraps
+// character.ParseCmd directly rather than character.LoadBytes; commandFile
+// is a JSON-encoded string of cmd.CommandFile (remap, defaults, commands,
+// states), matching load's own string-payload convention. This is the
+// read-path counterpart to saveCmd, letting a caller round-trip: parse ->
+// edit -> saveCmd.
+func loadCmd(this js.Value, args []js.Value) any {
+	defer func() {
+		// See load's identical recover() — a panic here would otherwise
+		// tear down the whole page's WASM instance.
+		recover()
+	}()
+
+	if len(args) != 1 {
+		return loadCmdResult(nil, fmt.Errorf("OpenKakutouCharacter.loadCmd: expected 1 argument (cmdBytes), got %d", len(args)))
+	}
+
+	cmdBytes, err := bytesFromJS(args[0])
+	if err != nil {
+		return loadCmdResult(nil, fmt.Errorf("OpenKakutouCharacter.loadCmd: cmdBytes: %w", err))
+	}
+
+	file, err := character.ParseCmd(cmdBytes)
+	if err != nil {
+		return loadCmdResult(nil, err)
+	}
+
+	data, err := json.Marshal(file)
+	if err != nil {
+		return loadCmdResult(nil, fmt.Errorf("OpenKakutouCharacter.loadCmd: encoding result as JSON: %w", err))
+	}
+
+	return loadCmdResult(data, nil)
+}
+
+// loadCmdResult builds loadCmd's { commandFile, error } JS return shape.
+// Exactly one field is ever non-null.
+func loadCmdResult(commandFileJSON []byte, err error) map[string]any {
+	if err != nil {
+		return map[string]any{"commandFile": nil, "error": err.Error()}
+	}
+	return map[string]any{"commandFile": string(commandFileJSON), "error": nil}
 }
 
 // resolveSprites is

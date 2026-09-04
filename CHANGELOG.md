@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Existing `.cmd` (input command) files can now be read from a browser, not just saved: a WASM consumer can parse a character's command file into its structured remap/defaults/commands/state data, then edit and save it back — completing the load-edit-save round trip for command files.
+
 ## [0.7.1] - 2026-09-02
 
 ### Fixed

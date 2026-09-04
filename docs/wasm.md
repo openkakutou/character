@@ -120,6 +120,43 @@ for (const { pixels, width, height, error } of results) {
 }
 ```
 
+## Reading a `.cmd` file directly
+
+`.cmd` isn't wired into `load`'s JSON contract (unlike `.def`/`.air`/`.cns`)
+— a separate global reads one directly:
+
+```js
+globalThis.OpenKakutouCharacter.loadCmd(cmdBytes)
+```
+
+- **Arguments**: a single `Uint8Array` holding a `.cmd` file's raw bytes.
+- **Return value**: always a plain object `{ commandFile, error }`, exactly
+  one field non-`null`:
+  - `commandFile` — a JSON string of the parsed `CommandFile` (remap,
+    defaults, commands, states — see
+    [docs/api.md](api.md#character/cmd) for the Go shape), the same
+    string-payload convention `load`'s `character` field uses. Every
+    slice/map is guaranteed non-`null`.
+  - `error` — a descriptive message, or the reason the call itself was
+    malformed (e.g. a wrong argument count).
+- Same never-throws, never-broken-after-an-error guarantee as `load`.
+
+This is the read-path counterpart to `saveCmd` below, letting a caller
+round-trip: `loadCmd` → edit the parsed JSON → `saveCmd`.
+
+### Example
+
+```js
+const loadResult = globalThis.OpenKakutouCharacter.loadCmd(cmdBytes);
+if (loadResult.error) {
+  throw new Error(loadResult.error);
+}
+const commandFile = JSON.parse(loadResult.commandFile);
+commandFile.commands[0].input = "~D, DF, F, a";
+
+const saveResult = globalThis.OpenKakutouCharacter.saveCmd(cmdBytes, JSON.stringify(commandFile));
+```
+
 ## Saving edited characters
 
 Five globals mirror the read path's `load`, one per format, letting a
@@ -144,10 +181,9 @@ globalThis.OpenKakutouCharacter.saveZss(originalZssBytes, editedScriptJSON)
     returns; `saveCns`'s matches the `stateDefs` array.
   - `saveCmd`'s and `saveZss`'s models are **not** part of `load`'s JSON
     contract — `.cmd`/`.zss` aren't wired into `Character` — so a caller
-    gets its baseline by parsing `originalCmdBytes`/`originalZssBytes`
-    itself (see [docs/api.md](api.md#character/cmd) /
-    [docs/api.md](api.md#character/zss) for the shape), or starts from a
-    zero value for a brand new file.
+    gets its baseline via `loadCmd` above (or, for `.zss`, by parsing
+    `originalZssBytes` itself — see [docs/api.md](api.md#character/zss) for
+    the shape), or starts from a zero value for a brand new file.
 - **Return value**: always a plain object `{ bytes, error }`, exactly one
   field non-`null`:
   - `bytes` — a `Uint8Array` of the serialized file. Byte-exact to the
