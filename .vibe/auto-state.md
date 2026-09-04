@@ -1,9 +1,7 @@
 ---
-status: running
+status: idle
 started: 2026-09-04T22:30
 limit: 1
-current: 056
-attempt: 1
 ---
 # Auto run journal
 
@@ -52,4 +50,4 @@ attempt: 1
 - 038 — feature — stopped by user before starting (still status: todo, no changes made)
 
 ## 2026-09-04T22:30 — run started (limit: 1)
-- 056 — feature — in progress
+- 056 — feature — done (7130d5e)
