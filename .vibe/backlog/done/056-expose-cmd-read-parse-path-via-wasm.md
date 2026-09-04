@@ -1,5 +1,5 @@
 ---
-status: todo
+status: done
 depends_on: [036, 039]
 ---
 # Expose `.cmd` Read/Parse Path Via WASM
@@ -10,10 +10,10 @@ The WASM bridge (`cmd/wasm/main.go`) exposes `saveCmd` (item 039) but no way to 
 Add a `loadCmd` (or similarly named) WASM export wrapping the existing `cmd.Parse`/`cmd` package read path, returning the same `{ commandFile, error }`-style JSON contract `saveCmd` already consumes, so a caller can round-trip: parse → edit → `saveCmd`.
 
 ## Acceptance Criteria
-- [ ] WASM exports a parse entrypoint accepting raw `.cmd` file bytes and returning the `cmd.CommandFile` structure as JSON (remap, defaults, commands, states)
-- [ ] Both MUGEN-style and Ikemen GO-style `.cmd` syntax variants parse correctly through the new entrypoint, same corpus as item 036
-- [ ] A malformed `.cmd` file returns a descriptive error instead of a WASM panic, never throws
-- [ ] Verified by a Node-based smoke test, same pattern as `cmd/wasm/smoke.mjs`
+- [x] WASM exports a parse entrypoint accepting raw `.cmd` file bytes and returning the `cmd.CommandFile` structure as JSON (remap, defaults, commands, states)
+- [x] Both MUGEN-style and Ikemen GO-style `.cmd` syntax variants parse correctly through the new entrypoint, same corpus as item 036
+- [x] A malformed `.cmd` file returns a descriptive error instead of a WASM panic, never throws
+- [x] Verified by a Node-based smoke test, same pattern as `cmd/wasm/smoke.mjs`
 
 ## Notes
 Blocks `character-editor` backlog item 008 (Command Editor) — its "view an existing command" acceptance criterion has no WASM surface to read from without this.
