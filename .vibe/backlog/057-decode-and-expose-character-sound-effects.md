@@ -13,4 +13,4 @@ status: blocked
 - [ ] A character with no `SoundFile` (or an unreadable ambient `.snd`) still loads successfully for every other file kind, matching this library's existing "one missing optional piece doesn't fail the whole load" behavior where applicable
 
 ## Notes
-Cross-repo: blocked on the `snd` repo actually existing and publishing a decode API/WASM build — no such repo exists yet as of this writing (roadmap `.vibe/decisions/026` scoped it, `repos.md` lists it as `planned`). Feeds `character-editor#017` (sound browser) and, indirectly through `engine#020`'s triggered events, `mode-quick-versus#013` (match audio playback).
+Cross-repo: blocked on the `snd` repo publishing a decode API/WASM build. `snd` was created 2026-09-22 (roadmap `.vibe/decisions/026`) but is still a bare scaffold (only a version placeholder, no `.snd` parsing/decoding code) — re-check once it has a real decode API to depend on. Feeds `character-editor#017` (sound browser) and, indirectly through `engine#020`'s triggered events, `mode-quick-versus#013` (match audio playback).
