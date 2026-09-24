@@ -2,6 +2,7 @@ package character
 
 import (
 	"bytes"
+	"encoding/binary"
 	"errors"
 	"os"
 	"path/filepath"
@@ -67,6 +68,74 @@ value = 0
 	}
 	if err := os.WriteFile(filepath.Join(dir, "char.sff"), sffBuf.Bytes(), 0o644); err != nil {
 		t.Fatalf("test setup: writing .sff fixture: %v", err)
+	}
+
+	return filepath.Join(dir, "char.def")
+}
+
+// writeFixtureCharacterWithSoundFile is writeFixtureCharacter plus a
+// "sound = char.snd" [Files] entry, with sndBytes written as char.snd's
+// content — used to test Load's SoundFile wiring without duplicating the
+// rest of the fixture setup.
+func writeFixtureCharacterWithSoundFile(t *testing.T, sndBytes []byte) string {
+	t.Helper()
+
+	dir := t.TempDir()
+
+	defContent := `[Info]
+name = Test Character
+author = Test Author
+
+[Files]
+sprite = char.sff
+anim = char.air
+cns = char.cns
+sound = char.snd
+`
+	if err := os.WriteFile(filepath.Join(dir, "char.def"), []byte(defContent), 0o644); err != nil {
+		t.Fatalf("test setup: writing .def fixture: %v", err)
+	}
+
+	cnsContent := `[Statedef 200, Attack]
+type = S
+movetype = A
+physics = S
+anim = 200
+ctrl = 0
+
+[State 200, ChangeState]
+type = ChangeState
+trigger1 = Time = 0
+value = 0
+`
+	if err := os.WriteFile(filepath.Join(dir, "char.cns"), []byte(cnsContent), 0o644); err != nil {
+		t.Fatalf("test setup: writing .cns fixture: %v", err)
+	}
+
+	airContent := `[Begin Action 200]
+0,0, 0,0, 5
+0,1, 10,10, 5
+`
+	if err := os.WriteFile(filepath.Join(dir, "char.air"), []byte(airContent), 0o644); err != nil {
+		t.Fatalf("test setup: writing .air fixture: %v", err)
+	}
+
+	sprites := []sff.V1WriteSprite{
+		{Group: 0, Image: 0, AxisX: 32, AxisY: 128, PixelData: mustEncodePCXFixture(t, 4, 2), Palette: make([]byte, sff.V1PaletteBlockSize)},
+		{Group: 0, Image: 1, AxisX: 33, AxisY: 130, PixelData: mustEncodePCXFixture(t, 6, 3), Palette: make([]byte, sff.V1PaletteBlockSize)},
+	}
+	var sffBuf bytes.Buffer
+	if err := sff.SerializeV1(&sffBuf, [4]byte{1, 0, 0, 1}, false, sprites); err != nil {
+		t.Fatalf("test setup: SerializeV1 failed: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "char.sff"), sffBuf.Bytes(), 0o644); err != nil {
+		t.Fatalf("test setup: writing .sff fixture: %v", err)
+	}
+
+	if sndBytes != nil {
+		if err := os.WriteFile(filepath.Join(dir, "char.snd"), sndBytes, 0o644); err != nil {
+			t.Fatalf("test setup: writing .snd fixture: %v", err)
+		}
 	}
 
 	return filepath.Join(dir, "char.def")
@@ -390,6 +459,134 @@ func TestLoad_DefFileItselfMissing_ReturnsDescriptiveErrorNotPanic(t *testing.T)
 // referenced path (which resolves to the containing directory itself) and
 // name the real problem, instead of surfacing a raw, confusing
 // "is a directory" filesystem error.
+// TestLoad_DefReferencesSoundFile_DecodesAndExposesSoundGroups covers
+// backlog item 057's nominal path: Load resolves and decodes SoundFile via
+// the snd library, exposing the result as Character.Sounds keyed by
+// (Group, Sample) the same way sff-resolved Sprites are keyed by
+// (Group, Image).
+func TestLoad_DefReferencesSoundFile_DecodesAndExposesSoundGroups(t *testing.T) {
+	sample0 := []int16{100, -100, 200}
+	sample1 := []int16{1, 2, 3, 4}
+	raw0 := make([]byte, len(sample0)*2)
+	for i, s := range sample0 {
+		binary.LittleEndian.PutUint16(raw0[i*2:i*2+2], uint16(s))
+	}
+	raw1 := make([]byte, len(sample1)*2)
+	for i, s := range sample1 {
+		binary.LittleEndian.PutUint16(raw1[i*2:i*2+2], uint16(s))
+	}
+
+	sndBytes := buildV1SndFile(t, []sndFixtureEntry{
+		{group: 0, sample: 0, payload: buildWAVFixture(t, 1, 44100, 16, raw0)},
+		{group: 0, sample: 1, payload: buildWAVFixture(t, 1, 22050, 16, raw1)},
+		{group: 1, sample: 5, payload: buildWAVFixture(t, 1, 44100, 16, raw0)},
+	})
+
+	defPath := writeFixtureCharacterWithSoundFile(t, sndBytes)
+
+	c, err := Load(defPath)
+	if err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+
+	if c.SoundFile != "char.snd" {
+		t.Errorf("expected SoundFile %q, got %q", "char.snd", c.SoundFile)
+	}
+	if len(c.Sounds) != 2 {
+		t.Fatalf("expected 2 sound groups (0 and 1), got %d: %+v", len(c.Sounds), c.Sounds)
+	}
+
+	group0 := c.Sounds[0]
+	if group0.Index != 0 {
+		t.Errorf("expected first group index 0, got %d", group0.Index)
+	}
+	if len(group0.Sounds) != 2 {
+		t.Fatalf("expected 2 sounds in group 0, got %d", len(group0.Sounds))
+	}
+	if group0.Sounds[0].Sample != 0 || group0.Sounds[1].Sample != 1 {
+		t.Errorf("expected samples 0 and 1 in group 0, got %d and %d", group0.Sounds[0].Sample, group0.Sounds[1].Sample)
+	}
+	if got := group0.Sounds[0].PCM; !equalInt16Slices(got, sample0) {
+		t.Errorf("expected group 0 sample 0 PCM %v, got %v", sample0, got)
+	}
+	if group0.Sounds[0].SampleRate != 44100 {
+		t.Errorf("expected sample rate 44100, got %d", group0.Sounds[0].SampleRate)
+	}
+	if group0.Sounds[1].SampleRate != 22050 {
+		t.Errorf("expected sample rate 22050, got %d", group0.Sounds[1].SampleRate)
+	}
+	if group0.Sounds[0].Channels != 1 {
+		t.Errorf("expected 1 channel, got %d", group0.Sounds[0].Channels)
+	}
+
+	group1 := c.Sounds[1]
+	if group1.Index != 1 || len(group1.Sounds) != 1 || group1.Sounds[0].Sample != 5 {
+		t.Fatalf("expected group 1 with a single sample 5, got %+v", group1)
+	}
+}
+
+func equalInt16Slices(a, b []int16) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+// TestLoad_DefWithoutSoundFile_LoadsSuccessfullyWithNoSounds covers backlog
+// item 057's optionality requirement: unlike AnimationFile/SpriteFile/
+// ConstantsFile, an empty SoundFile is not an error — every other file kind
+// still loads normally, and Sounds is simply empty.
+func TestLoad_DefWithoutSoundFile_LoadsSuccessfullyWithNoSounds(t *testing.T) {
+	defPath := writeFixtureCharacter(t)
+
+	c, err := Load(defPath)
+	if err != nil {
+		t.Fatalf("Load returned error for a character with no SoundFile: %v", err)
+	}
+	if len(c.Sounds) != 0 {
+		t.Errorf("expected no sounds for a character with no SoundFile, got %+v", c.Sounds)
+	}
+	if len(c.Animations) == 0 || len(c.Sprites) == 0 || len(c.StateDefs) == 0 {
+		t.Errorf("expected every other file kind to still load, got %+v", c)
+	}
+}
+
+// TestLoad_DefReferencesMissingSoundFile_ReturnsDescriptiveErrorNotPanic
+// covers the "once referenced" half of item 057's optionality decision
+// (.vibe/decisions/029): a declared but missing SoundFile is a hard error,
+// matching the existing convention for the other referenced files.
+func TestLoad_DefReferencesMissingSoundFile_ReturnsDescriptiveErrorNotPanic(t *testing.T) {
+	defPath := writeFixtureCharacterWithSoundFile(t, nil) // sound = char.snd, but char.snd is never written
+
+	_, err := Load(defPath)
+	if err == nil {
+		t.Fatal("expected an error when the referenced .snd file is missing, got nil")
+	}
+	if !strings.Contains(err.Error(), "char.snd") {
+		t.Errorf("expected error to name the missing sound file, got: %v", err)
+	}
+}
+
+// TestLoad_DefReferencesMalformedSoundFile_ReturnsDescriptiveErrorNotPanic
+// covers the error path for a SoundFile that exists but isn't a valid .snd
+// file (e.g. truncated or corrupted).
+func TestLoad_DefReferencesMalformedSoundFile_ReturnsDescriptiveErrorNotPanic(t *testing.T) {
+	defPath := writeFixtureCharacterWithSoundFile(t, []byte("not a sound file"))
+
+	_, err := Load(defPath)
+	if err == nil {
+		t.Fatal("expected an error when the referenced .snd file is malformed, got nil")
+	}
+	if !strings.Contains(err.Error(), "char.snd") {
+		t.Errorf("expected error to name the malformed sound file, got: %v", err)
+	}
+}
+
 func TestLoad_DefWithoutFilesSection_ReturnsClearDiagnosticNotFilesystemError(t *testing.T) {
 	dir := t.TempDir()
 

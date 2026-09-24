@@ -43,6 +43,12 @@ type Character struct {
 	Animations []air.Animation   `json:"animations"`
 	Sprites    []sff.SpriteGroup `json:"sprites"`
 	StateDefs  []cns.StateDef    `json:"stateDefs"`
+	// Sounds is the character's decoded sound effects, resolved from
+	// SoundFile via the external github.com/openkakutou/snd module.
+	// Unlike Sprites/Animations/StateDefs, SoundFile is optional: it is
+	// empty (rather than an error) for a character with no SoundFile
+	// declared at all — see .vibe/decisions/029.
+	Sounds []SoundGroup `json:"sounds"`
 }
 
 // ResolveSprite returns the Sprite that frame's (Group, Image) reference

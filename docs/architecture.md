@@ -4,10 +4,10 @@
 
 `character` is a Go module made of a thin root package plus format-specific
 sub-packages, one per MUGEN/Ikemen GO file format still owned by this repo,
-plus one external dependency for sprite (`.sff`) files. The root package
-(`character`) assembles them into a single `Character` struct — the unit a
-library consumer (the `editor` or a future `engine`) actually wants to work
-with, rather than raw per-format structs.
+plus two external dependencies: sprite (`.sff`) files and sound (`.snd`)
+files. The root package (`character`) assembles them into a single
+`Character` struct — the unit a library consumer (the `editor` or a future
+`engine`) actually wants to work with, rather than raw per-format structs.
 
 ```mermaid
 graph TD
@@ -15,6 +15,7 @@ graph TD
     air["character/air<br/>Animation, Frame, ClsnBox<br/>+ Parse/Serialize(.air text)"]
     def["character/def<br/>CharacterInfo (data model)<br/>+ Parse/Serialize(.def text)"]
     sff["github.com/openkakutou/sff (external module)<br/>Sprite, SpriteGroup<br/>+ Load (.sff read, either version)<br/>+ ResolveSpritePixels"]
+    snd["github.com/openkakutou/snd (external module)<br/>+ ParseV1/ParseV2, DecodeV1Sound/DecodeV2Sound"]
     cns["character/cns<br/>StateDef, Controller (data model)<br/>+ Parse/Serialize(.cns text)<br/>+ Document (comment-preserving round trip)"]
     cmd["character/cmd<br/>CommandFile, Command (data model)<br/>+ Parse/Serialize(.cmd text)"]
     zss["character/zss<br/>Script, Block (data model)<br/>+ Parse/Serialize(.zss text)"]
@@ -23,6 +24,7 @@ graph TD
     root -->|assembles| def
     root -->|assembles| cns
     root -->|depends on| sff
+    root -->|depends on, for Sounds| snd
     air -->|SpriteResolver resolves frame references against| sff
     cmd -->|delegates its Statedef -1/State block to| cns
     root -->|saves via Document/Serialize of| def
@@ -38,7 +40,7 @@ graph TD
 
 | Package | Responsibility | Status |
 |---|---|---|
-| `character` (root) | Assembles the sub-packages into a single `Character{}` struct, resolves an animation frame to its actual sprite (`ResolveSprite`), loads a full `Character` directly from a `.def` file path (`Load`), and saves an edited character back out per format (`SerializeDef`/`SerializeAir`/`SerializeCns`/`SerializeCmd`/`SerializeZss`) | `Animations []air.Animation`, `Sprites []sff.SpriteGroup`, and `StateDefs []cns.StateDef` all wired in, via a `.def`-driven top-level loader — completing the full read surface across all four formats; `character/cmd`/`character/zss` are implemented but not yet wired into `Character` itself (only into the independent save functions); the write path (item 039) is byte-exact to the original when nothing changed, freshly serialized otherwise — see `.vibe/decisions/028-wasm-save-path-per-format-diff-or-serialize.md` |
+| `character` (root) | Assembles the sub-packages into a single `Character{}` struct, resolves an animation frame to its actual sprite (`ResolveSprite`), loads a full `Character` directly from a `.def` file path (`Load`), and saves an edited character back out per format (`SerializeDef`/`SerializeAir`/`SerializeCns`/`SerializeCmd`/`SerializeZss`) | `Animations []air.Animation`, `Sprites []sff.SpriteGroup`, `StateDefs []cns.StateDef`, and `Sounds []SoundGroup` all wired in, via a `.def`-driven top-level loader — completing the full read surface across all four text formats plus both binary asset formats; `SoundFile`/`Sounds` are optional (empty when absent, unlike the other three) — see `.vibe/decisions/029-sound-file-optional-when-absent-hard-error-once-referenced.md`; `character/cmd`/`character/zss` are implemented but not yet wired into `Character` itself (only into the independent save functions); the write path (item 039) is byte-exact to the original when nothing changed, freshly serialized otherwise — see `.vibe/decisions/028-wasm-save-path-per-format-diff-or-serialize.md` |
 | `character/air` | MUGEN/Ikemen GO animation (`.air`) files: the `Animation`/`Frame`/`ClsnBox` data model, a parser that reads `.air` text into that model, a serializer that writes it back out, a `Document` type for comment-preserving round trips, and a `SpriteResolver` that resolves a `Frame`'s sprite reference against sprites loaded via `github.com/openkakutou/sff` | Data model + read path implemented; `Serialize` produces valid, re-readable output (not a byte-exact round-trip of an original file's formatting); `Document`/`ParseDocument` round-trip unmodified files byte-for-byte, comments included; `SpriteResolver` resolves every `Frame` reference to its `sff.Sprite`, or a descriptive error for a missing one, regardless of `.sff` version |
 | `character/def` | Character definition (`.def`) files — the entry point referencing the other formats: the `CharacterInfo` data model, a text parser (`Parse`), a serializer (`Serialize`), and a `Document` type for comment-preserving round trips | Data model and read+write cycle implemented (`CharacterInfo`; `Parse` reads `[Info]`/`[Files]` text into it, skipping unrecognized sections; `Serialize` writes it back out to valid, re-readable text; `Document`/`ParseDocument` round-trip unmodified files byte-for-byte, comments and unrecognized sections included); wired into the root `Character` struct via `character.Load` |
 | `character/cns` | Combat logic / state machine (`.cns`, text) files: the `StateDef`/`Controller` data model, a text parser (`Parse`) that reads `[Statedef N]`/`[State ...]` blocks into it, keeping trigger conditions and parameters as unevaluated data (and, for `StateDef`'s own numeric and boolean header fields, an unevaluated-expression fallback via `HeaderExprs`), a serializer (`Serialize`) that writes it back out, and a `Document` type for comment-preserving round trips | Data model and read+write cycle implemented; unrecognized sections are skipped by `Parse` rather than aborting the read, matching `def.Parse`'s tolerance; a `[State ...]` header's content is unconstrained (no state number required, matching real-world files) since `Parse` never stores it; `Document`/`ParseDocument` round-trip unmodified files byte-for-byte, comments and unrelated sections included; wired into the root `Character` struct via `character.Load` |
@@ -52,6 +54,16 @@ pinned in `go.mod`, so that other OpenKakutou repos needing sprite parsing
 (`stage`, `lifebar`) don't need to depend on this one to get it. This
 repo's own docs cover only how `character`/`air` *use* that module
 (below); its own internal implementation is documented in its own repo.
+
+Sound (`.snd`, binary) file support follows the same shape: it comes from
+the separate [`github.com/openkakutou/snd`](https://github.com/openkakutou/snd)
+module, a shared, domain-independent dependency also used directly by
+`mode-quick-versus` for non-character sound sets — never implemented as a
+sub-package of this repo. The root package peeks a `.snd` file's own
+version byte itself (mirroring `sff`'s own version-detection precedent)
+since `snd` only exposes decoding one already-known `(group, sample)` entry
+at a time, not a whole-table decode; `Load`/`LoadBytes` need every entry a
+character's `.snd` file declares.
 
 ## Read/write separation
 

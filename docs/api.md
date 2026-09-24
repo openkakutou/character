@@ -21,12 +21,27 @@ type Character struct {
     Animations    []air.Animation
     Sprites       []sff.SpriteGroup
     StateDefs     []cns.StateDef
+    Sounds        []SoundGroup
+}
+
+type Sound struct {
+    Group         int
+    Sample        int
+    SampleRate    int
+    Channels      int
+    BitsPerSample int
+    PCM           []int16
+}
+
+type SoundGroup struct {
+    Index  int
+    Sounds []Sound
 }
 
 func (c *Character) ResolveSprite(frame air.Frame) (sff.Sprite, error)
 
 func Load(path string) (*Character, error)
-func LoadBytes(defBytes, airBytes, sffBytes, cnsBytes []byte) (*Character, error)
+func LoadBytes(defBytes, airBytes, sffBytes, cnsBytes, sndBytes []byte) (*Character, error)
 ```
 
 `Character` is the assembled unit a library consumer (editor, engine) works
@@ -46,27 +61,45 @@ the frame's `(Group, Image)` — including on a zero-value `Character`, whose
 `Sprites` is empty.
 
 `Load` is the library's top-level entry point: given a `.def` file path, it
-parses the file (via `def.Parse`), resolves the `.air`/`.sff`/`.cns` paths
-it references relative to the `.def` file's own directory, reads all three
+parses the file (via `def.Parse`), resolves the `.air`/`.sff`/`.cns`/`.snd`
+paths it references relative to the `.def` file's own directory, reads them
 (via `air.Parse`, a `sff.Load` that auto-detects the sprite sheet's on-disk
-version, and `cns.Parse`), and returns a fully assembled `Character`. A
-missing or unreadable `.def`, `.air`, `.sff`, or `.cns` file returns a
-descriptive error naming which file and step failed, rather than panicking.
-See
-[`.vibe/decisions/010-def-loader-assembles-character-from-referenced-files.md`](../.vibe/decisions/010-def-loader-assembles-character-from-referenced-files.md).
+version, `cns.Parse`, and a version-auto-detecting decode through the
+external `github.com/openkakutou/snd` module), and returns a fully
+assembled `Character`. A missing or unreadable `.def`, `.air`, `.sff`, or
+`.cns` file returns a descriptive error naming which file and step failed,
+rather than panicking. `SoundFile` is the one exception: it is genuinely
+optional, so an empty `SoundFile` is not an error at all (`Sounds` is simply
+empty) — but once `SoundFile` is non-empty, a missing or undecodable `.snd`
+file is a hard error exactly like the other three. See
+[`.vibe/decisions/010-def-loader-assembles-character-from-referenced-files.md`](../.vibe/decisions/010-def-loader-assembles-character-from-referenced-files.md)
+and
+[`.vibe/decisions/029-sound-file-optional-when-absent-hard-error-once-referenced.md`](../.vibe/decisions/029-sound-file-optional-when-absent-hard-error-once-referenced.md).
+
+`Sound`/`SoundGroup` mirror `sff.Sprite`/`sff.SpriteGroup`'s shape for the
+sound domain: `Sounds` groups decoded sounds by their `Group` index, and
+each `Sound` is keyed by `(Group, Sample)` — the same pair a `.cns`
+`PlaySnd` controller already addresses a sound by.
 
 `LoadBytes` is `Load`'s counterpart for a caller with no filesystem access —
 chiefly the WASM entrypoint (see [docs/wasm.md](wasm.md)), whose JS caller
 has already fetched or selected each file's bytes itself. Unlike `Load`, it
 does not resolve or follow the `.def` file's own referenced paths: the
-caller supplies `.air`/`.sff`/`.cns` content directly. Every field on the
-returned `Character` carries an explicit `json:"..."` tag, and every
+caller supplies `.air`/`.sff`/`.cns`/`.snd` content directly. Every field on
+the returned `Character` carries an explicit `json:"..."` tag, and every
 reachable slice/map is guaranteed non-`nil` (encoding/json renders empty as
 `[]`/`{}`, never `null`), so its JSON marshaling is safe to hand to a JS
 caller without a null-check. A malformed or truncated buffer for any of the
-four inputs returns a descriptive error naming which one failed, rather
-than panicking; on any error the returned `*Character` is always `nil`. See
-[`.vibe/decisions/019-wasm-entrypoint-byte-buffer-loading-and-json-contract.md`](../.vibe/decisions/019-wasm-entrypoint-byte-buffer-loading-and-json-contract.md).
+four required inputs returns a descriptive error naming which one failed,
+rather than panicking; on any error the returned `*Character` is always
+`nil`. `sndBytes` is the exception, mirroring `SoundFile`'s own optionality:
+`nil` or empty means "no sound data supplied", not an error; a non-empty
+`sndBytes` that isn't a valid `.snd` file is still a hard error. A v2
+external-file-reference sound entry (Ikemen GO's extension) cannot be
+resolved through `LoadBytes` (no filesystem access) and reports a
+descriptive error if one is actually encountered. See
+[`.vibe/decisions/019-wasm-entrypoint-byte-buffer-loading-and-json-contract.md`](../.vibe/decisions/019-wasm-entrypoint-byte-buffer-loading-and-json-contract.md)
+and decision 029 above.
 
 ### Example
 
@@ -85,7 +118,7 @@ for _, frame := range c.Animations[0].Frames {
         sprite.Group, sprite.Image, sprite.Width, sprite.Height)
 }
 
-fmt.Printf("%d states\n", len(c.StateDefs))
+fmt.Printf("%d states, %d sound groups\n", len(c.StateDefs), len(c.Sounds))
 ```
 
 Assembling a `Character` from animations/sprites/states already loaded in
@@ -96,6 +129,7 @@ c := character.Character{
     Animations: animations, // from air.Parse
     Sprites:    spriteGroups, // from sff.Load, or ParseV1/ParseV2 + decode
     StateDefs:  stateDefs, // from cns.Parse
+    Sounds:     soundGroups, // from snd.ParseV1/ParseV2 + decode, grouped by Group
 }
 ```
 

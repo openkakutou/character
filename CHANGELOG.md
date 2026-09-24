@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- A character's sound effects (`.snd`) are now decoded and exposed, the same way sprites already are: loading a character resolves its sound file and makes every decoded sound group/sample available, both from Go and through the WASM contract. A character with no sound file (a common, legitimate case) still loads normally with no sounds; a sound file that's declared but missing or unreadable still reports a clear error, matching how every other referenced file already behaves.
+
 ## [0.8.0] - 2026-09-05
 
 ### Added

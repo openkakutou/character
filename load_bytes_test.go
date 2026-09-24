@@ -2,6 +2,7 @@ package character
 
 import (
 	"bytes"
+	"encoding/binary"
 	"encoding/json"
 	"reflect"
 	"strings"
@@ -55,7 +56,7 @@ value = 0
 func TestLoadBytes_ValidBuffers_ProducesFullyPopulatedCharacter(t *testing.T) {
 	defBytes, airBytes, sffBytes, cnsBytes := fixtureCharacterBytes(t)
 
-	c, err := LoadBytes(defBytes, airBytes, sffBytes, cnsBytes)
+	c, err := LoadBytes(defBytes, airBytes, sffBytes, cnsBytes, nil)
 	if err != nil {
 		t.Fatalf("LoadBytes returned error: %v", err)
 	}
@@ -130,7 +131,7 @@ movetype = I
 physics = S
 `)
 
-	c, err := LoadBytes(defBytes, airBytes, sffBuf.Bytes(), cnsBytes)
+	c, err := LoadBytes(defBytes, airBytes, sffBuf.Bytes(), cnsBytes, nil)
 	if err != nil {
 		t.Fatalf("LoadBytes returned error: %v", err)
 	}
@@ -185,7 +186,7 @@ pal1 = char1.act
 pal2 = char2.act
 `)
 
-	c, err := LoadBytes(defBytes, airBytes, sffBytes, cnsBytes)
+	c, err := LoadBytes(defBytes, airBytes, sffBytes, cnsBytes, nil)
 	if err != nil {
 		t.Fatalf("LoadBytes returned error: %v", err)
 	}
@@ -230,7 +231,7 @@ func TestLoadBytes_DefMissingOptionalMetadataFields_LoadsSuccessfullyWithEmptyFi
 name = Bare Character
 `)
 
-	c, err := LoadBytes(defBytes, airBytes, sffBytes, cnsBytes)
+	c, err := LoadBytes(defBytes, airBytes, sffBytes, cnsBytes, nil)
 	if err != nil {
 		t.Fatalf("LoadBytes returned error: %v", err)
 	}
@@ -252,7 +253,7 @@ name = Bare Character
 func TestLoadBytes_MalformedDefBytes_ReturnsError(t *testing.T) {
 	_, airBytes, sffBytes, cnsBytes := fixtureCharacterBytes(t)
 
-	_, err := LoadBytes([]byte("[Info\nname=Test\n"), airBytes, sffBytes, cnsBytes)
+	_, err := LoadBytes([]byte("[Info\nname=Test\n"), airBytes, sffBytes, cnsBytes, nil)
 	if err == nil {
 		t.Fatal("expected an error for malformed .def bytes, got nil")
 	}
@@ -261,7 +262,7 @@ func TestLoadBytes_MalformedDefBytes_ReturnsError(t *testing.T) {
 func TestLoadBytes_MalformedAirBytes_ReturnsError(t *testing.T) {
 	defBytes, _, sffBytes, cnsBytes := fixtureCharacterBytes(t)
 
-	_, err := LoadBytes(defBytes, []byte("[Begin Action abc]\n0,0, 0,0, 5\n"), sffBytes, cnsBytes)
+	_, err := LoadBytes(defBytes, []byte("[Begin Action abc]\n0,0, 0,0, 5\n"), sffBytes, cnsBytes, nil)
 	if err == nil {
 		t.Fatal("expected an error for malformed .air bytes, got nil")
 	}
@@ -270,7 +271,7 @@ func TestLoadBytes_MalformedAirBytes_ReturnsError(t *testing.T) {
 func TestLoadBytes_MalformedSffBytes_ReturnsError(t *testing.T) {
 	defBytes, airBytes, _, cnsBytes := fixtureCharacterBytes(t)
 
-	_, err := LoadBytes(defBytes, airBytes, []byte("not a sprite sheet"), cnsBytes)
+	_, err := LoadBytes(defBytes, airBytes, []byte("not a sprite sheet"), cnsBytes, nil)
 	if err == nil {
 		t.Fatal("expected an error for malformed .sff bytes, got nil")
 	}
@@ -279,7 +280,7 @@ func TestLoadBytes_MalformedSffBytes_ReturnsError(t *testing.T) {
 func TestLoadBytes_MalformedCnsBytes_ReturnsError(t *testing.T) {
 	defBytes, airBytes, sffBytes, _ := fixtureCharacterBytes(t)
 
-	_, err := LoadBytes(defBytes, airBytes, sffBytes, []byte("[Statedef\ntype = S\n"))
+	_, err := LoadBytes(defBytes, airBytes, sffBytes, []byte("[Statedef\ntype = S\n"), nil)
 	if err == nil {
 		t.Fatal("expected an error for malformed .cns bytes, got nil")
 	}
@@ -292,8 +293,75 @@ func TestLoadBytes_NilInputBuffers_ReturnsErrorNotPanic(t *testing.T) {
 		}
 	}()
 
-	_, err := LoadBytes(nil, nil, nil, nil)
+	_, err := LoadBytes(nil, nil, nil, nil, nil)
 	if err == nil {
 		t.Fatal("expected an error for nil input buffers, got nil")
+	}
+}
+
+// TestLoadBytes_ValidSoundBytes_DecodesAndExposesSoundGroups covers backlog
+// item 057's nominal path for the filesystem-independent loader: a non-empty
+// sndBytes buffer decodes to Character.Sounds the same way Load does from a
+// file.
+func TestLoadBytes_ValidSoundBytes_DecodesAndExposesSoundGroups(t *testing.T) {
+	defBytes, airBytes, sffBytes, cnsBytes := fixtureCharacterBytes(t)
+
+	samples := []int16{10, -10, 20, -20}
+	raw := make([]byte, len(samples)*2)
+	for i, s := range samples {
+		binary.LittleEndian.PutUint16(raw[i*2:i*2+2], uint16(s))
+	}
+	sndBytes := buildV1SndFile(t, []sndFixtureEntry{
+		{group: 3, sample: 7, payload: buildWAVFixture(t, 1, 44100, 16, raw)},
+	})
+
+	c, err := LoadBytes(defBytes, airBytes, sffBytes, cnsBytes, sndBytes)
+	if err != nil {
+		t.Fatalf("LoadBytes returned error: %v", err)
+	}
+
+	if len(c.Sounds) != 1 || c.Sounds[0].Index != 3 {
+		t.Fatalf("expected 1 sound group with index 3, got %+v", c.Sounds)
+	}
+	if len(c.Sounds[0].Sounds) != 1 || c.Sounds[0].Sounds[0].Sample != 7 {
+		t.Fatalf("expected 1 sound with sample 7, got %+v", c.Sounds[0].Sounds)
+	}
+	if got := c.Sounds[0].Sounds[0].PCM; !equalInt16Slices(got, samples) {
+		t.Errorf("expected PCM %v, got %v", samples, got)
+	}
+}
+
+// TestLoadBytes_EmptySoundBytes_LoadsSuccessfullyWithNoSounds covers the
+// optionality half of item 057's decision (.vibe/decisions/029): an empty
+// (or nil) sndBytes buffer means "no sound data supplied", not an error.
+func TestLoadBytes_EmptySoundBytes_LoadsSuccessfullyWithNoSounds(t *testing.T) {
+	defBytes, airBytes, sffBytes, cnsBytes := fixtureCharacterBytes(t)
+
+	c, err := LoadBytes(defBytes, airBytes, sffBytes, cnsBytes, nil)
+	if err != nil {
+		t.Fatalf("LoadBytes returned error for empty sndBytes: %v", err)
+	}
+	if len(c.Sounds) != 0 {
+		t.Errorf("expected no sounds for empty sndBytes, got %+v", c.Sounds)
+	}
+
+	data, err := json.Marshal(c)
+	if err != nil {
+		t.Fatalf("json.Marshal returned error: %v", err)
+	}
+	if !strings.Contains(string(data), `"sounds":[]`) {
+		t.Errorf("expected sounds to marshal as an empty array, got: %s", data)
+	}
+}
+
+// TestLoadBytes_MalformedSoundBytes_ReturnsError covers the error path: a
+// non-empty sndBytes buffer that isn't a valid .snd file is a hard error,
+// the same as malformed .air/.sff/.cns bytes already are.
+func TestLoadBytes_MalformedSoundBytes_ReturnsError(t *testing.T) {
+	defBytes, airBytes, sffBytes, cnsBytes := fixtureCharacterBytes(t)
+
+	_, err := LoadBytes(defBytes, airBytes, sffBytes, cnsBytes, []byte("not a sound file"))
+	if err == nil {
+		t.Fatal("expected an error for malformed .snd bytes, got nil")
 	}
 }

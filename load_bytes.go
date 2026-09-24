@@ -26,10 +26,18 @@ import (
 // renders empty as "[]"/"{}", never "null" — see
 // .vibe/decisions/019-wasm-entrypoint-byte-buffer-loading-and-json-contract.md).
 //
-// A malformed or truncated buffer for any of the four inputs returns a
-// descriptive error naming which one failed, rather than panicking; on any
-// error the returned Character is always nil, never partially populated.
-func LoadBytes(defBytes, airBytes, sffBytes, cnsBytes []byte) (*Character, error) {
+// A malformed or truncated buffer for any of the four required inputs
+// returns a descriptive error naming which one failed, rather than
+// panicking; on any error the returned Character is always nil, never
+// partially populated. sndBytes is the exception: it may be nil or empty,
+// meaning "no sound data supplied" (the caller's character has no
+// SoundFile, or chose not to fetch it) — not an error, mirroring how an
+// empty SoundFile is already optional for Load. A non-empty sndBytes that
+// isn't a valid .snd file is a hard error like the other four. A v2
+// external-file-reference entry cannot be resolved here (LoadBytes has no
+// filesystem access, unlike Load) and reports a descriptive error if one is
+// actually encountered. See .vibe/decisions/029.
+func LoadBytes(defBytes, airBytes, sffBytes, cnsBytes, sndBytes []byte) (*Character, error) {
 	info, err := def.Parse(bytes.NewReader(defBytes))
 	if err != nil {
 		return nil, fmt.Errorf("character: parsing character definition bytes: %w", err)
@@ -50,6 +58,14 @@ func LoadBytes(defBytes, airBytes, sffBytes, cnsBytes []byte) (*Character, error
 		return nil, fmt.Errorf("character: parsing combat logic bytes: %w", err)
 	}
 
+	var sounds []SoundGroup
+	if len(sndBytes) > 0 {
+		sounds, err = decodeSoundGroups(sndBytes, "sound bytes", nil)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	c := &Character{
 		Name:          info.Name,
 		Author:        info.Author,
@@ -63,6 +79,7 @@ func LoadBytes(defBytes, airBytes, sffBytes, cnsBytes []byte) (*Character, error
 		Animations:    animations,
 		Sprites:       sprites,
 		StateDefs:     stateDefs,
+		Sounds:        sounds,
 	}
 	normalizeForJSON(c)
 	return c, nil
@@ -102,6 +119,20 @@ func normalizeForJSON(c *Character) {
 	}
 	if c.Palettes == nil {
 		c.Palettes = []string{}
+	}
+
+	if c.Sounds == nil {
+		c.Sounds = []SoundGroup{}
+	}
+	for i := range c.Sounds {
+		if c.Sounds[i].Sounds == nil {
+			c.Sounds[i].Sounds = []Sound{}
+		}
+		for j := range c.Sounds[i].Sounds {
+			if c.Sounds[i].Sounds[j].PCM == nil {
+				c.Sounds[i].Sounds[j].PCM = []int16{}
+			}
+		}
 	}
 }
 

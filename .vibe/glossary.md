@@ -1,7 +1,7 @@
 # Ubiquitous Language
 
 ## Character
-The in-memory representation of a MUGEN/Ikemen GO fighting-game character, combining its definition, sprites, animations, and combat logic. It is the top-level unit a library consumer (editor, engine) works with, rather than raw per-format structs (`.def`/`.sff`/`.air`/`.cns`).
+The in-memory representation of a MUGEN/Ikemen GO fighting-game character, combining its definition, sprites, animations, sounds, and combat logic. It is the top-level unit a library consumer (editor, engine) works with, rather than raw per-format structs (`.def`/`.sff`/`.air`/`.snd`/`.cns`).
 _Sources: `character.go`_
 
 ## Animation
@@ -30,6 +30,15 @@ _Sources: `character.go`, `load.go`, `load_bytes.go`, `air/resolve.go`_
 ## Sprite group
 A collection of Sprites that share the same group index — e.g. the frames of a single stance or attack, addressed by their image index within the group. Defined by the external `github.com/openkakutou/sff` module (item 035); this repo consumes it as `sff.SpriteGroup`.
 _Sources: `character.go`, `load.go`, `load_bytes.go`, `air/resolve.go`_
+
+## Sound
+A single decoded sound effect belonging to a character, identified by its group and sample index, with its sample rate, channel count, source bit depth, and decoded PCM audio. A `.cns` `PlaySnd` controller's `(group, sample)` parameters address the Sound they play. Decoded via the external `github.com/openkakutou/snd` module (item 057); this repo exposes the result as its own `Sound` type.
+**Do not confuse with:** Sprite, the equivalent concept for a character's images rather than its audio.
+_Sources: `sound.go`, `load.go`, `load_sound.go`, `load_bytes.go`_
+
+## Sound group
+A collection of Sounds that share the same group index — mirrors Sprite group's shape, applied to a character's sound effects instead of its images.
+_Sources: `sound.go`, `load_sound.go`_
 
 ## Palette
 The resolved set of 256 colors a Sprite's pixel indices are drawn with — the final on-screen color for each possible index byte. An External palette, once decoded, can be supplied in place of a Sprite's own Palette when resolving its colors. Resolution logic (per-`.sff`-version palette lookup, alpha rules) is defined by the external `github.com/openkakutou/sff` module (item 035); this repo consumes it as `sff.Palette`, notably in `cmd/wasm`'s palette-override support.

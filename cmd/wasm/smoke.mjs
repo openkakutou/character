@@ -71,6 +71,10 @@ assert(character?.constantsFile === "", `unset constantsFile is an empty string 
 assert(Array.isArray(character?.stateFiles) && character.stateFiles.length === 0, "unset stateFiles is an empty array, not null");
 assert(Array.isArray(character?.palettes) && character.palettes.length === 0, "unset palettes is an empty array, not null");
 
+// --- backlog item 057: omitting sndBytes (the pre-existing 4-argument
+// call shape) still works and reports no sounds, empty array not null ---
+assert(Array.isArray(character?.sounds) && character.sounds.length === 0, "load without sndBytes: sounds is an empty array, not null");
+
 // --- error path: malformed sff bytes ---
 const errResult = globalThis.OpenKakutouCharacter.load(defBytes, airBytes, new TextEncoder().encode("garbage"), cnsBytes);
 assert(errResult.character === null, "malformed sff bytes: character is null");
@@ -86,6 +90,121 @@ assert(typeof argCountResult.error === "string" && argCountResult.error.length >
 // earlier failures didn't leave the Go runtime in a broken state.
 const afterErrorResult = globalThis.OpenKakutouCharacter.load(defBytes, airBytes, sffBytes, cnsBytes);
 assert(afterErrorResult.error === null, "module still works after a prior error");
+
+// --- backlog item 057: sound decoding via the optional 5th (sndBytes)
+// argument. snd has no write path of its own, so a minimal, well-formed
+// .snd v1 file is hand-built here the same way the Go test suite does
+// (character/sound_test.go's buildV1SndFile/buildWAVFixture). ---
+
+function buildWAV(channels, sampleRate, bitsPerSample, data) {
+	const fmtChunk = new Uint8Array(16);
+	const fmtView = new DataView(fmtChunk.buffer);
+	fmtView.setUint16(0, 1, true); // PCM format tag
+	fmtView.setUint16(2, channels, true);
+	fmtView.setUint32(4, sampleRate, true);
+	const blockAlign = (channels * bitsPerSample) / 8;
+	fmtView.setUint32(8, sampleRate * blockAlign, true);
+	fmtView.setUint16(12, blockAlign, true);
+	fmtView.setUint16(14, bitsPerSample, true);
+
+	const dataPadded = data.length % 2 === 1 ? new Uint8Array([...data, 0]) : data;
+	const chunks = [
+		new TextEncoder().encode("RIFF"),
+		new Uint8Array(4), // filled in below
+		new TextEncoder().encode("WAVE"),
+		new TextEncoder().encode("fmt "),
+		uint32LE(fmtChunk.length),
+		fmtChunk,
+		new TextEncoder().encode("data"),
+		uint32LE(data.length),
+		dataPadded,
+	];
+	const buf = concatUint8Arrays(chunks);
+	new DataView(buf.buffer).setUint32(4, buf.length - 8, true);
+	return buf;
+}
+
+function uint32LE(v) {
+	const b = new Uint8Array(4);
+	new DataView(b.buffer).setUint32(0, v, true);
+	return b;
+}
+
+function concatUint8Arrays(arrays) {
+	const total = arrays.reduce((sum, a) => sum + a.length, 0);
+	const out = new Uint8Array(total);
+	let offset = 0;
+	for (const a of arrays) {
+		out.set(a, offset);
+		offset += a.length;
+	}
+	return out;
+}
+
+// buildV1Snd assembles a minimal, well-formed .snd v1 file from a list of
+// { group, sample, payload } entries, chaining each subheader's
+// NextSubHeaderOffset the way a real file does.
+function buildV1Snd(entries) {
+	const headerSize = 24;
+	const header = new Uint8Array(headerSize);
+	header.set(new TextEncoder().encode("ElecbyteSnd\x00"), 0);
+	header.set([1, 0, 1, 0], 12);
+	const headerView = new DataView(header.buffer);
+	headerView.setUint32(16, entries.length, true);
+	headerView.setUint32(20, headerSize, true);
+
+	const offsets = [];
+	let pos = headerSize;
+	for (const e of entries) {
+		offsets.push(pos);
+		pos += 16 + e.payload.length;
+	}
+
+	const chunks = [header];
+	entries.forEach((e, i) => {
+		const sub = new Uint8Array(16);
+		const subView = new DataView(sub.buffer);
+		if (i + 1 < entries.length) {
+			subView.setUint32(0, offsets[i + 1], true);
+		}
+		subView.setUint32(4, e.payload.length, true);
+		subView.setInt16(8, e.group, true);
+		subView.setInt16(10, e.sample, true);
+		chunks.push(sub, e.payload);
+	});
+
+	return concatUint8Arrays(chunks);
+}
+
+const sndSamples = new Int16Array([50, -50, 4000, -4000]);
+const sndRaw = new Uint8Array(sndSamples.buffer);
+const sndBytes = buildV1Snd([{ group: 2, sample: 9, payload: buildWAV(1, 44100, 16, sndRaw) }]);
+
+const soundLoadResult = globalThis.OpenKakutouCharacter.load(defBytes, airBytes, sffBytes, cnsBytes, sndBytes);
+assert(soundLoadResult.error === null, `load with sndBytes reports no error (got: ${soundLoadResult.error})`);
+const soundCharacter = JSON.parse(soundLoadResult.character ?? "null");
+assert(Array.isArray(soundCharacter?.sounds) && soundCharacter.sounds.length === 1, `load with sndBytes has 1 sound group (got: ${JSON.stringify(soundCharacter?.sounds)})`);
+assert(soundCharacter.sounds[0].index === 2, `sound group index is 2 (got: ${soundCharacter.sounds[0].index})`);
+assert(soundCharacter.sounds[0].sounds.length === 1 && soundCharacter.sounds[0].sounds[0].sample === 9, "sound group has 1 sound with sample 9");
+assert(
+	JSON.stringify(soundCharacter.sounds[0].sounds[0].pcm) === JSON.stringify(Array.from(sndSamples)),
+	`decoded PCM matches the original samples (got: ${JSON.stringify(soundCharacter.sounds[0].sounds[0].pcm)})`,
+);
+
+// null/undefined sndBytes are equivalent to omitting it entirely.
+const soundNullResult = globalThis.OpenKakutouCharacter.load(defBytes, airBytes, sffBytes, cnsBytes, null);
+assert(soundNullResult.error === null, `load with null sndBytes reports no error (got: ${soundNullResult.error})`);
+const soundNullCharacter = JSON.parse(soundNullResult.character ?? "null");
+assert(Array.isArray(soundNullCharacter?.sounds) && soundNullCharacter.sounds.length === 0, "load with null sndBytes has no sounds");
+
+// malformed sndBytes is a hard error, naming the sound stage.
+const soundErrorResult = globalThis.OpenKakutouCharacter.load(defBytes, airBytes, sffBytes, cnsBytes, new TextEncoder().encode("not a sound file"));
+assert(soundErrorResult.character === null, "malformed sndBytes: character is null");
+assert(typeof soundErrorResult.error === "string" && soundErrorResult.error.includes("sound"), `malformed sndBytes: error identifies the sound stage (got: ${soundErrorResult.error})`);
+
+// The module must still respond correctly after a sound decoding error too.
+const afterSoundErrorResult = globalThis.OpenKakutouCharacter.load(defBytes, airBytes, sffBytes, cnsBytes);
+assert(afterSoundErrorResult.error === null, "module still works after a prior sndBytes error");
 
 // --- resolveSprites: batched sprite pixel resolution (item 034) ---
 // v1-basic.sff carries exactly one real sprite, at (group 0, image 0).

@@ -42,16 +42,41 @@ Defined in: `def/document.go`
 | Animations | []air.Animation | Exposed through `air`'s read-path type only |
 | Sprites | []sff.SpriteGroup | Exposed through `sff`'s read-path type only |
 | StateDefs | []cns.StateDef | Exposed through `cns`'s read-path type only |
+| Sounds | []SoundGroup | Decoded from `SoundFile` via the external `snd` module; empty (not an error) when `SoundFile` is empty — item 057 |
 
-Every field carries a `json:"..."` tag (`name`, `author`, `spriteFile`, `animationFile`, `soundFile`, `commandFile`, `constantsFile`, `stateFiles`, `palettes`, `animations`, `sprites`, `stateDefs`). Both `Load` and `LoadBytes` populate every `CharacterInfo`-derived field, not just `Name` (backlog item 038).
+Every field carries a `json:"..."` tag (`name`, `author`, `spriteFile`, `animationFile`, `soundFile`, `commandFile`, `constantsFile`, `stateFiles`, `palettes`, `animations`, `sprites`, `stateDefs`, `sounds`). Both `Load` and `LoadBytes` populate every `CharacterInfo`-derived field, not just `Name` (backlog item 038).
 
 Method: `(*Character) ResolveSprite(frame air.Frame) (sff.Sprite, error)` — resolves `frame`'s `(Group, Image)` reference against `Sprites`, by delegating to `air.NewSpriteResolver(c.Sprites)`; returns the same descriptive error `SpriteResolver.Resolve` does when no match exists, including when `Sprites` is empty (e.g. a zero-value `Character`).
 
-Package function: `Load(path string) (*Character, error)` — the top-level entry point: opens the `.def` file at `path`, parses it with `def.Parse`, resolves its `.air`/`.sff`/`.cns` references against `path`'s own directory, reads them with `air.Parse`/`sff.Load`/`cns.Parse`, and returns the assembled `Character`. A missing or unreadable `.def`/`.air`/`.sff`/`.cns` file returns a descriptive error rather than panicking.
+Package function: `Load(path string) (*Character, error)` — the top-level entry point: opens the `.def` file at `path`, parses it with `def.Parse`, resolves its `.air`/`.sff`/`.cns`/`.snd` references against `path`'s own directory, reads them with `air.Parse`/`sff.Load`/`cns.Parse`/`snd`-based decoding, and returns the assembled `Character`. A missing or unreadable `.def`/`.air`/`.sff`/`.cns` file returns a descriptive error rather than panicking; `SoundFile` is the one exception — empty is not an error, but declared-and-broken still is (item 057, `.vibe/decisions/029`).
 
-Package function: `LoadBytes(defBytes, airBytes, sffBytes, cnsBytes []byte) (*Character, error)` — filesystem-independent counterpart of `Load`, for a caller (chiefly `cmd/wasm`) that already holds each file's bytes in memory: parses each buffer directly, never resolving referenced paths itself. Every slice/map reachable from the returned `Character` is normalized to non-`nil` before returning, so its JSON marshaling never surprises a caller with `null` where an empty, iterable collection was expected. See `.vibe/decisions/019-wasm-entrypoint-byte-buffer-loading-and-json-contract.md`.
+Package function: `LoadBytes(defBytes, airBytes, sffBytes, cnsBytes, sndBytes []byte) (*Character, error)` — filesystem-independent counterpart of `Load`, for a caller (chiefly `cmd/wasm`) that already holds each file's bytes in memory: parses each buffer directly, never resolving referenced paths itself. `sndBytes` may be `nil`/empty, meaning "no sound data" (item 057). Every slice/map reachable from the returned `Character` is normalized to non-`nil` before returning, so its JSON marshaling never surprises a caller with `null` where an empty, iterable collection was expected. See `.vibe/decisions/019-wasm-entrypoint-byte-buffer-loading-and-json-contract.md`.
 
-Defined in: `character.go`, `load.go`, `load_bytes.go`
+Defined in: `character.go`, `load.go`, `load_bytes.go`, `load_sound.go`, `sound.go`
+
+## Sound
+| Field | Type | Notes |
+|---|---|---|
+| Group | int | Sound group index |
+| Sample | int | Sample index within Group — together, `(Group, Sample)` is the same key a `.cns` `PlaySnd` controller addresses a sound by |
+| SampleRate | int | Decoded audio's sample rate, in Hz |
+| Channels | int | Number of interleaved audio channels |
+| BitsPerSample | int | Original source bit depth (8 or 16), before normalization |
+| PCM | []int16 | Decoded audio, interleaved by channel, always normalized to signed 16-bit regardless of source depth |
+
+Decoded from a character's `SoundFile` via the external `github.com/openkakutou/snd` module — mirrors `sff.Sprite`'s role for the sound domain.
+
+Defined in: `sound.go`
+
+## SoundGroup
+| Field | Type | Notes |
+|---|---|---|
+| Index | int | Sound group index shared by every Sound in Sounds |
+| Sounds | []Sound | Ordered collection of sounds belonging to this group |
+
+Mirrors `sff.SpriteGroup`'s shape for the sound domain; built by `groupSounds` (`load_sound.go`), sorted by ascending `Index`.
+
+Defined in: `sound.go`
 
 ## Animation
 | Field | Type | Notes |

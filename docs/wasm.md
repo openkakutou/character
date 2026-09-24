@@ -23,14 +23,20 @@ never touch it.
 The module registers a single global on `js.Global()`:
 
 ```js
-globalThis.OpenKakutouCharacter.load(defBytes, airBytes, sffBytes, cnsBytes)
+globalThis.OpenKakutouCharacter.load(defBytes, airBytes, sffBytes, cnsBytes[, sndBytes])
 ```
 
-- **Arguments**: four `Uint8Array`s — the raw bytes of a character's
-  `.def`, `.air`, `.sff`, and `.cns` files, already fetched or selected by
-  the caller. The module never touches a filesystem or resolves the `.def`
-  file's own referenced paths itself; the caller supplies each buffer
-  directly, already knowing which bytes belong to which file.
+- **Arguments**: four required `Uint8Array`s — the raw bytes of a
+  character's `.def`, `.air`, `.sff`, and `.cns` files, already fetched or
+  selected by the caller — plus an optional fifth, `sndBytes`, the raw bytes
+  of the character's `.snd` sound file. The module never touches a
+  filesystem or resolves the `.def` file's own referenced paths itself; the
+  caller supplies each buffer directly, already knowing which bytes belong
+  to which file. Omitting `sndBytes`, or passing `null`/`undefined`, means
+  "no sound data" — the returned character simply has no sounds, not an
+  error, matching how a character with no sound file already behaves
+  natively (see `.vibe/decisions/029`); existing callers built against the
+  previous four-argument contract keep working unchanged.
 - **Return value**: always a plain object `{ character, error }`, exactly
   one field non-`null`:
   - `character` — a JSON string of the loaded `Character` (see
@@ -39,8 +45,10 @@ globalThis.OpenKakutouCharacter.load(defBytes, airBytes, sffBytes, cnsBytes)
     slice/map is guaranteed non-`null`, so a JS caller can iterate any
     collection without a null-check).
   - `error` — a descriptive message naming which stage failed (definition,
-    animation, sprite, or combat logic), or the reason the call itself was
-    malformed (e.g. a wrong argument count).
+    animation, sprite, sound, or combat logic), or the reason the call
+    itself was malformed (e.g. a wrong argument count). A malformed
+    `sndBytes` only errors when one is actually supplied — an empty/omitted
+    `sndBytes` never does.
 - The function never throws: an internal panic is recovered at this
   boundary and reported as `error` instead of crashing the whole page's
   WASM instance. A prior error does not leave the module in a broken
@@ -54,11 +62,12 @@ over per-resource calls).
 ### Example
 
 ```js
-const result = globalThis.OpenKakutouCharacter.load(defBytes, airBytes, sffBytes, cnsBytes);
+const result = globalThis.OpenKakutouCharacter.load(defBytes, airBytes, sffBytes, cnsBytes, sndBytes);
 if (result.error) {
   throw new Error(result.error);
 }
 const character = JSON.parse(result.character);
+// character.sounds is an array of { index, sounds: [{ group, sample, sampleRate, channels, bitsPerSample, pcm }] }
 ```
 
 ## Resolving sprite pixels

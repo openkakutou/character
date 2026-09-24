@@ -49,12 +49,17 @@ func main() {
 	select {}
 }
 
-// load is OpenKakutouCharacter.load(defBytes, airBytes, sffBytes, cnsBytes)
+// load is
+// OpenKakutouCharacter.load(defBytes, airBytes, sffBytes, cnsBytes[, sndBytes])
 // as seen from JS: each argument is a Uint8Array (or any JS value
-// js.CopyBytesToGo accepts), holding that file's raw bytes. It always
-// returns a JS object shaped { character: string|null, error: string|null }
-// — exactly one of the two fields is non-null — never throws and never lets
-// an internal panic escape to the JS caller.
+// js.CopyBytesToGo accepts), holding that file's raw bytes. sndBytes is
+// optional — omitting it, or passing null/undefined, means "no sound data",
+// exactly like an empty SoundFile (see .vibe/decisions/029) — so existing
+// callers built against the previous 4-argument contract keep working
+// unchanged. It always returns a JS object shaped
+// { character: string|null, error: string|null } — exactly one of the two
+// fields is non-null — never throws and never lets an internal panic escape
+// to the JS caller.
 func load(this js.Value, args []js.Value) any {
 	defer func() {
 		// A panic here would otherwise propagate out of the js.Func
@@ -65,8 +70,8 @@ func load(this js.Value, args []js.Value) any {
 		recover()
 	}()
 
-	if len(args) != 4 {
-		return result(nil, fmt.Errorf("OpenKakutouCharacter.load: expected 4 arguments (defBytes, airBytes, sffBytes, cnsBytes), got %d", len(args)))
+	if len(args) < 4 {
+		return result(nil, fmt.Errorf("OpenKakutouCharacter.load: expected at least 4 arguments (defBytes, airBytes, sffBytes, cnsBytes[, sndBytes]), got %d", len(args)))
 	}
 
 	defBytes, err := bytesFromJS(args[0])
@@ -86,7 +91,15 @@ func load(this js.Value, args []js.Value) any {
 		return result(nil, fmt.Errorf("OpenKakutouCharacter.load: cnsBytes: %w", err))
 	}
 
-	c, err := character.LoadBytes(defBytes, airBytes, sffBytes, cnsBytes)
+	var sndBytes []byte
+	if len(args) >= 5 && !args[4].IsNull() && !args[4].IsUndefined() {
+		sndBytes, err = bytesFromJS(args[4])
+		if err != nil {
+			return result(nil, fmt.Errorf("OpenKakutouCharacter.load: sndBytes: %w", err))
+		}
+	}
+
+	c, err := character.LoadBytes(defBytes, airBytes, sffBytes, cnsBytes, sndBytes)
 	if err != nil {
 		return result(nil, err)
 	}

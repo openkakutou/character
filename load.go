@@ -2,6 +2,7 @@ package character
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -57,6 +58,11 @@ func Load(path string) (*Character, error) {
 		return nil, err
 	}
 
+	sounds, err := loadSounds(dir, info.SoundFile)
+	if err != nil {
+		return nil, err
+	}
+
 	return &Character{
 		Name:          info.Name,
 		Author:        info.Author,
@@ -70,6 +76,7 @@ func Load(path string) (*Character, error) {
 		Animations:    animations,
 		Sprites:       sprites,
 		StateDefs:     stateDefs,
+		Sounds:        sounds,
 	}, nil
 }
 
@@ -224,4 +231,40 @@ func loadStateDefs(dir, referenced string) ([]cns.StateDef, error) {
 		return nil, fmt.Errorf("character: parsing combat logic file %q: %w", path, err)
 	}
 	return stateDefs, nil
+}
+
+// loadSounds opens and decodes the .snd file dir+referenced points to.
+//
+// Unlike loadAnimations/loadSprites/loadStateDefs, referenced == "" is not
+// an error: SoundFile is genuinely optional (validateFilesSection has never
+// required it, unlike AnimationFile/SpriteFile/ConstantsFile) — many real
+// characters have no dedicated sound file, or reference a shared one that
+// isn't always present. Once referenced is non-empty, though, a missing or
+// undecodable .snd file is a hard error, exactly like the other three
+// referenced files. See .vibe/decisions/029.
+//
+// A resolved v2 external-file-reference entry (Ikemen GO's extension) is
+// looked up relative to dir, the same base every other referenced file
+// already uses.
+func loadSounds(dir, referenced string) ([]SoundGroup, error) {
+	if referenced == "" {
+		return nil, nil
+	}
+
+	path := resolveReferencedPath(dir, referenced)
+	f, err := openReferencedFile(dir, referenced)
+	if err != nil {
+		return nil, fmt.Errorf("character: opening sound file %q: %w", path, err)
+	}
+	defer f.Close()
+
+	data, err := io.ReadAll(f)
+	if err != nil {
+		return nil, fmt.Errorf("character: reading sound file %q: %w", path, err)
+	}
+
+	openExternal := func(ref string) ([]byte, error) {
+		return os.ReadFile(resolveReferencedPath(dir, ref))
+	}
+	return decodeSoundGroups(data, path, openExternal)
 }
