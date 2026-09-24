@@ -669,7 +669,7 @@ func main() {
 		panic(err)
 	}
 
-	fmt.Printf("%s: %d animations, %d sprite groups, %d states\n", c.Name, len(c.Animations), len(c.Sprites), len(c.StateDefs))
+	fmt.Printf("%s: %d animations, %d sprite groups, %d states, %d sound groups\n", c.Name, len(c.Animations), len(c.Sprites), len(c.StateDefs), len(c.Sounds))
 
 	for _, frame := range c.Animations[0].Frames {
 		sprite, err := c.ResolveSprite(frame)
