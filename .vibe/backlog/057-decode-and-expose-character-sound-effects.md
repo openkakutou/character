@@ -1,5 +1,5 @@
 ---
-status: blocked
+status: todo
 ---
 # Decode And Expose Character Sound Effects
 
@@ -13,4 +13,7 @@ status: blocked
 - [ ] A character with no `SoundFile` (or an unreadable ambient `.snd`) still loads successfully for every other file kind, matching this library's existing "one missing optional piece doesn't fail the whole load" behavior where applicable
 
 ## Notes
-Cross-repo: blocked on `snd` publishing a decode API. `snd` was created 2026-09-22 (roadmap `.vibe/decisions/026`) and now has its own backlog (`001`/`002` — v1/v2 read + PCM decode) but neither is implemented yet; this item only needs the native Go API those provide, not `snd`'s own WASM build (`003`). Re-check once `snd#001`/`002` ship. Feeds `character-editor#017` (sound browser) and, indirectly through `engine#020`'s triggered events, `mode-quick-versus#013` (match audio playback).
+Cross-repo: was blocked on `snd` publishing a decode API; this item only needs the native Go API, not `snd`'s own WASM build (`003`). Feeds `character-editor#017` (sound browser) and, indirectly through `engine#020`'s triggered events, `mode-quick-versus#013` (match audio playback).
+
+## Unblocked
+2026-09-25: `snd#001`/`002` (v1/v2 read + PCM decode) both shipped and published — `snd` v0.2.0 (2026-09-24) covers the v1/v2 read+decode API this item needs; v0.3.0 (2026-09-24) additionally adds the WASM build (`snd#003`), not required here. Back to `status: todo`.
