@@ -61,13 +61,18 @@ type sndFixtureEntry struct {
 
 // buildV1SndFile assembles a minimal, well-formed .snd v1 file in memory
 // from a list of (group, sample, payload) entries, chaining each
-// subheader's NextSubHeaderOffset the way a real file does. Mirrors
-// github.com/openkakutou/snd's own buildV1File test helper, reimplemented
-// here since it isn't (and shouldn't be) exported by that module.
+// subheader's NextSubHeaderOffset the way a real file does. The subheader
+// itself is byte-for-byte identical to buildV2SndFile's (Group/Sample as
+// 4-byte fields, no reserved region) — real files, Ikemen GO's own reference
+// loader, and github.com/openkakutou/snd's ParseV1 all agree v1 and v2 share
+// this exact layout; only the header's version stamp differs. See
+// github.com/openkakutou/snd's own decision
+// 005-v1-group-sample-fields-are-4-bytes-not-2.md.
 func buildV1SndFile(t *testing.T, entries []sndFixtureEntry) []byte {
 	t.Helper()
 
 	const headerSize = 24
+	const subheaderSize = 16
 	var buf []byte
 
 	header := make([]byte, headerSize)
@@ -81,17 +86,17 @@ func buildV1SndFile(t *testing.T, entries []sndFixtureEntry) []byte {
 	pos := headerSize
 	for i, e := range entries {
 		offsets[i] = pos
-		pos += 16 + len(e.payload)
+		pos += subheaderSize + len(e.payload)
 	}
 
 	for i, e := range entries {
-		sub := make([]byte, 16)
+		sub := make([]byte, subheaderSize)
 		if i+1 < len(entries) {
 			binary.LittleEndian.PutUint32(sub[0:4], uint32(offsets[i+1]))
 		}
 		binary.LittleEndian.PutUint32(sub[4:8], uint32(len(e.payload)))
-		binary.LittleEndian.PutUint16(sub[8:10], uint16(int16(e.group)))
-		binary.LittleEndian.PutUint16(sub[10:12], uint16(int16(e.sample)))
+		binary.LittleEndian.PutUint32(sub[8:12], uint32(int32(e.group)))
+		binary.LittleEndian.PutUint32(sub[12:16], uint32(int32(e.sample)))
 		buf = append(buf, sub...)
 		buf = append(buf, e.payload...)
 	}
