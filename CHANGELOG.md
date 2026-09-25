@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- A character's `.snd` v1 sound file now reports the correct sample number for every sound: most sounds sharing a group with more than a couple of samples were previously silently colliding onto the same sample number instead of keeping their own distinct one, via the updated `snd` dependency (v0.3.1).
+
 ## [0.9.0] - 2026-09-25
 
 ### Added
