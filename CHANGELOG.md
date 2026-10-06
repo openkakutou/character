@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- A sound file with one or more undecodable sounds now still loads: every sound that works is available as usual, and each broken one stays listed under its own group and number, flagged with a message saying which sound failed and why. A sound file that is entirely invalid still reports an error.
+
 ## [0.9.1] - 2026-09-25
 
 ### Fixed

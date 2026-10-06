@@ -66,7 +66,8 @@ func decodeV1SoundGroups(r io.ReaderAt, context string) ([]SoundGroup, error) {
 	for i, e := range table.Sounds {
 		decoded, err := snd.DecodeV1Sound(r, table, e.Group, e.Sample)
 		if err != nil {
-			return nil, fmt.Errorf("character: decoding sound file %q: %w", context, err)
+			sounds[i] = undecodableSound(e.Group, e.Sample, context, err)
+			continue
 		}
 		sounds[i] = toSound(e.Group, e.Sample, decoded)
 	}
@@ -86,11 +87,23 @@ func decodeV2SoundGroups(r io.ReaderAt, context string, openExternal snd.Externa
 	for i, e := range table.Sounds {
 		decoded, err := snd.DecodeV2Sound(r, table, e.Group, e.Sample, openExternal)
 		if err != nil {
-			return nil, fmt.Errorf("character: decoding sound file %q: %w", context, err)
+			sounds[i] = undecodableSound(e.Group, e.Sample, context, err)
+			continue
 		}
 		sounds[i] = toSound(e.Group, e.Sample, decoded)
 	}
 	return groupSounds(sounds), nil
+}
+
+// undecodableSound represents one entry that failed to decode: it keeps its
+// (Group, Sample) key, carries no PCM, and names the failure in Error, so one
+// corrupt entry never hides the rest of the file.
+func undecodableSound(group, sample int, context string, err error) Sound {
+	return Sound{
+		Group:  group,
+		Sample: sample,
+		Error:  fmt.Sprintf("character: decoding sound file %q: group %d, sample %d: %v", context, group, sample, err),
+	}
 }
 
 // toSound converts one decoded snd entry to this package's own read-path

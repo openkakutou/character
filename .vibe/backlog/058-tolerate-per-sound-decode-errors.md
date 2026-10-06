@@ -1,5 +1,5 @@
 ---
-status: todo
+status: done
 ---
 # Tolerate Per-Sound Decode Errors
 

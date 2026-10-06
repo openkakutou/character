@@ -31,6 +31,7 @@ type Sound struct {
     Channels      int
     BitsPerSample int
     PCM           []int16
+    Error         string // non-empty if this entry failed to decode (PCM empty); omitted in JSON otherwise
 }
 
 type SoundGroup struct {

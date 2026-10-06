@@ -19,6 +19,10 @@ type Sound struct {
 	// PCM is the decoded audio, interleaved by channel and normalized to
 	// signed 16-bit samples regardless of the original source bit depth.
 	PCM []int16 `json:"pcm"`
+	// Error is non-empty when this entry could not be decoded: the sound
+	// keeps its (Group, Sample) key so a consumer can flag it, and PCM is
+	// left empty. Omitted from JSON for every successfully decoded sound.
+	Error string `json:"error,omitempty"`
 }
 
 // SoundGroup is a collection of Sounds that share the same group index —

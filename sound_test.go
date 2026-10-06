@@ -2,6 +2,8 @@ package character
 
 import (
 	"encoding/binary"
+	"encoding/json"
+	"strings"
 	"testing"
 )
 
@@ -141,4 +143,61 @@ func buildV2SndFile(t *testing.T, entries []sndFixtureEntry) []byte {
 	}
 
 	return buf
+}
+
+// TestDecodeSoundGroups_OneUndecodableEntry_KeepsOthersAndFlagsIt covers
+// backlog item 058 for both .snd versions: a single corrupt entry stays in
+// its group with a descriptive Error while every other entry still decodes.
+func TestDecodeSoundGroups_OneUndecodableEntry_KeepsOthersAndFlagsIt(t *testing.T) {
+	good := buildWAVFixture(t, 1, 44100, 16, []byte{1, 0, 2, 0})
+	entries := []sndFixtureEntry{
+		{group: 1, sample: 0, payload: good},
+		{group: 1, sample: 1, payload: []byte("not a wav at all")},
+		{group: 2, sample: 0, payload: good},
+	}
+	builders := map[string]func(*testing.T, []sndFixtureEntry) []byte{
+		"v1": buildV1SndFile,
+		"v2": buildV2SndFile,
+	}
+	for name, build := range builders {
+		t.Run(name, func(t *testing.T) {
+			groups, err := decodeSoundGroups(build(t, entries), "x.snd", nil)
+			if err != nil {
+				t.Fatalf("expected no hard error, got %v", err)
+			}
+			if len(groups) != 2 || len(groups[0].Sounds) != 2 || len(groups[1].Sounds) != 1 {
+				t.Fatalf("unexpected grouping: %+v", groups)
+			}
+			bad := groups[0].Sounds[1]
+			if bad.Group != 1 || bad.Sample != 1 || bad.PCM != nil {
+				t.Errorf("bad sound should keep its key and have no PCM: %+v", bad)
+			}
+			for _, want := range []string{"group 1", "sample 1"} {
+				if !strings.Contains(bad.Error, want) {
+					t.Errorf("Error %q should mention %q", bad.Error, want)
+				}
+			}
+			for _, ok := range []Sound{groups[0].Sounds[0], groups[1].Sounds[0]} {
+				if ok.Error != "" || len(ok.PCM) != 2 {
+					t.Errorf("good sound corrupted: %+v", ok)
+				}
+			}
+		})
+	}
+}
+
+// TestSound_JSON_OmitsErrorForGoodSounds keeps the wire format unchanged for
+// every consumer of good sounds.
+func TestSound_JSON_OmitsErrorForGoodSounds(t *testing.T) {
+	data, err := json.Marshal(Sound{Group: 1, PCM: []int16{1}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(data), `"error"`) {
+		t.Errorf("good sound should not carry an error field: %s", data)
+	}
+	data, _ = json.Marshal(Sound{Group: 1, Error: "boom"})
+	if !strings.Contains(string(data), `"error":"boom"`) {
+		t.Errorf("bad sound should marshal its error: %s", data)
+	}
 }
