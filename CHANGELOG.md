@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-11-08
+
 ### Added
 
 - Loading a character now also reads the Ikemen GO state scripts (`.zss`) its definition declares, picking them out the way Ikemen GO does: among the state files and the common state file, by their `.zss` extension, falling back to a same-named `.zss` file when the declared one is missing, and alongside any `.cns` files. Each script's states and functions come back with the character, including from the web build, which accepts the scripts as an optional extra input. A missing or malformed script does not stop the character from loading: that script comes back empty with a message naming it. A character without a constants (`cns`) file now loads too. Saving an unmodified script, or an unmodified character definition, still reproduces it exactly.
@@ -189,7 +191,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `.sff` v1 sprites can now have their actual decoded pixel data resolved through the same public API as their palette, so a caller can get a sprite's real image, not just its dimensions; validated against real, unmodified MUGEN/Ikemen character files rather than only hand-built test data, which surfaced and fixed two long-standing decoding inaccuracies for real files — a sprite whose stored "linked sprite" reference points at itself or a later sprite now correctly falls back to its own image instead of misreading unrelated data, and a sprite's own color palette is now located correctly for every real file layout, not just the common case; a sprite with a corrupted or nonsensical declared size now falls back to a blank placeholder image instead of risking a crash
 - A character (name, animations, sprites, combat logic) can now be loaded directly in a web browser, no local Go installation required: tagging a new release automatically publishes a downloadable WebAssembly build of the library alongside the small glue file it needs to run
 
-[Unreleased]: https://github.com/openkakutou/character/compare/v0.11.0...HEAD
+[Unreleased]: https://github.com/openkakutou/character/compare/v0.12.0...HEAD
+[0.12.0]: https://github.com/openkakutou/character/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/openkakutou/character/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/openkakutou/character/compare/v0.9.1...v0.10.0
 [0.9.1]: https://github.com/openkakutou/character/compare/v0.9.0...v0.9.1
