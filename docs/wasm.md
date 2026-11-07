@@ -23,7 +23,7 @@ never touch it.
 The module registers a single global on `js.Global()`:
 
 ```js
-globalThis.OpenKakutouCharacter.load(defBytes, airBytes, sffBytes, cnsBytes[, sndBytes])
+globalThis.OpenKakutouCharacter.load(defBytes, airBytes, sffBytes, cnsBytes[, sndBytes[, cmdBytes]])
 ```
 
 - **Arguments**: four required `Uint8Array`s — the raw bytes of a
@@ -36,7 +36,11 @@ globalThis.OpenKakutouCharacter.load(defBytes, airBytes, sffBytes, cnsBytes[, sn
   "no sound data" — the returned character simply has no sounds, not an
   error, matching how a character with no sound file already behaves
   natively (see `.vibe/decisions/029`); existing callers built against the
-  previous four-argument contract keep working unchanged.
+  previous four-argument contract keep working unchanged. A sixth optional
+  argument, `cmdBytes`, is the character's `.cmd` file: the returned
+  character carries it as `commands`, and a malformed one does not fail the
+  load — `commands` is empty and `commandError` holds the message (see
+  `.vibe/decisions/031`).
 - **Return value**: always a plain object `{ character, error }`, exactly
   one field non-`null`:
   - `character` — a JSON string of the loaded `Character` (see
@@ -131,8 +135,9 @@ for (const { pixels, width, height, error } of results) {
 
 ## Reading a `.cmd` file directly
 
-`.cmd` isn't wired into `load`'s JSON contract (unlike `.def`/`.air`/`.cns`)
-— a separate global reads one directly:
+`load` returns a character's parsed `.cmd` as `commands` (plus `commandError`
+when it could not be parsed) when given the optional sixth argument `cmdBytes`.
+A separate global reads a `.cmd` on its own:
 
 ```js
 globalThis.OpenKakutouCharacter.loadCmd(cmdBytes)

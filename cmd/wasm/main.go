@@ -50,13 +50,15 @@ func main() {
 }
 
 // load is
-// OpenKakutouCharacter.load(defBytes, airBytes, sffBytes, cnsBytes[, sndBytes])
+// OpenKakutouCharacter.load(defBytes, airBytes, sffBytes, cnsBytes[, sndBytes[, cmdBytes]])
 // as seen from JS: each argument is a Uint8Array (or any JS value
 // js.CopyBytesToGo accepts), holding that file's raw bytes. sndBytes is
 // optional — omitting it, or passing null/undefined, means "no sound data",
 // exactly like an empty SoundFile (see .vibe/decisions/029) — so existing
 // callers built against the previous 4-argument contract keep working
-// unchanged. It always returns a JS object shaped
+// unchanged. cmdBytes is optional the same way (null/undefined = no .cmd);
+// a malformed one does not fail the load: the character JSON carries empty
+// "commands" and a non-empty "commandError" (see .vibe/decisions/031). It always returns a JS object shaped
 // { character: string|null, error: string|null } — exactly one of the two
 // fields is non-null — never throws and never lets an internal panic escape
 // to the JS caller.
@@ -71,7 +73,7 @@ func load(this js.Value, args []js.Value) any {
 	}()
 
 	if len(args) < 4 {
-		return result(nil, fmt.Errorf("OpenKakutouCharacter.load: expected at least 4 arguments (defBytes, airBytes, sffBytes, cnsBytes[, sndBytes]), got %d", len(args)))
+		return result(nil, fmt.Errorf("OpenKakutouCharacter.load: expected at least 4 arguments (defBytes, airBytes, sffBytes, cnsBytes[, sndBytes[, cmdBytes]]), got %d", len(args)))
 	}
 
 	defBytes, err := bytesFromJS(args[0])
@@ -99,7 +101,15 @@ func load(this js.Value, args []js.Value) any {
 		}
 	}
 
-	c, err := character.LoadBytes(defBytes, airBytes, sffBytes, cnsBytes, sndBytes)
+	var cmdBytes []byte
+	if len(args) >= 6 && !args[5].IsNull() && !args[5].IsUndefined() {
+		cmdBytes, err = bytesFromJS(args[5])
+		if err != nil {
+			return result(nil, fmt.Errorf("OpenKakutouCharacter.load: cmdBytes: %w", err))
+		}
+	}
+
+	c, err := character.LoadBytes(defBytes, airBytes, sffBytes, cnsBytes, sndBytes, cmdBytes)
 	if err != nil {
 		return result(nil, err)
 	}
@@ -142,8 +152,9 @@ func result(characterJSON []byte, err error) map[string]any {
 // cmdBytes is a Uint8Array holding a .cmd file's raw bytes. It always
 // returns a JS object shaped { commandFile: string|null, error: string|null
 // } — exactly one of the two fields is non-null — never throws. Unlike
-// load, .cmd isn't wired into Character, so this wraps
-// character.ParseCmd directly rather than character.LoadBytes; commandFile
+// load (which embeds the parsed .cmd in the character and reports problems
+// non-fatally), this wraps character.ParseCmd directly and fails hard on a
+// malformed file; commandFile
 // is a JSON-encoded string of cmd.CommandFile (remap, defaults, commands,
 // states), matching load's own string-payload convention. This is the
 // read-path counterpart to saveCmd, letting a caller round-trip: parse ->
@@ -398,10 +409,8 @@ func saveCns(this js.Value, args []js.Value) any {
 // Uint8Array holding the .cmd file's previously loaded bytes (empty for a
 // brand new file), editedCommandFileJSON is a JSON string matching
 // cmd.CommandFile's own JSON shape (remap, defaults, commands, states —
-// not yet exposed by load/character.LoadBytes, since .cmd isn't wired
-// into Character; a caller instead gets its baseline by parsing
-// originalCmdBytes itself, or starts from a zero value for a brand new
-// file). Same { bytes, error } contract, byte-exact-when-unmodified
+// the "commands" field of load's character JSON, or loadCmd's result; a
+// brand new file starts from a zero value). Same { bytes, error } contract, byte-exact-when-unmodified
 // strategy, and never-throws guarantee as saveDef — see
 // character.SerializeCmd.
 func saveCmd(this js.Value, args []js.Value) any {

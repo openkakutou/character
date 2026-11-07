@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/openkakutou/character/air"
+	"github.com/openkakutou/character/cmd"
 	"github.com/openkakutou/character/cns"
 	"github.com/openkakutou/character/def"
 	"github.com/openkakutou/sff"
@@ -23,7 +24,9 @@ import (
 //
 // A missing or unreadable .def, .air, .sff, or .cns file returns a
 // descriptive error naming which file and step failed, rather than
-// panicking. See
+// panicking. A missing or unparseable .cmd file is the exception: it is
+// non-fatal and reported in Character.CommandError instead (see
+// .vibe/decisions/031). See
 // .vibe/decisions/010-def-loader-assembles-character-from-referenced-files.md.
 func Load(path string) (*Character, error) {
 	f, err := os.Open(path)
@@ -63,6 +66,8 @@ func Load(path string) (*Character, error) {
 		return nil, err
 	}
 
+	commands, commandErr := loadCommands(dir, info.CommandFile)
+
 	return &Character{
 		Name:          info.Name,
 		Author:        info.Author,
@@ -77,6 +82,8 @@ func Load(path string) (*Character, error) {
 		Sprites:       sprites,
 		StateDefs:     stateDefs,
 		Sounds:        sounds,
+		Commands:      commands,
+		CommandError:  commandErr,
 	}, nil
 }
 
@@ -267,4 +274,31 @@ func loadSounds(dir, referenced string) ([]SoundGroup, error) {
 		return os.ReadFile(resolveReferencedPath(dir, ref))
 	}
 	return decodeSoundGroups(data, path, openExternal)
+}
+
+// loadCommands opens and parses the .cmd file dir+referenced points to.
+//
+// Unlike the other referenced files, a failure is non-fatal: it returns the
+// normalized empty CommandFile plus a descriptive message naming the file and
+// the failing step, which Load stores in Character.CommandError.
+// referenced == "" (no cmd declared) yields the empty value and no message.
+// See .vibe/decisions/031.
+func loadCommands(dir, referenced string) (cmd.CommandFile, string) {
+	empty := normalizeCommandFileForJSON(cmd.CommandFile{})
+	if referenced == "" {
+		return empty, ""
+	}
+
+	path := resolveReferencedPath(dir, referenced)
+	f, err := openReferencedFile(dir, referenced)
+	if err != nil {
+		return empty, fmt.Sprintf("character: opening command file %q: %v", path, err)
+	}
+	defer f.Close()
+
+	file, err := cmd.Parse(f)
+	if err != nil {
+		return empty, fmt.Sprintf("character: parsing command file %q: %v", path, err)
+	}
+	return normalizeCommandFileForJSON(file), ""
 }

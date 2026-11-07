@@ -1,0 +1,10 @@
+---
+date: 2026-11-07
+status: accepted
+---
+# .cmd is wired into Character with a typed field and a non-fatal error field
+**Context:** Backlog item 059. The `cmd` package parses and round-trips `.cmd`, but `Character` did not load or expose it. `CommandFile` (string) already holds the `.def` path, and decision 030 set the precedent that a broken optional-ish resource must not stop the load.
+**Decision:** `Character.Commands` (`cmd.CommandFile`, JSON `commands`) holds the parsed file, always normalized (no nil slice/map). `Character.CommandError` (`commandError`, omitted when empty) holds a message naming the file and the step (opening/parsing) when the `.cmd` is missing, unreadable or malformed; `Load`/`LoadBytes` still succeed with an empty `Commands`. No `cmd` declared (or no `cmdBytes`) is not an error. `LoadBytes` gains a trailing optional `cmdBytes []byte` (nil/empty = none), and the WASM `load` accepts it as an optional 6th argument (null/undefined allowed). Saving reuses `SerializeCmd(original, c.Commands)`, byte-exact for an unmodified file.
+**Reason:** A broken `.cmd` should not hide a character's sprites, animations and states from a viewer/editor, and the trailing optional parameter keeps existing call shapes working in JS. Reusing `SerializeCmd` keeps the write path from decision 028.
+**Rejected alternatives:** Making a missing/malformed `.cmd` a fatal load error (inconsistent with 030; loses the rest of the character); a separate list of load errors on `Character` (splits one resource across two structures, same as rejected in 030); a new unified "save character" entry point (contradicts the per-format save path of 028 for no gain).
+**Compatibility:** Same `.cmd` grammar as decisions 025/026 (MUGEN 1.0/1.1 plus Ikemen GO `[Remap]`/extensions); no engine divergence introduced. No community `.cmd` corpus was found locally, only synthetic fixtures, so compatibility with real MUGEN/Ikemen GO command files is not re-verified by this change (the parser itself was validated on a 520-file corpus in earlier items) (`cmd/testdata/sample.cmd`, `engine/testdata/fighter.cmd`).

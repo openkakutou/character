@@ -75,6 +75,30 @@ assert(Array.isArray(character?.palettes) && character.palettes.length === 0, "u
 // call shape) still works and reports no sounds, empty array not null ---
 assert(Array.isArray(character?.sounds) && character.sounds.length === 0, "load without sndBytes: sounds is an empty array, not null");
 
+// --- backlog item 059: .cmd wired into Character. Omitted cmdBytes gives an
+// empty (non-null) commands object and no commandError ---
+assert(character?.commands && Array.isArray(character.commands.commands) && character.commands.commands.length === 0, "load without cmdBytes: commands.commands is an empty array, not null");
+assert(character?.commands && typeof character.commands.remap === "object" && character.commands.remap !== null, "load without cmdBytes: commands.remap is an object, not null");
+assert(character?.commandError === undefined, "load without cmdBytes: no commandError");
+
+const cmdBytes = toUint8Array("cmd/testdata/sample.cmd");
+const cmdResult = globalThis.OpenKakutouCharacter.load(defBytes, airBytes, sffBytes, cnsBytes, null, cmdBytes);
+assert(cmdResult.error === null, `load with cmdBytes reports no error (got: ${cmdResult.error})`);
+const cmdCharacter = JSON.parse(cmdResult.character ?? "null");
+assert(cmdCharacter?.commands?.commands?.length > 0, "load with cmdBytes: commands are populated");
+assert(cmdCharacter?.commandError === undefined, "load with cmdBytes: no commandError");
+
+// JSON/WASM boundary round trip: load's `commands` JSON fed back into saveCmd
+// with the original bytes reproduces them byte-for-byte.
+const cmdRoundTrip = globalThis.OpenKakutouCharacter.saveCmd(cmdBytes, JSON.stringify(cmdCharacter.commands));
+assert(cmdRoundTrip.error === null, `load commands -> saveCmd reports no error (got: ${cmdRoundTrip.error})`);
+assert(Buffer.from(cmdRoundTrip.bytes).equals(Buffer.from(cmdBytes)), "load commands -> saveCmd reproduces cmdBytes byte-for-byte");
+
+const badCmdResult = globalThis.OpenKakutouCharacter.load(defBytes, airBytes, sffBytes, cnsBytes, undefined, new TextEncoder().encode("[Command\nname = \"a\"\n"));
+assert(badCmdResult.error === null, "malformed cmdBytes does not fail the load");
+const badCmdCharacter = JSON.parse(badCmdResult.character ?? "null");
+assert(typeof badCmdCharacter?.commandError === "string" && badCmdCharacter.commandError.length > 0, "malformed cmdBytes: commandError is a non-empty string");
+
 // --- error path: malformed sff bytes ---
 const errResult = globalThis.OpenKakutouCharacter.load(defBytes, airBytes, new TextEncoder().encode("garbage"), cnsBytes);
 assert(errResult.character === null, "malformed sff bytes: character is null");
@@ -316,8 +340,9 @@ assert(
 );
 
 // --- loadCmd: read/parse path (item 056) ---
-// .cmd isn't wired into `load`'s Character/JSON contract either, so this
-// exercises cmd bytes directly rather than through `character`.
+// loadCmd is a standalone per-format entry point alongside `load`'s
+// `commands` field; this exercises cmd bytes directly rather than through
+// `character`.
 
 // loadCmd: nominal, MUGEN-style .cmd (explicit [Statedef -1], [Remap]).
 const mugenCmdBytes = new TextEncoder().encode(
@@ -369,15 +394,15 @@ assert(roundTrippedCommandFile?.remap?.a === "a", "round trip: unedited fields (
 const afterLoadCmdErrorResult = globalThis.OpenKakutouCharacter.load(defBytes, airBytes, sffBytes, cnsBytes);
 assert(afterLoadCmdErrorResult.error === null, "module still works after a prior loadCmd error");
 
-// saveCmd: not yet wired into `load`'s Character/JSON contract (.cmd isn't
-// part of it), so the baseline comes from a fresh, empty original — a new
-// command file — rather than round-tripping character.commandFile.
+// saveCmd is a standalone per-format entry point alongside `load`'s
+// `commands` field; here the baseline is a fresh, empty original (a new
+// command file).
 const newCommandFile = { remap: {}, defaults: { time: 0, bufferTime: 0 }, commands: [{ name: "QCF_a", input: "~D, DF, F, a", time: 0, bufferTime: 0 }], states: [] };
 const saveCmdNewResult = globalThis.OpenKakutouCharacter.saveCmd(new Uint8Array(0), JSON.stringify(newCommandFile));
 assert(saveCmdNewResult.error === null, `saveCmd (new file) reports no error (got: ${saveCmdNewResult.error})`);
 assert(new TextDecoder().decode(saveCmdNewResult.bytes).includes("QCF_a"), "saveCmd (new file) output contains the new command's name");
 
-// saveZss: same "not wired into Character" reasoning as saveCmd.
+// saveZss: .zss is not on Character, so it has no load-side JSON to round-trip.
 const zssBytes = new TextEncoder().encode("[Statedef 200; type: S; ctrl: 0;]\nif AnimElem = 1 {\n\tcallSuper{}\n}\n");
 const parsedZssResult = { preamble: "", blocks: [{ kind: "Statedef", number: 200, headerParams: { type: "S", ctrl: "0" }, body: "if AnimElem = 1 {\n\tcallSuper{}\n}\n" }] };
 const saveZssNoEditsResult = globalThis.OpenKakutouCharacter.saveZss(zssBytes, JSON.stringify(parsedZssResult));

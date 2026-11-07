@@ -56,7 +56,7 @@ value = 0
 func TestLoadBytes_ValidBuffers_ProducesFullyPopulatedCharacter(t *testing.T) {
 	defBytes, airBytes, sffBytes, cnsBytes := fixtureCharacterBytes(t)
 
-	c, err := LoadBytes(defBytes, airBytes, sffBytes, cnsBytes, nil)
+	c, err := LoadBytes(defBytes, airBytes, sffBytes, cnsBytes, nil, nil)
 	if err != nil {
 		t.Fatalf("LoadBytes returned error: %v", err)
 	}
@@ -131,7 +131,7 @@ movetype = I
 physics = S
 `)
 
-	c, err := LoadBytes(defBytes, airBytes, sffBuf.Bytes(), cnsBytes, nil)
+	c, err := LoadBytes(defBytes, airBytes, sffBuf.Bytes(), cnsBytes, nil, nil)
 	if err != nil {
 		t.Fatalf("LoadBytes returned error: %v", err)
 	}
@@ -186,7 +186,7 @@ pal1 = char1.act
 pal2 = char2.act
 `)
 
-	c, err := LoadBytes(defBytes, airBytes, sffBytes, cnsBytes, nil)
+	c, err := LoadBytes(defBytes, airBytes, sffBytes, cnsBytes, nil, nil)
 	if err != nil {
 		t.Fatalf("LoadBytes returned error: %v", err)
 	}
@@ -231,7 +231,7 @@ func TestLoadBytes_DefMissingOptionalMetadataFields_LoadsSuccessfullyWithEmptyFi
 name = Bare Character
 `)
 
-	c, err := LoadBytes(defBytes, airBytes, sffBytes, cnsBytes, nil)
+	c, err := LoadBytes(defBytes, airBytes, sffBytes, cnsBytes, nil, nil)
 	if err != nil {
 		t.Fatalf("LoadBytes returned error: %v", err)
 	}
@@ -253,7 +253,7 @@ name = Bare Character
 func TestLoadBytes_MalformedDefBytes_ReturnsError(t *testing.T) {
 	_, airBytes, sffBytes, cnsBytes := fixtureCharacterBytes(t)
 
-	_, err := LoadBytes([]byte("[Info\nname=Test\n"), airBytes, sffBytes, cnsBytes, nil)
+	_, err := LoadBytes([]byte("[Info\nname=Test\n"), airBytes, sffBytes, cnsBytes, nil, nil)
 	if err == nil {
 		t.Fatal("expected an error for malformed .def bytes, got nil")
 	}
@@ -262,7 +262,7 @@ func TestLoadBytes_MalformedDefBytes_ReturnsError(t *testing.T) {
 func TestLoadBytes_MalformedAirBytes_ReturnsError(t *testing.T) {
 	defBytes, _, sffBytes, cnsBytes := fixtureCharacterBytes(t)
 
-	_, err := LoadBytes(defBytes, []byte("[Begin Action abc]\n0,0, 0,0, 5\n"), sffBytes, cnsBytes, nil)
+	_, err := LoadBytes(defBytes, []byte("[Begin Action abc]\n0,0, 0,0, 5\n"), sffBytes, cnsBytes, nil, nil)
 	if err == nil {
 		t.Fatal("expected an error for malformed .air bytes, got nil")
 	}
@@ -271,7 +271,7 @@ func TestLoadBytes_MalformedAirBytes_ReturnsError(t *testing.T) {
 func TestLoadBytes_MalformedSffBytes_ReturnsError(t *testing.T) {
 	defBytes, airBytes, _, cnsBytes := fixtureCharacterBytes(t)
 
-	_, err := LoadBytes(defBytes, airBytes, []byte("not a sprite sheet"), cnsBytes, nil)
+	_, err := LoadBytes(defBytes, airBytes, []byte("not a sprite sheet"), cnsBytes, nil, nil)
 	if err == nil {
 		t.Fatal("expected an error for malformed .sff bytes, got nil")
 	}
@@ -280,7 +280,7 @@ func TestLoadBytes_MalformedSffBytes_ReturnsError(t *testing.T) {
 func TestLoadBytes_MalformedCnsBytes_ReturnsError(t *testing.T) {
 	defBytes, airBytes, sffBytes, _ := fixtureCharacterBytes(t)
 
-	_, err := LoadBytes(defBytes, airBytes, sffBytes, []byte("[Statedef\ntype = S\n"), nil)
+	_, err := LoadBytes(defBytes, airBytes, sffBytes, []byte("[Statedef\ntype = S\n"), nil, nil)
 	if err == nil {
 		t.Fatal("expected an error for malformed .cns bytes, got nil")
 	}
@@ -293,7 +293,7 @@ func TestLoadBytes_NilInputBuffers_ReturnsErrorNotPanic(t *testing.T) {
 		}
 	}()
 
-	_, err := LoadBytes(nil, nil, nil, nil, nil)
+	_, err := LoadBytes(nil, nil, nil, nil, nil, nil)
 	if err == nil {
 		t.Fatal("expected an error for nil input buffers, got nil")
 	}
@@ -315,7 +315,7 @@ func TestLoadBytes_ValidSoundBytes_DecodesAndExposesSoundGroups(t *testing.T) {
 		{group: 3, sample: 7, payload: buildWAVFixture(t, 1, 44100, 16, raw)},
 	})
 
-	c, err := LoadBytes(defBytes, airBytes, sffBytes, cnsBytes, sndBytes)
+	c, err := LoadBytes(defBytes, airBytes, sffBytes, cnsBytes, sndBytes, nil)
 	if err != nil {
 		t.Fatalf("LoadBytes returned error: %v", err)
 	}
@@ -337,7 +337,7 @@ func TestLoadBytes_ValidSoundBytes_DecodesAndExposesSoundGroups(t *testing.T) {
 func TestLoadBytes_EmptySoundBytes_LoadsSuccessfullyWithNoSounds(t *testing.T) {
 	defBytes, airBytes, sffBytes, cnsBytes := fixtureCharacterBytes(t)
 
-	c, err := LoadBytes(defBytes, airBytes, sffBytes, cnsBytes, nil)
+	c, err := LoadBytes(defBytes, airBytes, sffBytes, cnsBytes, nil, nil)
 	if err != nil {
 		t.Fatalf("LoadBytes returned error for empty sndBytes: %v", err)
 	}
@@ -360,7 +360,7 @@ func TestLoadBytes_EmptySoundBytes_LoadsSuccessfullyWithNoSounds(t *testing.T) {
 func TestLoadBytes_MalformedSoundBytes_ReturnsError(t *testing.T) {
 	defBytes, airBytes, sffBytes, cnsBytes := fixtureCharacterBytes(t)
 
-	_, err := LoadBytes(defBytes, airBytes, sffBytes, cnsBytes, []byte("not a sound file"))
+	_, err := LoadBytes(defBytes, airBytes, sffBytes, cnsBytes, []byte("not a sound file"), nil)
 	if err == nil {
 		t.Fatal("expected an error for malformed .snd bytes, got nil")
 	}

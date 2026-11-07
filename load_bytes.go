@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/openkakutou/character/air"
+	"github.com/openkakutou/character/cmd"
 	"github.com/openkakutou/character/cns"
 	"github.com/openkakutou/character/def"
 	"github.com/openkakutou/sff"
@@ -37,7 +38,12 @@ import (
 // external-file-reference entry cannot be resolved here (LoadBytes has no
 // filesystem access, unlike Load) and reports a descriptive error if one is
 // actually encountered. See .vibe/decisions/029.
-func LoadBytes(defBytes, airBytes, sffBytes, cnsBytes, sndBytes []byte) (*Character, error) {
+//
+// cmdBytes is likewise optional (nil or empty = no .cmd supplied, not an
+// error) but, unlike sndBytes, a non-empty malformed one is NOT an error:
+// the load succeeds, Commands is the normalized empty value and
+// CommandError describes the failure. See .vibe/decisions/031.
+func LoadBytes(defBytes, airBytes, sffBytes, cnsBytes, sndBytes, cmdBytes []byte) (*Character, error) {
 	info, err := def.Parse(bytes.NewReader(defBytes))
 	if err != nil {
 		return nil, fmt.Errorf("character: parsing character definition bytes: %w", err)
@@ -66,6 +72,16 @@ func LoadBytes(defBytes, airBytes, sffBytes, cnsBytes, sndBytes []byte) (*Charac
 		}
 	}
 
+	var commands cmd.CommandFile
+	var commandErr string
+	if len(cmdBytes) > 0 {
+		var perr error
+		commands, perr = ParseCmd(cmdBytes)
+		if perr != nil {
+			commands, commandErr = cmd.CommandFile{}, perr.Error()
+		}
+	}
+
 	c := &Character{
 		Name:          info.Name,
 		Author:        info.Author,
@@ -80,6 +96,8 @@ func LoadBytes(defBytes, airBytes, sffBytes, cnsBytes, sndBytes []byte) (*Charac
 		Sprites:       sprites,
 		StateDefs:     stateDefs,
 		Sounds:        sounds,
+		Commands:      commands,
+		CommandError:  commandErr,
 	}
 	normalizeForJSON(c)
 	return c, nil
@@ -120,6 +138,8 @@ func normalizeForJSON(c *Character) {
 	if c.Palettes == nil {
 		c.Palettes = []string{}
 	}
+
+	c.Commands = normalizeCommandFileForJSON(c.Commands)
 
 	if c.Sounds == nil {
 		c.Sounds = []SoundGroup{}

@@ -43,6 +43,8 @@ Defined in: `def/document.go`
 | Sprites | []sff.SpriteGroup | Exposed through `sff`'s read-path type only |
 | StateDefs | []cns.StateDef | Exposed through `cns`'s read-path type only |
 | Sounds | []SoundGroup | Decoded from `SoundFile` via the external `snd` module; empty (not an error) when `SoundFile` is empty — item 057 |
+| Commands | cmd.CommandFile | Parsed `.cmd` (from `CommandFile` via `Load`, or `cmdBytes` via `LoadBytes`); always normalized (no nil slice/map), empty when none declared/supplied or on failure — item 059, `.vibe/decisions/031` |
+| CommandError | string | Non-empty when a declared/supplied `.cmd` could not be opened or parsed; non-fatal, omitted from JSON when empty |
 
 Every field carries a `json:"..."` tag (`name`, `author`, `spriteFile`, `animationFile`, `soundFile`, `commandFile`, `constantsFile`, `stateFiles`, `palettes`, `animations`, `sprites`, `stateDefs`, `sounds`). Both `Load` and `LoadBytes` populate every `CharacterInfo`-derived field, not just `Name` (backlog item 038).
 
@@ -50,7 +52,7 @@ Method: `(*Character) ResolveSprite(frame air.Frame) (sff.Sprite, error)` — re
 
 Package function: `Load(path string) (*Character, error)` — the top-level entry point: opens the `.def` file at `path`, parses it with `def.Parse`, resolves its `.air`/`.sff`/`.cns`/`.snd` references against `path`'s own directory, reads them with `air.Parse`/`sff.Load`/`cns.Parse`/`snd`-based decoding, and returns the assembled `Character`. A missing or unreadable `.def`/`.air`/`.sff`/`.cns` file returns a descriptive error rather than panicking; `SoundFile` is the one exception — empty is not an error, but declared-and-broken still is (item 057, `.vibe/decisions/029`).
 
-Package function: `LoadBytes(defBytes, airBytes, sffBytes, cnsBytes, sndBytes []byte) (*Character, error)` — filesystem-independent counterpart of `Load`, for a caller (chiefly `cmd/wasm`) that already holds each file's bytes in memory: parses each buffer directly, never resolving referenced paths itself. `sndBytes` may be `nil`/empty, meaning "no sound data" (item 057). Every slice/map reachable from the returned `Character` is normalized to non-`nil` before returning, so its JSON marshaling never surprises a caller with `null` where an empty, iterable collection was expected. See `.vibe/decisions/019-wasm-entrypoint-byte-buffer-loading-and-json-contract.md`.
+Package function: `LoadBytes(defBytes, airBytes, sffBytes, cnsBytes, sndBytes, cmdBytes []byte) (*Character, error)` — filesystem-independent counterpart of `Load`, for a caller (chiefly `cmd/wasm`) that already holds each file's bytes in memory: parses each buffer directly, never resolving referenced paths itself. `sndBytes` may be `nil`/empty, meaning "no sound data" (item 057). Every slice/map reachable from the returned `Character` is normalized to non-`nil` before returning, so its JSON marshaling never surprises a caller with `null` where an empty, iterable collection was expected. See `.vibe/decisions/019-wasm-entrypoint-byte-buffer-loading-and-json-contract.md`.
 
 Defined in: `character.go`, `load.go`, `load_bytes.go`, `load_sound.go`, `sound.go`
 

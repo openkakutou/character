@@ -42,7 +42,7 @@ type SoundGroup struct {
 func (c *Character) ResolveSprite(frame air.Frame) (sff.Sprite, error)
 
 func Load(path string) (*Character, error)
-func LoadBytes(defBytes, airBytes, sffBytes, cnsBytes, sndBytes []byte) (*Character, error)
+func LoadBytes(defBytes, airBytes, sffBytes, cnsBytes, sndBytes, cmdBytes []byte) (*Character, error)
 ```
 
 `Character` is the assembled unit a library consumer (editor, engine) works
@@ -140,11 +140,13 @@ c := character.Character{
 func ParseCmd(cmdBytes []byte) (cmd.CommandFile, error)
 ```
 
-`.cmd` isn't wired into `Character`/`Load`/`LoadBytes` — a character uses it
-independently of the rest of its files, and `cmd.CommandFile`'s shape has no
-place on `Character` yet (see
-[`.vibe/decisions/028-wasm-save-path-per-format-diff-or-serialize.md`](../.vibe/decisions/028-wasm-save-path-per-format-diff-or-serialize.md)'s
-rejected alternatives). `ParseCmd` is the read-path counterpart to
+`.cmd` is wired into `Character`: `Load` reads the file `CommandFile` names,
+`LoadBytes` takes it as its optional sixth argument `cmdBytes`, and the result
+lands in `Character.Commands` (a `cmd.CommandFile`, never nil slices/maps).
+A missing, unreadable or malformed `.cmd` is non-fatal: the load succeeds,
+`Commands` is empty and `Character.CommandError` carries the message (see
+[`.vibe/decisions/031-cmd-wired-into-character-non-fatal-error-field.md`](../.vibe/decisions/031-cmd-wired-into-character-non-fatal-error-field.md)).
+A character with no `.cmd` declared (or no `cmdBytes`) has no error. `ParseCmd` is the read-path counterpart to
 `SerializeCmd` for a caller with no filesystem access — chiefly the WASM
 entrypoint (see [docs/wasm.md](wasm.md)) — wrapping `cmd.Parse` (see
 `character/cmd` below) the same way `LoadBytes` wraps `def.Parse`/

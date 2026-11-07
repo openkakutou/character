@@ -8,6 +8,7 @@ package character
 
 import (
 	"github.com/openkakutou/character/air"
+	"github.com/openkakutou/character/cmd"
 	"github.com/openkakutou/character/cns"
 	"github.com/openkakutou/sff"
 )
@@ -49,6 +50,16 @@ type Character struct {
 	// empty (rather than an error) for a character with no SoundFile
 	// declared at all — see .vibe/decisions/029.
 	Sounds []SoundGroup `json:"sounds"`
+	// Commands is the character's parsed input command file, resolved from
+	// CommandFile (Load) or the cmdBytes argument (LoadBytes). It is the
+	// normalized empty value (no nil slice/map) when no .cmd was declared or
+	// supplied, or when it could not be read — see CommandError and
+	// .vibe/decisions/031.
+	Commands cmd.CommandFile `json:"commands"`
+	// CommandError is non-empty when a .cmd file was declared or supplied
+	// but could not be opened or parsed. It is non-fatal: the load still
+	// succeeds, mirroring Sound.Error (.vibe/decisions/030).
+	CommandError string `json:"commandError,omitempty"`
 }
 
 // ResolveSprite returns the Sprite that frame's (Group, Image) reference

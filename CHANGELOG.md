@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Loading a character now also reads its input command (`.cmd`) file and makes the parsed commands available alongside the rest of the character, including from the web build, which accepts the command file as an optional extra input. A command file that is missing, unreadable or malformed does not stop the character from loading: the character comes back without commands and a message saying what went wrong. Saving an unmodified command file still reproduces it exactly.
+
 ## [0.10.0] - 2026-10-06
 
 ### Added
