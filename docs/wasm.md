@@ -23,7 +23,7 @@ never touch it.
 The module registers a single global on `js.Global()`:
 
 ```js
-globalThis.OpenKakutouCharacter.load(defBytes, airBytes, sffBytes, cnsBytes[, sndBytes[, cmdBytes]])
+globalThis.OpenKakutouCharacter.load(defBytes, airBytes, sffBytes, cnsBytes[, sndBytes[, cmdBytes[, zssFiles]]])
 ```
 
 - **Arguments**: four required `Uint8Array`s — the raw bytes of a
@@ -40,7 +40,15 @@ globalThis.OpenKakutouCharacter.load(defBytes, airBytes, sffBytes, cnsBytes[, sn
   argument, `cmdBytes`, is the character's `.cmd` file: the returned
   character carries it as `commands`, and a malformed one does not fail the
   load — `commands` is empty and `commandError` holds the message (see
-  `.vibe/decisions/031`).
+  `.vibe/decisions/031`). A seventh optional argument, `zssFiles`, is a plain
+  object mapping each `.zss` entry text of the `.def` (`st`, `stN`,
+  `stcommon`) to a `Uint8Array`; keys ignore path separators and letter case.
+  The scripts come back as `scripts`: `[{ file, script, error }]`, and a
+  missing or malformed one does not fail the load (`error` is set,
+  `script` is empty). For Ikemen GO's fallback (an entry such as
+  `common1.cns` that is not found), supply the script under
+  `"common1.cns.zss"`. A value that is not an object of byte arrays is an
+  error (see `.vibe/decisions/032`).
 - **Return value**: always a plain object `{ character, error }`, exactly
   one field non-`null`:
   - `character` — a JSON string of the loaded `Character` (see
@@ -190,14 +198,16 @@ globalThis.OpenKakutouCharacter.saveZss(originalZssBytes, editedScriptJSON)
   format — edited or not.
   - `saveDef`'s model matches `load`'s own `CharacterInfo` shape (`name`,
     `author`, `spriteFile`, `animationFile`, `soundFile`, `commandFile`,
-    `constantsFile`, `stateFiles`, `palettes`).
+    `constantsFile`, `stateFiles`, `stateCommonFile`, `palettes`). The JSON is
+    applied on top of the info parsed from the original `.def`: a field
+    absent from the JSON keeps its original value, while an explicit `""` or
+    `[]` clears it. With an empty original the base is the zero value.
   - `saveAir`'s model matches the `animations` array `load` already
     returns; `saveCns`'s matches the `stateDefs` array.
-  - `saveCmd`'s and `saveZss`'s models are **not** part of `load`'s JSON
-    contract — `.cmd`/`.zss` aren't wired into `Character` — so a caller
-    gets its baseline via `loadCmd` above (or, for `.zss`, by parsing
-    `originalZssBytes` itself — see [docs/api.md](api.md#character/zss) for
-    the shape), or starts from a zero value for a brand new file.
+  - `saveCmd`'s model is the `commands` object `load` returns (or the
+    `commandFile` from `loadCmd` above); `saveZss`'s model is one entry's
+    `scripts[i].script` from `load`. Both start from a zero value for a brand
+    new file. See [docs/api.md](api.md#character/zss) for the `.zss` shape.
 - **Return value**: always a plain object `{ bytes, error }`, exactly one
   field non-`null`:
   - `bytes` — a `Uint8Array` of the serialized file. Byte-exact to the

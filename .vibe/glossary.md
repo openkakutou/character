@@ -51,7 +51,7 @@ A standalone `.act` palette file (256 RGB colors) used to recolor a character wi
 _Sources: `cmd/wasm/main.go`, `.vibe/decisions/016-external-palette-override-api-shape.md`_
 
 ## State
-A named mode of a character's behavior (e.g. standing, an attack, a hit reaction), defined by a `.cns` `[Statedef N]` block: a state number, its type/move-type/physics classification, and the State controllers that run while it is active. A character may instead define its states via `.zss`'s own `[Statedef N; ...]` block shape (never both formats at once) — there, the same header fields are kept as unevaluated `key: value` data rather than typed classification fields, and the controllers that run are Lua-like script statements kept as one raw, unevaluated body rather than individually parsed.
+A named mode of a character's behavior (e.g. standing, an attack, a hit reaction), defined by a `.cns` `[Statedef N]` block: a state number, its type/move-type/physics classification, and the State controllers that run while it is active. A character may instead define its states via `.zss`'s own `[Statedef N; ...]` block shape (a character may mix `.cns` and `.zss` state files) — there, the same header fields are kept as unevaluated `key: value` data rather than typed classification fields, and the controllers that run are Lua-like script statements kept as one raw, unevaluated body rather than individually parsed.
 **Do not confuse with:** Animation, which is the visual sequence of Frames a state typically plays but is a separate `.air` concept referenced by number, not part of the state itself; Function, `.zss`'s other block kind, which is a reusable named script routine rather than a mode of the character's own behavior.
 _Sources: `cns/statedef.go`, `cns/parser.go`, `zss/script.go`, `zss/parser.go`_
 
@@ -74,3 +74,8 @@ _Sources: `cmd/command.go`, `cmd/parser.go`_
 A reusable, named block of Lua-like script logic, defined by a `.zss [Function Name(params) ret]` block — Ikemen GO's `.zss` state-script format's equivalent of a subroutine, callable from a State's own script body or from another Function. Its parameter names and declared return variable name(s) are parsed; its actual script logic is kept as raw, unevaluated text, the same way a State's script body is.
 **Do not confuse with:** State, `.zss`'s other block kind, which defines a mode of the character's own behavior rather than a reusable routine.
 _Sources: `zss/script.go`, `zss/parser.go`_
+
+## Common state file
+The state file a character's `.def` names with `stcommon` (usually the engine's shared `common1.cns`), holding the default states every character relies on. Loaded after the character's own state files; when it is not a `.zss` and is absent from the character folder, it is skipped silently.
+**Do not confuse with:** State, a single mode of behavior rather than the file that holds default ones.
+_Sources: `def/character_info.go`, `def/parser.go`, `load_zss.go`, `.vibe/decisions/032-zss-scripts-wired-into-character-ikemen-file-selection.md`_

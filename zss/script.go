@@ -6,8 +6,9 @@
 // file I/O, or write-only (format-preservation) logic; per CLAUDE.md's
 // read/write separation constraint, that lives elsewhere.
 //
-// A .zss file is Ikemen GO's Lua-like alternative to .cns: a character uses
-// either .cns or .zss, never both (see roadmap decision 012). Following the
+// A .zss file is Ikemen GO's Lua-like alternative to .cns: a character may
+// mix .cns and .zss state files, each file being one or the other (the
+// extension decides; see .vibe/decisions/032). Following the
 // same "unevaluated data" principle cns.Controller already applies to
 // trigger conditions, a Block's script body — the Lua-like statements
 // between one block header and the next — is kept as raw, unevaluated text.
@@ -37,13 +38,13 @@ type Block struct {
 
 	// Number is the state number this block defines (the N in
 	// "[Statedef N; ...]"). Unused (zero) for a Function block.
-	Number int `json:"number,omitempty"`
+	Number int `json:"number"`
 	// HeaderParams are a Statedef header's semicolon-separated
 	// "key: value" fields (e.g. "type", "physics", "movetype", "anim",
 	// "ctrl"), verbatim and unevaluated, keyed by lowercase field name —
 	// mirroring cns.Controller.Parameters one format up. Unused (nil) for
 	// a Function block.
-	HeaderParams map[string]string `json:"headerParams,omitempty"`
+	HeaderParams map[string]string `json:"headerParams"`
 
 	// Name is this block's function name (the "[Function Name(...)"
 	// part). Empty for a Statedef block.
@@ -51,12 +52,12 @@ type Block struct {
 	// Params are a Function header's parenthesized parameter names, in
 	// declaration order. Empty for a Statedef block, or a Function
 	// declared with no parameters.
-	Params []string `json:"params,omitempty"`
+	Params []string `json:"params"`
 	// Ret are a Function header's declared return variable name(s) (the
 	// text after the closing parenthesis, e.g. "ret" or
 	// "xangl,yangl,zangl"), in declaration order. Empty for a Statedef
 	// block, or a Function declaring no return value.
-	Ret []string `json:"ret,omitempty"`
+	Ret []string `json:"ret"`
 
 	// Body is this block's full script text: every line between this
 	// block's header and the next block header (or end of file), kept
@@ -74,5 +75,5 @@ type Script struct {
 	// header, or contains no blocks at all.
 	Preamble string `json:"preamble,omitempty"`
 	// Blocks are this script's Statedef/Function blocks, in file order.
-	Blocks []Block `json:"blocks,omitempty"`
+	Blocks []Block `json:"blocks"`
 }

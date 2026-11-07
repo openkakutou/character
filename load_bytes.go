@@ -3,6 +3,8 @@ package character
 import (
 	"bytes"
 	"fmt"
+	"io/fs"
+	"strings"
 
 	"github.com/openkakutou/character/air"
 	"github.com/openkakutou/character/cmd"
@@ -27,14 +29,15 @@ import (
 // renders empty as "[]"/"{}", never "null" — see
 // .vibe/decisions/019-wasm-entrypoint-byte-buffer-loading-and-json-contract.md).
 //
-// A malformed or truncated buffer for any of the four required inputs
-// returns a descriptive error naming which one failed, rather than
-// panicking; on any error the returned Character is always nil, never
+// A malformed or truncated buffer for defBytes, airBytes or sffBytes, or a
+// non-empty malformed cnsBytes, returns a descriptive error naming which one
+// failed, rather than panicking; cnsBytes may be empty (no .cns: a character
+// may carry its states in .zss alone); on any error the returned Character is always nil, never
 // partially populated. sndBytes is the exception: it may be nil or empty,
 // meaning "no sound data supplied" (the caller's character has no
 // SoundFile, or chose not to fetch it) — not an error, mirroring how an
 // empty SoundFile is already optional for Load. A non-empty sndBytes that
-// isn't a valid .snd file is a hard error like the other four. A v2
+// isn't a valid .snd file is a hard error like the others. A v2
 // external-file-reference entry cannot be resolved here (LoadBytes has no
 // filesystem access, unlike Load) and reports a descriptive error if one is
 // actually encountered. See .vibe/decisions/029.
@@ -43,7 +46,19 @@ import (
 // error) but, unlike sndBytes, a non-empty malformed one is NOT an error:
 // the load succeeds, Commands is the normalized empty value and
 // CommandError describes the failure. See .vibe/decisions/031.
-func LoadBytes(defBytes, airBytes, sffBytes, cnsBytes, sndBytes, cmdBytes []byte) (*Character, error) {
+//
+// zssFiles supplies the .zss scripts the .def declares (st, stN, stcommon),
+// keyed by the .def entry text, with separators and letter case ignored
+// (nil = none). A declared .zss that is not supplied, or does not parse, is
+// reported in its Scripts entry's Error, not as a failure of the load.
+//
+// Ikemen GO's fallback applies to a non-.zss entry (e.g.
+// "stcommon = common1.cns") that is not found: its "<entry>.zss" sibling is
+// loaded. Supply that script under the key "<entry>.zss" (e.g.
+// "common1.cns.zss"), matching its name on disk. Keying it under the entry
+// itself (e.g. "common1.cns") means "that .cns file exists": it is not read
+// as zss and the fallback is not taken. See .vibe/decisions/032.
+func LoadBytes(defBytes, airBytes, sffBytes, cnsBytes, sndBytes, cmdBytes []byte, zssFiles map[string][]byte) (*Character, error) {
 	info, err := def.Parse(bytes.NewReader(defBytes))
 	if err != nil {
 		return nil, fmt.Errorf("character: parsing character definition bytes: %w", err)
@@ -64,6 +79,18 @@ func LoadBytes(defBytes, airBytes, sffBytes, cnsBytes, sndBytes, cmdBytes []byte
 		return nil, fmt.Errorf("character: parsing combat logic bytes: %w", err)
 	}
 
+	normalized := make(map[string][]byte, len(zssFiles))
+	for name, data := range zssFiles {
+		normalized[normalizeZssKey(name)] = data
+	}
+	scripts := resolveScripts(info, func(entry string) ([]byte, error) {
+		data, ok := normalized[normalizeZssKey(entry)]
+		if !ok {
+			return nil, fmt.Errorf("not supplied: %w", fs.ErrNotExist)
+		}
+		return data, nil
+	})
+
 	var sounds []SoundGroup
 	if len(sndBytes) > 0 {
 		sounds, err = decodeSoundGroups(sndBytes, "sound bytes", nil)
@@ -83,24 +110,32 @@ func LoadBytes(defBytes, airBytes, sffBytes, cnsBytes, sndBytes, cmdBytes []byte
 	}
 
 	c := &Character{
-		Name:          info.Name,
-		Author:        info.Author,
-		SpriteFile:    info.SpriteFile,
-		AnimationFile: info.AnimationFile,
-		SoundFile:     info.SoundFile,
-		CommandFile:   info.CommandFile,
-		ConstantsFile: info.ConstantsFile,
-		StateFiles:    info.StateFiles,
-		Palettes:      info.Palettes,
-		Animations:    animations,
-		Sprites:       sprites,
-		StateDefs:     stateDefs,
-		Sounds:        sounds,
-		Commands:      commands,
-		CommandError:  commandErr,
+		Name:            info.Name,
+		Author:          info.Author,
+		SpriteFile:      info.SpriteFile,
+		AnimationFile:   info.AnimationFile,
+		SoundFile:       info.SoundFile,
+		CommandFile:     info.CommandFile,
+		ConstantsFile:   info.ConstantsFile,
+		StateFiles:      info.StateFiles,
+		StateCommonFile: info.StateCommonFile,
+		Scripts:         scripts,
+		Palettes:        info.Palettes,
+		Animations:      animations,
+		Sprites:         sprites,
+		StateDefs:       stateDefs,
+		Sounds:          sounds,
+		Commands:        commands,
+		CommandError:    commandErr,
 	}
 	normalizeForJSON(c)
 	return c, nil
+}
+
+// normalizeZssKey folds a .def entry to the form zssFiles keys are compared
+// in: forward slashes, lower case.
+func normalizeZssKey(name string) string {
+	return strings.ToLower(strings.ReplaceAll(name, "\\", "/"))
 }
 
 // normalizeForJSON replaces every nil slice/map reachable from c with its
@@ -140,6 +175,10 @@ func normalizeForJSON(c *Character) {
 	}
 
 	c.Commands = normalizeCommandFileForJSON(c.Commands)
+
+	if c.Scripts == nil {
+		c.Scripts = []ScriptFile{}
+	}
 
 	if c.Sounds == nil {
 		c.Sounds = []SoundGroup{}

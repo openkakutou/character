@@ -149,3 +149,22 @@ type failingWriter struct{}
 func (w *failingWriter) Write(p []byte) (int, error) {
 	return 0, &failingWriterError{}
 }
+
+func TestSerialize_StateCommonFile_WrittenAsStcommonAndRoundTrips(t *testing.T) {
+	info := CharacterInfo{ConstantsFile: "a.cns", StateCommonFile: "common1.cns", StateFiles: []string{"x.zss"}}
+
+	var buf strings.Builder
+	if err := Serialize(&buf, info); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(buf.String(), "cns = a.cns\nstcommon = common1.cns\nst = x.zss\n") {
+		t.Errorf("stcommon not written between cns and st entries:\n%s", buf.String())
+	}
+	got, err := Parse(strings.NewReader(buf.String()))
+	if err != nil {
+		t.Fatalf("re-parse: %v", err)
+	}
+	if got.StateCommonFile != "common1.cns" {
+		t.Errorf("StateCommonFile = %q after round trip", got.StateCommonFile)
+	}
+}

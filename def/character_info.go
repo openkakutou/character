@@ -41,9 +41,15 @@ type CharacterInfo struct {
 	// ConstantsFile is the path to this character's main combat logic
 	// (.cns) file (.def [Files] "cns").
 	ConstantsFile string `json:"constantsFile"`
-	// StateFiles lists additional state definition (.st) files this
-	// character includes beyond ConstantsFile (.def [Files] "st", "st1",
-	// "st2", ...), in the order they appear in the .def file.
+	// StateCommonFile is the path to this character's common state file
+	// (.def [Files] "stcommon"), usually the engine's own common1.cns, which
+	// is typically not inside the character folder. Ikemen GO also accepts
+	// a .zss file here.
+	StateCommonFile string `json:"stateCommonFile"`
+	// StateFiles lists additional state definition files this character
+	// includes beyond ConstantsFile (.def [Files] "st", "st1", "st2", ...),
+	// in Ikemen GO's load order: "st" (no number) first, then by numeric
+	// suffix ascending, ties in file order. An entry may be a .zss script.
 	StateFiles []string `json:"stateFiles"`
 	// Palettes lists this character's palette (.act) files, in palette
 	// number order (.def [Files] "pal1", "pal2", ...).

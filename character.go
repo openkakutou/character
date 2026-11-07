@@ -36,14 +36,21 @@ type Character struct {
 	SoundFile     string `json:"soundFile"`
 	CommandFile   string `json:"commandFile"`
 	ConstantsFile string `json:"constantsFile"`
-	// StateFiles lists additional state definition (.st) files beyond
+	// StateFiles lists additional state files (.cns or .zss) beyond
 	// ConstantsFile, and Palettes lists palette (.act) files — both from
 	// the .def [Files] section, see def.CharacterInfo.
-	StateFiles []string          `json:"stateFiles"`
-	Palettes   []string          `json:"palettes"`
-	Animations []air.Animation   `json:"animations"`
-	Sprites    []sff.SpriteGroup `json:"sprites"`
-	StateDefs  []cns.StateDef    `json:"stateDefs"`
+	StateFiles []string `json:"stateFiles"`
+	// StateCommonFile is the .def "stcommon" entry, see def.CharacterInfo.
+	StateCommonFile string            `json:"stateCommonFile"`
+	Palettes        []string          `json:"palettes"`
+	Animations      []air.Animation   `json:"animations"`
+	Sprites         []sff.SpriteGroup `json:"sprites"`
+	StateDefs       []cns.StateDef    `json:"stateDefs"`
+	// Scripts holds every .zss state script referenced by StateFiles or
+	// StateCommonFile, in Ikemen GO's load order, each with its own
+	// non-fatal Error. It is empty for a MUGEN character, which has no
+	// .zss. See .vibe/decisions/032.
+	Scripts []ScriptFile `json:"scripts"`
 	// Sounds is the character's decoded sound effects, resolved from
 	// SoundFile via the external github.com/openkakutou/snd module.
 	// Unlike Sprites/Animations/StateDefs, SoundFile is optional: it is

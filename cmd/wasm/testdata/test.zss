@@ -1,0 +1,23 @@
+# Sample .zss fixture used by zss.Parse tests.
+# Structure mirrors real Ikemen GO Lua-like state scripts.
+[Statedef 200; type: S; physics: N; movetype: A; anim: 200; ctrl: 0;]
+if AnimElem = 1 {
+	mapAdd{map:"chain_5a";value:1}
+}
+if AnimElem = 4 {
+	call Eff_5a();
+}
+
+[Function Eff_5a()]
+helper{stateno: 6721; id: 6721; pos: 0, -200; ownpal: 1;}
+
+[StateDef 5000; type: S; moveType: H; physics: S;]
+if AnimTime = 0 {
+	changeState{value: 5001;}
+}
+
+[Function CancelNormal() ret]
+let ret = 0;
+if (stateNo = 100 && AnimElem = 3,>= 2) {
+	let ret = 1;
+}

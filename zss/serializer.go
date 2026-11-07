@@ -19,10 +19,11 @@ import (
 // Parse reads back into an equivalent Script, mirroring cns.Serialize. A
 // Statedef's HeaderParams (an unordered map) are written sorted by key for
 // deterministic, reviewable output; map order carries no meaning Parse
-// relies on. A Body already carries its own trailing newline (see Parse),
-// so nothing is added after it.
+// relies on. A non-empty Preamble or Body missing its trailing newline (an
+// edited one; Parse always keeps it) gets one, so the next header still
+// starts its own line.
 func Serialize(w io.Writer, script Script) error {
-	if _, err := io.WriteString(w, script.Preamble); err != nil {
+	if _, err := io.WriteString(w, endWithNewline(script.Preamble)); err != nil {
 		return fmt.Errorf("zss: writing preamble: %w", err)
 	}
 
@@ -30,11 +31,18 @@ func Serialize(w io.Writer, script Script) error {
 		if err := writeBlockHeader(w, b); err != nil {
 			return fmt.Errorf("zss: writing block %d header: %w", i, err)
 		}
-		if _, err := io.WriteString(w, b.Body); err != nil {
+		if _, err := io.WriteString(w, endWithNewline(b.Body)); err != nil {
 			return fmt.Errorf("zss: writing block %d body: %w", i, err)
 		}
 	}
 	return nil
+}
+
+func endWithNewline(s string) string {
+	if s == "" || strings.HasSuffix(s, "\n") {
+		return s
+	}
+	return s + "\n"
 }
 
 // writeBlockHeader writes a single block's header line for b, dispatching

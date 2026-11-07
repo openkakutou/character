@@ -111,6 +111,26 @@ func TestSerialize_Preamble_WrittenBeforeFirstBlock(t *testing.T) {
 // Serialize's output must always reparse into an equivalent Script — the
 // round-trip contract Parse/Serialize give every other format in this repo
 // (air, def, cns, cmd).
+func TestSerialize_BodyWithoutTrailingNewline_NextBlockStaysSeparate(t *testing.T) {
+	script := Script{
+		Preamble: "# banner",
+		Blocks: []Block{
+			{Kind: BlockKindStatedef, Number: 1, Body: "x = 1"},
+			{Kind: BlockKindStatedef, Number: 2, Body: "y = 2"},
+		},
+	}
+
+	var buf strings.Builder
+	if err := Serialize(&buf, script); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	want := "# banner\n[Statedef 1]\nx = 1\n[Statedef 2]\ny = 2\n"
+	if buf.String() != want {
+		t.Errorf("got %q, want %q", buf.String(), want)
+	}
+}
+
 func TestSerialize_RoundTripsThroughParse(t *testing.T) {
 	original := Script{
 		Preamble: "# banner\n",

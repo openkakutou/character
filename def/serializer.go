@@ -17,11 +17,11 @@ import (
 // how Parse's own test fixtures write them. A field left at its zero value
 // (an empty string, or a nil/empty StateFiles/Palettes) is omitted from the
 // output entirely rather than written as an empty key, keeping the output
-// clean for a minimal CharacterInfo. StateFiles are written as "st",
-// "st1", "st2", ... in slice order; Palettes are written as "pal1",
-// "pal2", ... in slice order — Parse reconstructs both lists from
-// file-appearance order (StateFiles) or numeric suffix (Palettes), so this
-// numbering always round-trips regardless of the exact key chosen.
+// clean for a minimal CharacterInfo. StateCommonFile is written as "stcommon"
+// between the cns and st entries. StateFiles are written as "st", "st1",
+// "st2", ... in slice order; Palettes are written as "pal1", "pal2", ... in
+// slice order. Parse reconstructs both lists from the numeric suffix, so
+// this numbering always round-trips regardless of the exact key chosen.
 func Serialize(w io.Writer, info CharacterInfo) error {
 	if err := writeInfoSection(w, info); err != nil {
 		return err
@@ -66,6 +66,7 @@ func writeFilesSection(w io.Writer, info CharacterInfo) error {
 		{"sound", info.SoundFile},
 		{"cmd", info.CommandFile},
 		{"cns", info.ConstantsFile},
+		{"stcommon", info.StateCommonFile},
 	}
 	for _, f := range fields {
 		if f.value == "" {

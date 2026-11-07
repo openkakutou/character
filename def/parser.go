@@ -29,10 +29,10 @@ var paletteKeyPattern = regexp.MustCompile(`(?i)^pal(\d+)$`)
 // .vibe/decisions/009-def-parse-ignores-unknown-sections.md. Within a known
 // section, an unrecognized key is likewise ignored. Comment lines (';',
 // whole-line or trailing) are stripped before parsing. Values may optionally
-// be wrapped in double quotes, which are removed. StateFiles are collected
-// in file-appearance order; Palettes are collected and then sorted by their
-// numeric suffix, per CharacterInfo's documented field order. An empty input
-// returns a zero-value CharacterInfo and a nil error. A malformed section
+// be wrapped in double quotes, which are removed. StateFiles are ordered
+// with "st" first, then by numeric suffix; Palettes by numeric suffix; ties
+// keep file order (per CharacterInfo's documented field order). An empty
+// input returns a zero-value CharacterInfo and a nil error. A malformed section
 // header still returns a descriptive error naming the offending line, as
 // does a reader that fails outright. A content line inside a known section
 // that isn't a valid key=value pair (missing "=") is ignored rather than
@@ -49,6 +49,7 @@ func Parse(r io.Reader) (CharacterInfo, error) {
 		path   string
 	}
 	var palettes []paletteEntry
+	var stateFiles []paletteEntry
 
 	lineNumber := 0
 	for scanner.Scan() {
@@ -101,8 +102,15 @@ func Parse(r io.Reader) (CharacterInfo, error) {
 				info.CommandFile = value
 			case strings.EqualFold(key, "cns"):
 				info.ConstantsFile = value
+			case strings.EqualFold(key, "stcommon"):
+				info.StateCommonFile = value
 			case stateFileKeyPattern.MatchString(key):
-				info.StateFiles = append(info.StateFiles, value)
+				// "st" has no number: it sorts before every "stN" (number -1).
+				number := -1
+				if m := stateFileKeyPattern.FindStringSubmatch(key); m[1] != "" {
+					number, _ = strconv.Atoi(m[1])
+				}
+				stateFiles = append(stateFiles, paletteEntry{number: number, path: value})
 			case paletteKeyPattern.MatchString(key):
 				m := paletteKeyPattern.FindStringSubmatch(key)
 				number, _ := strconv.Atoi(m[1])
@@ -114,6 +122,14 @@ func Parse(r io.Reader) (CharacterInfo, error) {
 
 	if err := scanner.Err(); err != nil {
 		return CharacterInfo{}, fmt.Errorf("def: reading character definition source: %w", err)
+	}
+
+	if len(stateFiles) > 0 {
+		sort.SliceStable(stateFiles, func(i, j int) bool { return stateFiles[i].number < stateFiles[j].number })
+		info.StateFiles = make([]string, len(stateFiles))
+		for i, s := range stateFiles {
+			info.StateFiles[i] = s.path
+		}
 	}
 
 	if len(palettes) > 0 {

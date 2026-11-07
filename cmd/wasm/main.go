@@ -50,7 +50,7 @@ func main() {
 }
 
 // load is
-// OpenKakutouCharacter.load(defBytes, airBytes, sffBytes, cnsBytes[, sndBytes[, cmdBytes]])
+// OpenKakutouCharacter.load(defBytes, airBytes, sffBytes, cnsBytes[, sndBytes[, cmdBytes[, zssFiles]]])
 // as seen from JS: each argument is a Uint8Array (or any JS value
 // js.CopyBytesToGo accepts), holding that file's raw bytes. sndBytes is
 // optional — omitting it, or passing null/undefined, means "no sound data",
@@ -58,7 +58,16 @@ func main() {
 // callers built against the previous 4-argument contract keep working
 // unchanged. cmdBytes is optional the same way (null/undefined = no .cmd);
 // a malformed one does not fail the load: the character JSON carries empty
-// "commands" and a non-empty "commandError" (see .vibe/decisions/031). It always returns a JS object shaped
+// "commands" and a non-empty "commandError" (see .vibe/decisions/031).
+// zssFiles is optional too (null/undefined = none): a JS object mapping each
+// .zss entry of the .def ([Files] st, stN, stcommon, as written there) to its
+// Uint8Array; a declared .zss left out is reported in that entry of the
+// character JSON's "scripts", not as a load failure (see
+// .vibe/decisions/032). For a non-.zss entry (e.g. "stcommon = common1.cns")
+// that is not found, Ikemen GO's fallback loads "<entry>.zss": supply that
+// script under the key "<entry>.zss" (e.g. "common1.cns.zss"), matching its
+// on-disk name. Keying it under the entry itself ("common1.cns") means "that
+// .cns file exists" and it is not read as zss. It always returns a JS object shaped
 // { character: string|null, error: string|null } — exactly one of the two
 // fields is non-null — never throws and never lets an internal panic escape
 // to the JS caller.
@@ -73,7 +82,7 @@ func load(this js.Value, args []js.Value) any {
 	}()
 
 	if len(args) < 4 {
-		return result(nil, fmt.Errorf("OpenKakutouCharacter.load: expected at least 4 arguments (defBytes, airBytes, sffBytes, cnsBytes[, sndBytes[, cmdBytes]]), got %d", len(args)))
+		return result(nil, fmt.Errorf("OpenKakutouCharacter.load: expected at least 4 arguments (defBytes, airBytes, sffBytes, cnsBytes[, sndBytes[, cmdBytes[, zssFiles]]]), got %d", len(args)))
 	}
 
 	defBytes, err := bytesFromJS(args[0])
@@ -109,7 +118,15 @@ func load(this js.Value, args []js.Value) any {
 		}
 	}
 
-	c, err := character.LoadBytes(defBytes, airBytes, sffBytes, cnsBytes, sndBytes, cmdBytes)
+	var zssFiles map[string][]byte
+	if len(args) >= 7 && !args[6].IsNull() && !args[6].IsUndefined() {
+		zssFiles, err = zssFilesFromJS(args[6])
+		if err != nil {
+			return result(nil, fmt.Errorf("OpenKakutouCharacter.load: zssFiles: %w", err))
+		}
+	}
+
+	c, err := character.LoadBytes(defBytes, airBytes, sffBytes, cnsBytes, sndBytes, cmdBytes, zssFiles)
 	if err != nil {
 		return result(nil, err)
 	}
@@ -120,6 +137,26 @@ func load(this js.Value, args []js.Value) any {
 	}
 
 	return result(data, nil)
+}
+
+// zssFilesFromJS converts a JS object mapping .def entry text to a
+// Uint8Array into a Go map, returning a descriptive error if v is not an
+// object or one of its values is not a byte array.
+func zssFilesFromJS(v js.Value) (files map[string][]byte, err error) {
+	if v.Type() != js.TypeObject {
+		return nil, fmt.Errorf("expected an object mapping .zss entries to byte arrays, got %v", v)
+	}
+	keys := js.Global().Get("Object").Call("keys", v)
+	files = make(map[string][]byte, keys.Length())
+	for i := 0; i < keys.Length(); i++ {
+		name := keys.Index(i).String()
+		data, err := bytesFromJS(v.Get(name))
+		if err != nil {
+			return nil, fmt.Errorf("%q: %w", name, err)
+		}
+		files[name] = data
+	}
+	return files, nil
 }
 
 // bytesFromJS copies a JS Uint8Array-like value into a Go []byte via
@@ -302,8 +339,12 @@ func spriteResult(pixels []color.RGBA, width, height int, err error) map[string]
 // character with no original file yet), editedInfoJSON is a JSON string
 // matching character.LoadBytes's own CharacterInfo shape (name, author,
 // spriteFile, animationFile, soundFile, commandFile, constantsFile,
-// stateFiles, palettes) — the caller's current in-memory representation,
-// edited or not. Returns { bytes, error }: on success bytes is a
+// stateFiles, palettes, stateCommonFile) — the caller's current in-memory
+// representation, edited or not. The JSON is applied onto the info parsed
+// from originalDefBytes: a field absent from the JSON keeps its original
+// value (so a caller that does not know a field, e.g. stateCommonFile, does
+// not erase it), while an explicitly sent "" or [] clears it. With an empty
+// original the base is the zero value. Returns { bytes, error }: on success bytes is a
 // Uint8Array of the serialized .def file — byte-exact to
 // originalDefBytes when editedInfoJSON describes no real change, freshly
 // generated text otherwise (see character.SerializeDef and
@@ -327,6 +368,11 @@ func saveDef(this js.Value, args []js.Value) any {
 	}
 
 	var info def.CharacterInfo
+	if len(original) > 0 {
+		if info, err = def.Parse(bytes.NewReader(original)); err != nil {
+			return saveResult(nil, fmt.Errorf("OpenKakutouCharacter.saveDef: parsing originalDefBytes: %w", err))
+		}
+	}
 	if err := json.Unmarshal([]byte(args[1].String()), &info); err != nil {
 		return saveResult(nil, fmt.Errorf("OpenKakutouCharacter.saveDef: editedInfoJSON: %w", err))
 	}
@@ -443,11 +489,8 @@ func saveCmd(this js.Value, args []js.Value) any {
 // editedScriptJSON) as seen from JS: originalZssBytes is a Uint8Array
 // holding the .zss file's previously loaded bytes (empty for a brand new
 // file), editedScriptJSON is a JSON string matching zss.Script's own JSON
-// shape (preamble, blocks — not yet exposed by load/character.LoadBytes,
-// since a character uses .cns or .zss, never both, and only .cns is
-// currently wired into Character; a caller instead gets its baseline by
-// parsing originalZssBytes itself, or starts from a zero value for a
-// brand new file). Same { bytes, error } contract,
+// shape (preamble, blocks — the baseline is "scripts[i].script" from
+// load's character JSON, or a zero value for a brand new file). Same { bytes, error } contract,
 // byte-exact-when-unmodified strategy, and never-throws guarantee as
 // saveDef — see character.SerializeZss.
 func saveZss(this js.Value, args []js.Value) any {

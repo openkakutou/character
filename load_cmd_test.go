@@ -141,7 +141,7 @@ func TestLoad_UnmodifiedCmd_RoundTripsByteForByte(t *testing.T) {
 
 func TestLoadBytes_ValidCmdBytes_ExposesCommandsAndRoundTrips(t *testing.T) {
 	defBytes, airBytes, sffBytes, cnsBytes := fixtureCharacterBytes(t)
-	c, err := LoadBytes(defBytes, airBytes, sffBytes, cnsBytes, nil, []byte(cmdFixtureContent))
+	c, err := LoadBytes(defBytes, airBytes, sffBytes, cnsBytes, nil, []byte(cmdFixtureContent), nil)
 	if err != nil {
 		t.Fatalf("LoadBytes: %v", err)
 	}
@@ -160,7 +160,7 @@ func TestLoadBytes_ValidCmdBytes_ExposesCommandsAndRoundTrips(t *testing.T) {
 func TestLoadBytes_NoCmdBytes_NoErrorAndNonNullJSON(t *testing.T) {
 	defBytes, airBytes, sffBytes, cnsBytes := fixtureCharacterBytes(t)
 	for _, in := range [][]byte{nil, {}} {
-		c, err := LoadBytes(defBytes, airBytes, sffBytes, cnsBytes, nil, in)
+		c, err := LoadBytes(defBytes, airBytes, sffBytes, cnsBytes, nil, in, nil)
 		if err != nil {
 			t.Fatalf("LoadBytes: %v", err)
 		}
@@ -192,7 +192,7 @@ func TestLoadBytes_NoCmdBytes_NoErrorAndNonNullJSON(t *testing.T) {
 
 func TestLoadBytes_MalformedCmdBytes_NonFatalWithCommandError(t *testing.T) {
 	defBytes, airBytes, sffBytes, cnsBytes := fixtureCharacterBytes(t)
-	c, err := LoadBytes(defBytes, airBytes, sffBytes, cnsBytes, nil, []byte("[Command\nname = \"a\"\n"))
+	c, err := LoadBytes(defBytes, airBytes, sffBytes, cnsBytes, nil, []byte("[Command\nname = \"a\"\n"), nil)
 	if err != nil {
 		t.Fatalf("LoadBytes must not fail on malformed cmd: %v", err)
 	}

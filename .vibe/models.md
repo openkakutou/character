@@ -10,7 +10,8 @@
 | SoundFile | string | Path to the .snd sound file (.def `[Files]` "sound") |
 | CommandFile | string | Path to the .cmd command input file (.def `[Files]` "cmd") |
 | ConstantsFile | string | Path to the main .cns combat logic file (.def `[Files]` "cns") |
-| StateFiles | []string | Additional .st files beyond ConstantsFile, in .def file order |
+| StateFiles | []string | Additional state files beyond ConstantsFile: `st` first, then `stN` by number |
+| StateCommonFile | string | Path to the common state file (.def `[Files]` "stcommon"), json `stateCommonFile` |
 | Palettes | []string | .act palette files, in palette number order (.def `[Files]` "pal1", "pal2", ...) |
 
 Paths are stored exactly as written in the .def file; resolving them against a filesystem is left to the package that eventually loads a .def file. Populated by `Parse(r io.Reader) (CharacterInfo, error)`, which reads `[Info]`/`[Files]` `.def` text into this shape, skipping unrecognized sections/keys. Written back out by `Serialize(w io.Writer, info CharacterInfo) error`.
@@ -38,6 +39,7 @@ Defined in: `def/document.go`
 | CommandFile | string | Populated from `CharacterInfo.CommandFile` |
 | ConstantsFile | string | Populated from `CharacterInfo.ConstantsFile`; metadata only — not used to locate `StateDefs` |
 | StateFiles | []string | Populated from `CharacterInfo.StateFiles` |
+| StateCommonFile | string | Populated from `CharacterInfo.StateCommonFile` (json `stateCommonFile`) |
 | Palettes | []string | Populated from `CharacterInfo.Palettes` |
 | Animations | []air.Animation | Exposed through `air`'s read-path type only |
 | Sprites | []sff.SpriteGroup | Exposed through `sff`'s read-path type only |
@@ -45,16 +47,26 @@ Defined in: `def/document.go`
 | Sounds | []SoundGroup | Decoded from `SoundFile` via the external `snd` module; empty (not an error) when `SoundFile` is empty — item 057 |
 | Commands | cmd.CommandFile | Parsed `.cmd` (from `CommandFile` via `Load`, or `cmdBytes` via `LoadBytes`); always normalized (no nil slice/map), empty when none declared/supplied or on failure — item 059, `.vibe/decisions/031` |
 | CommandError | string | Non-empty when a declared/supplied `.cmd` could not be opened or parsed; non-fatal, omitted from JSON when empty |
+| Scripts | []ScriptFile | `.zss` scripts from `StateFiles` then `StateCommonFile`, Ikemen GO load order; never nil, json `scripts` (item 060, `.vibe/decisions/032`) |
 
-Every field carries a `json:"..."` tag (`name`, `author`, `spriteFile`, `animationFile`, `soundFile`, `commandFile`, `constantsFile`, `stateFiles`, `palettes`, `animations`, `sprites`, `stateDefs`, `sounds`). Both `Load` and `LoadBytes` populate every `CharacterInfo`-derived field, not just `Name` (backlog item 038).
+Every field carries a `json:"..."` tag (`name`, `author`, `spriteFile`, `animationFile`, `soundFile`, `commandFile`, `constantsFile`, `stateFiles`, `stateCommonFile`, `palettes`, `animations`, `sprites`, `stateDefs`, `sounds`). Both `Load` and `LoadBytes` populate every `CharacterInfo`-derived field, not just `Name` (backlog item 038).
 
 Method: `(*Character) ResolveSprite(frame air.Frame) (sff.Sprite, error)` — resolves `frame`'s `(Group, Image)` reference against `Sprites`, by delegating to `air.NewSpriteResolver(c.Sprites)`; returns the same descriptive error `SpriteResolver.Resolve` does when no match exists, including when `Sprites` is empty (e.g. a zero-value `Character`).
 
 Package function: `Load(path string) (*Character, error)` — the top-level entry point: opens the `.def` file at `path`, parses it with `def.Parse`, resolves its `.air`/`.sff`/`.cns`/`.snd` references against `path`'s own directory, reads them with `air.Parse`/`sff.Load`/`cns.Parse`/`snd`-based decoding, and returns the assembled `Character`. A missing or unreadable `.def`/`.air`/`.sff`/`.cns` file returns a descriptive error rather than panicking; `SoundFile` is the one exception — empty is not an error, but declared-and-broken still is (item 057, `.vibe/decisions/029`).
 
-Package function: `LoadBytes(defBytes, airBytes, sffBytes, cnsBytes, sndBytes, cmdBytes []byte) (*Character, error)` — filesystem-independent counterpart of `Load`, for a caller (chiefly `cmd/wasm`) that already holds each file's bytes in memory: parses each buffer directly, never resolving referenced paths itself. `sndBytes` may be `nil`/empty, meaning "no sound data" (item 057). Every slice/map reachable from the returned `Character` is normalized to non-`nil` before returning, so its JSON marshaling never surprises a caller with `null` where an empty, iterable collection was expected. See `.vibe/decisions/019-wasm-entrypoint-byte-buffer-loading-and-json-contract.md`.
+Package function: `LoadBytes(defBytes, airBytes, sffBytes, cnsBytes, sndBytes, cmdBytes []byte, zssFiles map[string][]byte) (*Character, error)` — filesystem-independent counterpart of `Load`, for a caller (chiefly `cmd/wasm`) that already holds each file's bytes in memory: parses each buffer directly, never resolving referenced paths itself. `sndBytes` may be `nil`/empty, meaning "no sound data" (item 057). Every slice/map reachable from the returned `Character` is normalized to non-`nil` before returning, so its JSON marshaling never surprises a caller with `null` where an empty, iterable collection was expected. See `.vibe/decisions/019-wasm-entrypoint-byte-buffer-loading-and-json-contract.md`.
 
 Defined in: `character.go`, `load.go`, `load_bytes.go`, `load_sound.go`, `sound.go`
+
+## ScriptFile
+| Field | Type | Notes |
+|---|---|---|
+| File | string | Name the script was loaded under: the `.def` entry, or `<entry>.zss` when the Ikemen GO fallback applied |
+| Script | zss.Script | Parsed script; normalized empty value when Error is set |
+| Error | string | Non-empty when the `.zss` could not be read or parsed; non-fatal, omitted from JSON when empty |
+
+`json:"..."`-tagged (`file`, `script`, `error`). Defined in: `load_zss.go`
 
 ## Sound
 | Field | Type | Notes |
@@ -242,7 +254,7 @@ Defined by the external `github.com/openkakutou/sff` module (item 035); consumed
 
 `json:"..."`-tagged (`remap`, `defaults`, `commands`, `states`).
 
-Populated by `Parse(r io.Reader) (CommandFile, error)`, which reads `[Remap]`/`[Defaults]`/`[Command]` `.cmd` text into this shape while delegating the shared state-controller block to `cns.Parse` (synthesizing an implicit `[Statedef -1]` header first when the source omits one entirely, per real-world files). Written back out by `Serialize(w io.Writer, file CommandFile) error`. Not yet wired into the root `Character` struct. See `.vibe/decisions/025-cmd-package-reuses-cns-for-state-triggering-block.md` and `.vibe/decisions/026-cmd-parse-synthesizes-implicit-statedef-minus-1-header.md`.
+Populated by `Parse(r io.Reader) (CommandFile, error)`, which reads `[Remap]`/`[Defaults]`/`[Command]` `.cmd` text into this shape while delegating the shared state-controller block to `cns.Parse` (synthesizing an implicit `[Statedef -1]` header first when the source omits one entirely, per real-world files). Written back out by `Serialize(w io.Writer, file CommandFile) error`. Wired into the root `Character` as `Character.Scripts` (item 060). See `.vibe/decisions/025-cmd-package-reuses-cns-for-state-triggering-block.md` and `.vibe/decisions/026-cmd-parse-synthesizes-implicit-statedef-minus-1-header.md`.
 
 Defined in: `cmd/command.go`, `cmd/parser.go`, `cmd/serializer.go`
 
@@ -284,7 +296,7 @@ Defined in: `cmd/document.go`
 | Preamble | string | Raw content preceding the first block header (typically a file banner/comment block), preserved verbatim |
 | Blocks | []Block | This script's Statedef/Function blocks, in file order |
 
-`json:"..."`-tagged (`preamble`, `blocks`).
+`json:"..."`-tagged (`preamble`, omitted when empty; `blocks`). `Serialize` appends a missing trailing newline.
 
 Populated by `Parse(r io.Reader) (Script, error)`, which splits `.zss` text into blocks at each `[Statedef ...]`/`[Function ...]` header line. Written back out by `Serialize(w io.Writer, script Script) error`. Not yet wired into the root `Character` struct. See `.vibe/decisions/027-zss-block-structure-header-parsed-body-raw.md`.
 
@@ -301,7 +313,7 @@ Defined in: `zss/script.go`
 | Ret | []string | Function's declared return variable name(s), in order; empty for Statedef or a Function declaring no return value |
 | Body | string | The block's full script text — everything between this block's header and the next (or EOF) — kept verbatim as raw, unevaluated Lua-like source; this repo parses `.zss` structure only, it does not execute the scripting language (see `.vibe/decisions/027-zss-block-structure-header-parsed-body-raw.md`) |
 
-`json:"..."`-tagged (`kind`, `number`, `headerParams`, `name`, `params`, `ret`, `body`).
+`json:"..."`-tagged (`kind`, `number`, `headerParams`, `name` omitted when empty, `params`, `ret`, `body`); `number`/`headerParams`/`params`/`ret` are always present (no `omitempty`).
 
 Defined in: `zss/script.go`
 

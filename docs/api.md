@@ -17,11 +17,21 @@ type Character struct {
     CommandFile   string
     ConstantsFile string
     StateFiles    []string
+    StateCommonFile string
     Palettes      []string
     Animations    []air.Animation
     Sprites       []sff.SpriteGroup
     StateDefs     []cns.StateDef
+    Scripts       []ScriptFile
     Sounds        []SoundGroup
+    Commands      cmd.CommandFile
+    CommandError  string // non-empty if the .cmd could not be read; omitted in JSON otherwise
+}
+
+type ScriptFile struct {
+    File   string     // name the script was loaded under
+    Script zss.Script // empty when Error is set
+    Error  string     // non-empty if the .zss could not be read or parsed; omitted in JSON otherwise
 }
 
 type Sound struct {
@@ -42,12 +52,12 @@ type SoundGroup struct {
 func (c *Character) ResolveSprite(frame air.Frame) (sff.Sprite, error)
 
 func Load(path string) (*Character, error)
-func LoadBytes(defBytes, airBytes, sffBytes, cnsBytes, sndBytes, cmdBytes []byte) (*Character, error)
+func LoadBytes(defBytes, airBytes, sffBytes, cnsBytes, sndBytes, cmdBytes []byte, zssFiles map[string][]byte) (*Character, error)
 ```
 
 `Character` is the assembled unit a library consumer (editor, engine) works
 with: `Name`/`Author`/`SpriteFile`/`AnimationFile`/`SoundFile`/`CommandFile`/
-`ConstantsFile`/`StateFiles`/`Palettes` are threaded straight through from
+`ConstantsFile`/`StateFiles`/`StateCommonFile`/`Palettes` are threaded straight through from
 the `.def` file's own `def.CharacterInfo` (see `character/def`) — the file
 path fields are metadata only, carried over as written in the `.def` file;
 neither `Load` nor `LoadBytes` re-derives the animations/sprites/state defs
@@ -67,9 +77,11 @@ paths it references relative to the `.def` file's own directory, reads them
 (via `air.Parse`, a `sff.Load` that auto-detects the sprite sheet's on-disk
 version, `cns.Parse`, and a version-auto-detecting decode through the
 external `github.com/openkakutou/snd` module), and returns a fully
-assembled `Character`. A missing or unreadable `.def`, `.air`, `.sff`, or
-`.cns` file returns a descriptive error naming which file and step failed,
-rather than panicking. `SoundFile` is the one exception: it is genuinely
+assembled `Character`. A missing or unreadable `.def`, `.air`, or `.sff` file, or a
+declared `.cns` that is missing or unreadable, returns a descriptive error naming which file and step failed,
+rather than panicking. An empty `ConstantsFile` (no `cns` entry) is not an error: `StateDefs` is
+then empty, since a character may carry its states in `.zss` alone.
+`SoundFile` is the one exception: it is genuinely
 optional, so an empty `SoundFile` is not an error at all (`Sounds` is simply
 empty) — but once `SoundFile` is non-empty, a missing or undecodable `.snd`
 file is a hard error exactly like the other three. See
@@ -101,6 +113,37 @@ resolved through `LoadBytes` (no filesystem access) and reports a
 descriptive error if one is actually encountered. See
 [`.vibe/decisions/019-wasm-entrypoint-byte-buffer-loading-and-json-contract.md`](../.vibe/decisions/019-wasm-entrypoint-byte-buffer-loading-and-json-contract.md)
 and decision 029 above.
+
+### Loading `.zss` state scripts
+
+`Load` and `LoadBytes` also load the `.zss` state scripts the `.def`
+references through `st`, `stN` and `stcommon`, into `Character.Scripts`
+(one `ScriptFile` per script, never `nil`). Selection follows Ikemen GO, in
+this order: `st` first, then `stN` by number, then `stcommon`.
+
+- An entry whose extension is `.zss` (case-insensitive, exact; `.zssx` does
+  not count) is loaded.
+- Any other entry is only tested for existence. If it is not found,
+  `<entry>.zss` is tried and loaded when present (`ScriptFile.File` is then
+  `<entry>.zss`); otherwise the entry is skipped silently (for example the
+  engine's `common1.cns`).
+- `.cns` and `.zss` state files may be mixed. `.cns` state files other than
+  `cns` are not parsed (backlog 067).
+
+A `.zss` that is missing, unreadable or malformed is non-fatal: its
+`ScriptFile` carries `Error` (naming the file and the step) and an empty
+`Script`; the load succeeds. See
+[`.vibe/decisions/032-zss-scripts-wired-into-character-ikemen-file-selection.md`](../.vibe/decisions/032-zss-scripts-wired-into-character-ikemen-file-selection.md).
+
+`LoadBytes` takes the scripts as `zssFiles`, a map keyed by the `.def` entry
+text (path separators and letter case ignored; `nil` means none supplied).
+For the fallback, supply the script under `"<entry>.zss"` (for example
+`"common1.cns.zss"`). A key equal to the non-`.zss` entry itself means "that
+file exists": it is not read as zss and the fallback is not taken.
+
+Known gap: 5 of Ikemen GO's own 10 `data/*.zss` scripts fail to parse,
+because the `Statedef` header parser rejects `const(...)` and relative
+(`+1`) state numbers (backlog 066). They come back as per-file errors.
 
 ### Example
 
@@ -460,6 +503,7 @@ type CharacterInfo struct {
     ConstantsFile string   // path to the main .cns combat logic file
     StateFiles    []string // additional .st files beyond ConstantsFile, in file order
     Palettes      []string // .act palette files, in palette number order
+    StateCommonFile string // "stcommon" entry, usually the engine's common1.cns
 }
 ```
 
@@ -484,11 +528,10 @@ Only the `[Info]` and `[Files]` sections are recognized (matched
 case-insensitively, as are their keys); any other section — `[Arcade]`,
 `[Palette Keymap]`, `[Quotes]`, and the like — is skipped without
 validation, and parsing continues into the next known section rather than
-aborting. Within a known section, an unrecognized key (e.g. `displayname`,
-`stcommon`) is likewise ignored. Comment lines (`;`, whole-line or trailing)
+aborting. Within a known section, an unrecognized key (e.g. `displayname`) is likewise ignored. Comment lines (`;`, whole-line or trailing)
 are stripped before parsing, and a value may optionally be wrapped in double
-quotes, which are removed. `StateFiles` is collected in file-appearance
-order; `Palettes` is collected and then sorted by its numeric suffix
+quotes, which are removed. `StateFiles` is sorted like Ikemen GO loads
+them (`st` first, then `stN` by number; equal numbers keep file order); `Palettes` is collected and then sorted by its numeric suffix
 (`pal1`, `pal2`, ...), matching `CharacterInfo.Palettes`'s documented "in
 palette number order" contract regardless of the order those keys appeared
 in the file. See
@@ -543,7 +586,7 @@ references are written unquoted. A field left at its zero value (an empty
 string, or a nil/empty `StateFiles`/`Palettes`) is omitted from the output
 entirely rather than written as an empty key. `StateFiles` are written as
 `st`, `st1`, `st2`, ... in slice order; `Palettes` are written as `pal1`,
-`pal2`, ... in slice order — `Parse` reconstructs both lists from
+`pal2`, ... in slice order, and `StateCommonFile` as `stcommon` — `Parse` reconstructs both lists from
 file-appearance order (`StateFiles`) or numeric suffix (`Palettes`), so this
 numbering always round-trips regardless of the exact key chosen. `Serialize`
 returns an error rather than panicking if the underlying writer fails.
@@ -1053,8 +1096,9 @@ type Script struct {
 ```
 
 `Script`/`Block` is the pure-data vocabulary for an Ikemen GO `.zss` file: an
-alternative to `.cns` combat logic (a character uses one or the other, never
-both). Following the same "unevaluated data" principle `cns.Controller`
+alternative to `.cns` combat logic (a character may use either, or mix both).
+Every field is always present in the JSON form (`number`, `headerParams`,
+`params`, `ret`, `blocks`); only `name` and `preamble` are omitted when empty. Following the same "unevaluated data" principle `cns.Controller`
 already applies to trigger conditions, a `Block`'s `Body` — the Lua-like
 statements between one block header and the next — is kept as raw,
 unevaluated text: this package parses `.zss` structure only, it does not
@@ -1110,8 +1154,9 @@ This produces valid output that `Parse` reads back into an equivalent
 file's formatting (see `Document`, below, for that case) — it always writes
 fresh output. `HeaderParams` (an unordered map) is written sorted by key for
 deterministic output; map order carries no meaning `Parse` relies on.
-`Serialize` returns an error rather than panicking if the underlying writer
-fails.
+A non-empty `Preamble` or `Body` that lacks a trailing newline gets one, so
+the next header stays on its own line. `Serialize` returns an error rather
+than panicking if the underlying writer fails.
 
 ### Byte-exact round trip
 
@@ -1154,8 +1199,8 @@ for _, b := range script.Blocks {
 }
 ```
 
-`character/zss` is not yet wired into `character.Load`/`Character`, the same
-way `character/cmd` isn't (see above).
+`character/zss` is wired into `character.Load`/`Character` as
+`Character.Scripts` (see "Loading `.zss` state scripts" above).
 
 
 ## Sprite (`.sff`) files — external dependency

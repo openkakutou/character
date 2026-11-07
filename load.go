@@ -17,16 +17,19 @@ import (
 // Load reads the .def character definition file at path and assembles a
 // fully populated Character: its identifying info, its referenced
 // animations (.air), its referenced sprites (.sff, either on-disk version),
-// and its referenced combat logic (.cns). Referenced file paths are
-// resolved relative to the directory containing path itself, matching
+// its referenced combat logic (.cns, optional when states come from .zss),
+// and its .zss state scripts (st, stN, stcommon; Character.Scripts).
+// Referenced file paths are resolved relative to the directory containing path itself, matching
 // CharacterInfo's own documented convention and real MUGEN/Ikemen character
 // folder layout.
 //
-// A missing or unreadable .def, .air, .sff, or .cns file returns a
+// A missing or unreadable .def, .air or .sff file, or a declared .cns that
+// is missing or unreadable (an empty cns entry is allowed), returns a
 // descriptive error naming which file and step failed, rather than
 // panicking. A missing or unparseable .cmd file is the exception: it is
 // non-fatal and reported in Character.CommandError instead (see
-// .vibe/decisions/031). See
+// .vibe/decisions/031); so is a missing or unparseable .zss, reported in its
+// ScriptFile.Error (.vibe/decisions/032). See
 // .vibe/decisions/010-def-loader-assembles-character-from-referenced-files.md.
 func Load(path string) (*Character, error) {
 	f, err := os.Open(path)
@@ -56,10 +59,24 @@ func Load(path string) (*Character, error) {
 		return nil, err
 	}
 
-	stateDefs, err := loadStateDefs(dir, info.ConstantsFile)
-	if err != nil {
-		return nil, err
+	// Ikemen GO reads constants only when cns is set, and a character may
+	// carry its states in .zss alone (.vibe/decisions/032).
+	var stateDefs []cns.StateDef
+	if info.ConstantsFile != "" {
+		stateDefs, err = loadStateDefs(dir, info.ConstantsFile)
+		if err != nil {
+			return nil, err
+		}
 	}
+
+	scripts := resolveScripts(info, func(entry string) ([]byte, error) {
+		f, err := openReferencedFile(dir, entry)
+		if err != nil {
+			return nil, err
+		}
+		defer f.Close()
+		return io.ReadAll(f)
+	})
 
 	sounds, err := loadSounds(dir, info.SoundFile)
 	if err != nil {
@@ -69,21 +86,23 @@ func Load(path string) (*Character, error) {
 	commands, commandErr := loadCommands(dir, info.CommandFile)
 
 	return &Character{
-		Name:          info.Name,
-		Author:        info.Author,
-		SpriteFile:    info.SpriteFile,
-		AnimationFile: info.AnimationFile,
-		SoundFile:     info.SoundFile,
-		CommandFile:   info.CommandFile,
-		ConstantsFile: info.ConstantsFile,
-		StateFiles:    info.StateFiles,
-		Palettes:      info.Palettes,
-		Animations:    animations,
-		Sprites:       sprites,
-		StateDefs:     stateDefs,
-		Sounds:        sounds,
-		Commands:      commands,
-		CommandError:  commandErr,
+		Name:            info.Name,
+		Author:          info.Author,
+		SpriteFile:      info.SpriteFile,
+		AnimationFile:   info.AnimationFile,
+		SoundFile:       info.SoundFile,
+		CommandFile:     info.CommandFile,
+		ConstantsFile:   info.ConstantsFile,
+		StateFiles:      info.StateFiles,
+		StateCommonFile: info.StateCommonFile,
+		Scripts:         scripts,
+		Palettes:        info.Palettes,
+		Animations:      animations,
+		Sprites:         sprites,
+		StateDefs:       stateDefs,
+		Sounds:          sounds,
+		Commands:        commands,
+		CommandError:    commandErr,
 	}, nil
 }
 
@@ -99,8 +118,9 @@ func Load(path string) (*Character, error) {
 // containing directory (filepath.Join(dir, "")), which fails with an
 // opaque "is a directory" filesystem error instead of naming the real
 // problem. A .def with at least one populated [Files] entry is left
-// untouched: a file missing only some entries (e.g. no cns) still gets the
-// existing per-file "opening ... file" error further down the load path.
+// untouched: a missing cns is allowed (states may come from .zss), while a
+// missing anim or sprite entry still gets the per-file "opening ... file"
+// error further down the load path.
 // See backlog item 051.
 func validateFilesSection(path string, info def.CharacterInfo) error {
 	if info.AnimationFile != "" || info.SpriteFile != "" || info.ConstantsFile != "" {

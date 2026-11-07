@@ -292,6 +292,17 @@ assert(
 	"saveDef (no edits) is byte-identical to the original .def",
 );
 
+// saveDef: an unmodified .def with stcommon, edited info JSON WITHOUT stateCommonFile
+// (what an editor that predates the field sends) stays byte-identical.
+const stcommonDefBytes = new TextEncoder().encode("; my comment\n[Info]\nname = \"X\"\n\n[Files]\ncns = a.cns\nstcommon = common1.cns\nst = main.zss\n");
+const legacyInfo = { name: "X", author: "", spriteFile: "", animationFile: "", soundFile: "", commandFile: "", constantsFile: "a.cns", stateFiles: ["main.zss"], palettes: [] };
+const saveDefLegacyResult = globalThis.OpenKakutouCharacter.saveDef(stcommonDefBytes, JSON.stringify(legacyInfo));
+assert(saveDefLegacyResult.error === null, `saveDef (stcommon, field absent) reports no error (got: ${saveDefLegacyResult.error})`);
+assert(
+	new TextDecoder().decode(saveDefLegacyResult.bytes ?? new Uint8Array(0)) === new TextDecoder().decode(stcommonDefBytes),
+	"saveDef (stcommon, stateCommonFile absent from the edited JSON) is byte-identical to the original .def",
+);
+
 // saveDef: an edit is reflected in the output.
 const renamedInfo = { ...editedInfo, name: "Renamed via WASM" };
 const saveDefEditedResult = globalThis.OpenKakutouCharacter.saveDef(defBytes, JSON.stringify(renamedInfo));
@@ -425,6 +436,26 @@ assert(
 const saveArgCountResult = globalThis.OpenKakutouCharacter.saveCns(cnsBytes);
 assert(saveArgCountResult.bytes === null, "saveCns (missing argument) returns null bytes");
 assert(typeof saveArgCountResult.error === "string" && saveArgCountResult.error.length > 0, "saveCns (missing argument) reports an error");
+
+// --- backlog item 060: .zss scripts via the optional 7th (zssFiles)
+// argument, an object mapping the .def entry text to its bytes ---
+const zssDefBytes = new TextEncoder().encode("[Files]\nst = Test.zss\n");
+const zssFixtureBytes = toUint8Array("cmd/wasm/testdata/test.zss");
+const zssResult = globalThis.OpenKakutouCharacter.load(zssDefBytes, airBytes, sffBytes, cnsBytes, null, null, { "Test.zss": zssFixtureBytes });
+assert(zssResult.error === null, `load with zssFiles reports no error (got: ${zssResult.error})`);
+const zssCharacter = JSON.parse(zssResult.character ?? "null");
+assert(zssCharacter?.scripts?.[0]?.script?.blocks?.length > 0, "load with zssFiles: scripts[0] has blocks");
+assert(zssCharacter?.scripts?.[0]?.error === undefined, "load with zssFiles: scripts[0] has no error");
+assert(zssCharacter?.scripts?.[0]?.file === "Test.zss", `load with zssFiles: scripts[0].file is Test.zss (got: ${zssCharacter?.scripts?.[0]?.file})`);
+assert(Array.isArray(character?.scripts) && character.scripts.length === 0, "load without zssFiles on a .zss-less .def: scripts is an empty array");
+
+const zssMissingResult = globalThis.OpenKakutouCharacter.load(zssDefBytes, airBytes, sffBytes, cnsBytes);
+assert(zssMissingResult.error === null, "declared .zss not supplied does not fail the load");
+const zssMissingCharacter = JSON.parse(zssMissingResult.character ?? "null");
+assert(typeof zssMissingCharacter?.scripts?.[0]?.error === "string" && zssMissingCharacter.scripts[0].error.length > 0, "declared .zss not supplied: scripts[0].error is a non-empty string");
+
+const zssBadArgResult = globalThis.OpenKakutouCharacter.load(zssDefBytes, airBytes, sffBytes, cnsBytes, null, null, 42);
+assert(zssBadArgResult.character === null && typeof zssBadArgResult.error === "string", "malformed zssFiles argument returns an error");
 
 // The module must still respond correctly after the save* calls above too.
 const afterSaveResult = globalThis.OpenKakutouCharacter.load(defBytes, airBytes, sffBytes, cnsBytes);

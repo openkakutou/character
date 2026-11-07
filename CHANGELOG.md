@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Loading a character now also reads the Ikemen GO state scripts (`.zss`) its definition declares, picking them out the way Ikemen GO does: among the state files and the common state file, by their `.zss` extension, falling back to a same-named `.zss` file when the declared one is missing, and alongside any `.cns` files. Each script's states and functions come back with the character, including from the web build, which accepts the scripts as an optional extra input. A missing or malformed script does not stop the character from loading: that script comes back empty with a message naming it. A character without a constants (`cns`) file now loads too. Saving an unmodified script, or an unmodified character definition, still reproduces it exactly.
+
 ## [0.11.0] - 2026-11-07
 
 ### Added

@@ -295,3 +295,39 @@ type failingReader struct{}
 func (r *failingReader) Read(p []byte) (int, error) {
 	return 0, &failingReaderError{}
 }
+
+func TestParse_StcommonKey_PopulatesStateCommonFileCaseInsensitively(t *testing.T) {
+	info, err := Parse(strings.NewReader("[Files]\nStCommon = common1.cns\nst = a.zss\n"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if info.StateCommonFile != "common1.cns" {
+		t.Errorf("StateCommonFile = %q, want %q", info.StateCommonFile, "common1.cns")
+	}
+	if len(info.StateFiles) != 1 || info.StateFiles[0] != "a.zss" {
+		t.Errorf("StateFiles = %v, want [a.zss] (stcommon must not leak into StateFiles)", info.StateFiles)
+	}
+}
+
+func TestParse_StateFilesInShuffledOrder_SortedStFirstThenByNumber(t *testing.T) {
+	src := "[Files]\nst10 = ten\nst2 = two\nst = zero\nst1 = one\n"
+	info, err := Parse(strings.NewReader(src))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	want := []string{"zero", "one", "two", "ten"}
+	if strings.Join(info.StateFiles, ",") != strings.Join(want, ",") {
+		t.Errorf("StateFiles = %v, want %v", info.StateFiles, want)
+	}
+}
+
+func TestParse_DuplicateStateNumbers_KeepFileOrder(t *testing.T) {
+	info, err := Parse(strings.NewReader("[Files]\nst1 = first\nst = zero\nst1 = second\n"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	want := "zero,first,second"
+	if got := strings.Join(info.StateFiles, ","); got != want {
+		t.Errorf("StateFiles = %q, want %q", got, want)
+	}
+}

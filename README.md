@@ -53,6 +53,7 @@ This project is in early-stage development. Shipped so far:
 - An existing character's command inputs can now be read directly in a web app via the WebAssembly build, not just saved — named input sequences, their recognition timing, optional button remapping, and their link to the state changes they trigger; a malformed command file is caught with a clear error instead of crashing the page
 - A character's input command (`.cmd`) file is now loaded along with the rest of the character, natively and via the WebAssembly build (as an optional extra input) — a missing or malformed command file never stops the character from loading, it just comes back without commands and a message saying what went wrong
 - A character's sound effects are now decoded and loaded too, both natively and via the WebAssembly build — every sound is grouped and numbered the same way a character's combat logic already addresses it, ready to be played back; a character with no sound file loads normally with no sounds, while a sound file that is declared but missing or broken is still caught with a clear error
+- A character's Ikemen GO state scripts (`.zss`) are now loaded along with the rest of the character, natively and via the WebAssembly build (as an optional extra input) — they are picked out the way Ikemen GO does it, can sit alongside `.cns` files, and a missing or malformed script never stops the character from loading; a character without a constants file now loads too
 
 Planned:
 
@@ -908,7 +909,7 @@ func main() {
 
 Write a `Script` back out to `.zss` text with `zss.Serialize`, or use `zss.ParseDocument`/`Document.Serialize` instead to load a `.zss` file and save it back out unchanged (no data edits) — the same `Parse`/`Serialize` vs. `ParseDocument`/`Document.Serialize` split every other format in this library follows.
 
-Wiring `.cmd`/`.zss` into `Character` is not implemented yet — this API surface will grow as those pieces are added.
+You rarely need to parse these files by hand: `character.Load` already reads a character's `.cmd` file into `Commands` and the `.zss` scripts its `.def` declares into `Scripts`, each with its own error message if that file is missing or malformed.
 
 ### Loading a character in a web browser (WebAssembly)
 
