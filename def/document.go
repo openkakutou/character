@@ -13,19 +13,22 @@ import (
 // .vibe/decisions/009-def-parse-ignores-unknown-sections.md).
 //
 // Document.Info is decoded the same way Parse's return value is, for
-// convenient structured access to what was parsed — but Serialize does not
-// read it back. As long as Document.Info is left untouched, ParseDocument
-// followed by Serialize reproduces the original source byte-for-byte,
-// comments and all. Mutating Info has no effect on Serialize's output:
-// regenerating text from an edited CharacterInfo while still preserving
-// unrelated comments/sections/ordering around the edit is a heavier
-// per-line reconciliation this type does not attempt, mirroring
-// air.Document (see
-// .vibe/decisions/003-air-round-trip-via-separate-document-type.md).
+// convenient structured access to what was parsed. Serialize ignores it and
+// writes the retained source verbatim, so ParseDocument followed by Serialize
+// reproduces the original source byte-for-byte, comments and all.
+// SerializeEdited is the format-preserving write path for an edited
+// CharacterInfo: it rewrites only what changed (see
+// .vibe/decisions/033-format-preserving-edits-per-format-alignment.md).
 type Document struct {
 	Info CharacterInfo
 
 	source []byte
+
+	// layout and baseline are what SerializeEdited needs: where each
+	// recognized key sits in source, and the CharacterInfo as parsed (kept
+	// apart from the caller-visible Info so mutating Info cannot hide an edit).
+	layout   sourceLayout
+	baseline CharacterInfo
 }
 
 // ParseDocument reads MUGEN/Ikemen GO .def character definition text from
@@ -42,7 +45,12 @@ func ParseDocument(r io.Reader) (*Document, error) {
 		return nil, err
 	}
 
-	return &Document{Info: info, source: source}, nil
+	return &Document{
+		Info:     info,
+		source:   source,
+		layout:   indexSource(source),
+		baseline: cloneInfo(info),
+	}, nil
 }
 
 // Serialize writes the Document's retained source back out to w verbatim,

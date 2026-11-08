@@ -104,3 +104,38 @@ func TestSerializeCns_MalformedOriginal_ReturnsDescriptiveError(t *testing.T) {
 		t.Fatalf("expected error to mention the cns package's own diagnostic, got: %v", err)
 	}
 }
+
+func TestSerializeCns_WithEdits_KeepsUnrelatedComment(t *testing.T) {
+	original := []byte("; my note\n[Statedef 200]\ntype = S\nanim = 200\n\n; keep\n[State 200, 0]\ntype = ChangeState\ntrigger1 = Time = 0\nvalue = 0\n")
+	states, err := cns.Parse(strings.NewReader(string(original)))
+	if err != nil {
+		t.Fatalf("test setup: %v", err)
+	}
+	states[0].Anim = 201
+
+	out, err := SerializeCns(original, states)
+	if err != nil {
+		t.Fatalf("SerializeCns returned an error: %v", err)
+	}
+	want := "; my note\n[Statedef 200]\ntype = S\nanim = 201\n\n; keep\n[State 200, 0]\ntype = ChangeState\ntrigger1 = Time = 0\nvalue = 0\n"
+	if string(out) != want {
+		t.Fatalf("got:\n%q\nwant:\n%q", out, want)
+	}
+}
+
+func TestSerializeCns_NoEdits_NilVsEmptyDoNotCountAsEdited(t *testing.T) {
+	original := []byte("; my note\n[Statedef 200]\ntype = S\n")
+	states, err := cns.Parse(strings.NewReader(string(original)))
+	if err != nil {
+		t.Fatalf("test setup: %v", err)
+	}
+	states = normalizeStateDefsForJSON(states)
+
+	out, err := SerializeCns(original, states)
+	if err != nil {
+		t.Fatalf("SerializeCns returned an error: %v", err)
+	}
+	if string(out) != string(original) {
+		t.Fatalf("got:\n%q\nwant:\n%q", out, original)
+	}
+}

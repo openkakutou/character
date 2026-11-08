@@ -133,7 +133,7 @@ func Parse(r io.Reader) (CharacterInfo, error) {
 	}
 
 	if len(palettes) > 0 {
-		sort.Slice(palettes, func(i, j int) bool { return palettes[i].number < palettes[j].number })
+		sort.SliceStable(palettes, func(i, j int) bool { return palettes[i].number < palettes[j].number })
 		info.Palettes = make([]string, len(palettes))
 		for i, p := range palettes {
 			info.Palettes[i] = p.path

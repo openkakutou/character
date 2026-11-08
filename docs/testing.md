@@ -56,6 +56,16 @@ go vet ./...
   suite, mirroring the other formats': parsing a realistic fixture
   (`zss/testdata/sample.zss`) and serializing it back reproduces the file
   exactly.
+- Format-preserving edits (item 061): each package's `edit_test.go`
+  (`air`, `def`, `cns`, `cmd`, `zss`) covers `Document.SerializeEdited` —
+  an unchanged model reproduces the original, a single edit rewrites only
+  its lines, insertions/deletions land at the documented position with
+  comments kept or removed accordingly, and the output re-parses to the
+  edited model. The root `Serialize*` tests cover the save path built on it.
+  An opt-in corpus test, `TestCorpus_SaveRoundTripAndSingleEdit`, checks a
+  real-character corpus (save round trip plus a single edit) and is skipped
+  unless `CHARACTER_CORPUS_DIR` is set:
+  `CHARACTER_CORPUS_DIR=<dir> go test -run Corpus -timeout 30m .`
 
 ## What's covered today
 

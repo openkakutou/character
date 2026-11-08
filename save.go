@@ -21,10 +21,12 @@ import (
 // round trip already normalizes it (see normalizeCharacterInfoForJSON), is
 // unchanged from what parsing original itself produces, the original bytes
 // are written back out verbatim — a byte-exact round trip, matching
-// def.Document's existing guarantee. Otherwise (info was edited, or
-// original is empty) fresh text is generated via def.Serialize, reflecting
-// info's current values without preserving original's comments/ordering —
-// see .vibe/decisions/028-wasm-save-path-per-format-diff-or-serialize.md.
+// def.Document's existing guarantee. If info was edited, only
+// what differs is rewritten via def.Document.SerializeEdited, keeping the
+// rest of original (comments, ordering) — see
+// .vibe/decisions/033-format-preserving-edits-per-format-alignment.md. If
+// original is empty, fresh text is generated via def.Serialize. Per-format
+// exports and the JSON normalization stay as in decision 028.
 //
 // A malformed original returns a descriptive error (from def.ParseDocument)
 // rather than silently falling back to a fresh serialize.
@@ -48,11 +50,17 @@ func SerializeDef(original []byte, info def.CharacterInfo) ([]byte, error) {
 			}
 			return buf.Bytes(), nil
 		}
+
+		var buf bytes.Buffer
+		if err := doc.SerializeEdited(&buf, edited); err != nil {
+			return nil, fmt.Errorf("character: applying edits to original character definition: %w", err)
+		}
+		return buf.Bytes(), nil
 	}
 
 	var buf bytes.Buffer
 	if err := def.Serialize(&buf, edited); err != nil {
-		return nil, fmt.Errorf("character: serializing edited character definition: %w", err)
+		return nil, fmt.Errorf("character: serializing new character definition: %w", err)
 	}
 	return buf.Bytes(), nil
 }
@@ -62,9 +70,9 @@ func SerializeDef(original []byte, info def.CharacterInfo) ([]byte, error) {
 // own previously loaded bytes — empty when animations describes a brand
 // new file with no original yet.
 //
-// Same byte-exact-when-unmodified / fresh-serialize-when-edited strategy as
+// Same byte-exact-when-unmodified / format-preserving-edit strategy as
 // SerializeDef — see that function's doc comment and
-// .vibe/decisions/028-wasm-save-path-per-format-diff-or-serialize.md.
+// .vibe/decisions/033-format-preserving-edits-per-format-alignment.md.
 func SerializeAir(original []byte, animations []air.Animation) ([]byte, error) {
 	edited := normalizeAnimationsForJSON(animations)
 
@@ -83,11 +91,17 @@ func SerializeAir(original []byte, animations []air.Animation) ([]byte, error) {
 			}
 			return buf.Bytes(), nil
 		}
+
+		var buf bytes.Buffer
+		if err := doc.SerializeEdited(&buf, edited); err != nil {
+			return nil, fmt.Errorf("character: applying edits to original animation file: %w", err)
+		}
+		return buf.Bytes(), nil
 	}
 
 	var buf bytes.Buffer
 	if err := air.Serialize(&buf, edited); err != nil {
-		return nil, fmt.Errorf("character: serializing edited animation file: %w", err)
+		return nil, fmt.Errorf("character: serializing new animation file: %w", err)
 	}
 	return buf.Bytes(), nil
 }
@@ -112,9 +126,9 @@ func normalizeAnimationsForJSON(animations []air.Animation) []air.Animation {
 // previously loaded bytes — empty when states describes a brand new file
 // with no original yet.
 //
-// Same byte-exact-when-unmodified / fresh-serialize-when-edited strategy as
+// Same byte-exact-when-unmodified / format-preserving-edit strategy as
 // SerializeDef — see that function's doc comment and
-// .vibe/decisions/028-wasm-save-path-per-format-diff-or-serialize.md.
+// .vibe/decisions/033-format-preserving-edits-per-format-alignment.md.
 func SerializeCns(original []byte, states []cns.StateDef) ([]byte, error) {
 	edited := normalizeStateDefsForJSON(states)
 
@@ -133,11 +147,17 @@ func SerializeCns(original []byte, states []cns.StateDef) ([]byte, error) {
 			}
 			return buf.Bytes(), nil
 		}
+
+		var buf bytes.Buffer
+		if err := doc.SerializeEdited(&buf, edited); err != nil {
+			return nil, fmt.Errorf("character: applying edits to original combat logic file: %w", err)
+		}
+		return buf.Bytes(), nil
 	}
 
 	var buf bytes.Buffer
 	if err := cns.Serialize(&buf, edited); err != nil {
-		return nil, fmt.Errorf("character: serializing edited combat logic file: %w", err)
+		return nil, fmt.Errorf("character: serializing new combat logic file: %w", err)
 	}
 	return buf.Bytes(), nil
 }
@@ -162,9 +182,9 @@ func normalizeStateDefsForJSON(states []cns.StateDef) []cns.StateDef {
 // loaded bytes — empty when file describes a brand new file with no
 // original yet.
 //
-// Same byte-exact-when-unmodified / fresh-serialize-when-edited strategy as
+// Same byte-exact-when-unmodified / format-preserving-edit strategy as
 // SerializeDef — see that function's doc comment and
-// .vibe/decisions/028-wasm-save-path-per-format-diff-or-serialize.md.
+// .vibe/decisions/033-format-preserving-edits-per-format-alignment.md.
 func SerializeCmd(original []byte, file cmd.CommandFile) ([]byte, error) {
 	edited := normalizeCommandFileForJSON(file)
 
@@ -183,11 +203,17 @@ func SerializeCmd(original []byte, file cmd.CommandFile) ([]byte, error) {
 			}
 			return buf.Bytes(), nil
 		}
+
+		var buf bytes.Buffer
+		if err := doc.SerializeEdited(&buf, edited); err != nil {
+			return nil, fmt.Errorf("character: applying edits to original command file: %w", err)
+		}
+		return buf.Bytes(), nil
 	}
 
 	var buf bytes.Buffer
 	if err := cmd.Serialize(&buf, edited); err != nil {
-		return nil, fmt.Errorf("character: serializing edited command file: %w", err)
+		return nil, fmt.Errorf("character: serializing new command file: %w", err)
 	}
 	return buf.Bytes(), nil
 }
@@ -212,9 +238,9 @@ func normalizeCommandFileForJSON(file cmd.CommandFile) cmd.CommandFile {
 // previously loaded bytes — empty when script describes a brand new file
 // with no original yet.
 //
-// Same byte-exact-when-unmodified / fresh-serialize-when-edited strategy as
+// Same byte-exact-when-unmodified / format-preserving-edit strategy as
 // SerializeDef — see that function's doc comment and
-// .vibe/decisions/028-wasm-save-path-per-format-diff-or-serialize.md.
+// .vibe/decisions/033-format-preserving-edits-per-format-alignment.md.
 func SerializeZss(original []byte, script zss.Script) ([]byte, error) {
 	edited := normalizeScriptForJSON(script)
 
@@ -233,11 +259,17 @@ func SerializeZss(original []byte, script zss.Script) ([]byte, error) {
 			}
 			return buf.Bytes(), nil
 		}
+
+		var buf bytes.Buffer
+		if err := doc.SerializeEdited(&buf, edited); err != nil {
+			return nil, fmt.Errorf("character: applying edits to original state script file: %w", err)
+		}
+		return buf.Bytes(), nil
 	}
 
 	var buf bytes.Buffer
 	if err := zss.Serialize(&buf, edited); err != nil {
-		return nil, fmt.Errorf("character: serializing edited state script file: %w", err)
+		return nil, fmt.Errorf("character: serializing new state script file: %w", err)
 	}
 	return buf.Bytes(), nil
 }

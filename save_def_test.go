@@ -139,3 +139,21 @@ sprite = test.sff
 		t.Fatalf("expected byte-identical output when only nil-vs-empty-slice differs\n--- got ---\n%s\n--- want ---\n%s", out, original)
 	}
 }
+
+func TestSerializeDef_WithEdits_KeepsUnrelatedComment(t *testing.T) {
+	original := []byte("; my note\n[Info]\nname = Test\nauthor = Me\n")
+	info, err := def.Parse(strings.NewReader(string(original)))
+	if err != nil {
+		t.Fatalf("test setup: %v", err)
+	}
+	info.Author = "You"
+
+	out, err := SerializeDef(original, info)
+	if err != nil {
+		t.Fatalf("SerializeDef returned an error: %v", err)
+	}
+	want := "; my note\n[Info]\nname = Test\nauthor = You\n"
+	if string(out) != want {
+		t.Fatalf("got:\n%q\nwant:\n%q", out, want)
+	}
+}

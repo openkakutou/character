@@ -55,10 +55,31 @@ func writeStatedefHeader(w io.Writer, state StateDef) error {
 		return fmt.Errorf("cns: writing Statedef %d header: %w", state.Number, err)
 	}
 
-	fields := []struct {
-		key   string
-		value string
-	}{
+	fields := headerFields(state)
+	for _, f := range fields {
+		if _, err := fmt.Fprintf(w, "%s = %s\n", f.key, f.value); err != nil {
+			return fmt.Errorf("cns: writing Statedef %d %s: %w", state.Number, f.key, err)
+		}
+	}
+
+	if _, err := fmt.Fprintln(w); err != nil {
+		return fmt.Errorf("cns: writing Statedef %d separator: %w", state.Number, err)
+	}
+	return nil
+}
+
+// headerField is one "key = value" line of a Statedef header as Serialize
+// writes it.
+type headerField struct {
+	key   string
+	value string
+}
+
+// headerFields lists every recognized header field of state, in the order
+// Serialize writes them, with HeaderExprs applied. SerializeEdited compares
+// and patches headers through the same list.
+func headerFields(state StateDef) []headerField {
+	return []headerField{
 		{"type", string(state.Type)},
 		{"movetype", string(state.MoveType)},
 		{"physics", string(state.Physics)},
@@ -72,16 +93,6 @@ func writeStatedefHeader(w io.Writer, state StateDef) error {
 		{"hitcountpersist", boolOrExprValue(state, "hitcountpersist", state.HitCountPersist)},
 		{"sprpriority", intOrExprValue(state, "sprpriority", state.SprPriority)},
 	}
-	for _, f := range fields {
-		if _, err := fmt.Fprintf(w, "%s = %s\n", f.key, f.value); err != nil {
-			return fmt.Errorf("cns: writing Statedef %d %s: %w", state.Number, f.key, err)
-		}
-	}
-
-	if _, err := fmt.Fprintln(w); err != nil {
-		return fmt.Errorf("cns: writing Statedef %d separator: %w", state.Number, err)
-	}
-	return nil
 }
 
 // intOrExprValue returns state.HeaderExprs[name] when present (a numeric

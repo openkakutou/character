@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Saving an edited character file (`.def`, `.air`, `.cns`, `.cmd` or `.zss`) now rewrites only what was changed: comments, blank lines, the order of sections and the formatting of everything else stay exactly as in the original, so a one-value edit shows up as a one-line difference. An added animation, state, command or script block goes right after the one before it; a removed one disappears together with the comments just above it; a renumbered one keeps its comments. Ikemen GO extra values on an animation frame (scale, angle) are kept when that frame is edited. Checked against about 4,300 real community character files: saving them unchanged reproduces each one exactly, and a single edit changes only its own lines.
+
+### Fixed
+
+- Opening an animation file with a negative or absurdly large collision-box count no longer hangs or crashes the load.
+
 ## [0.12.0] - 2026-11-08
 
 ### Added

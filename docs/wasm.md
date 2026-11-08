@@ -213,8 +213,10 @@ globalThis.OpenKakutouCharacter.saveZss(originalZssBytes, editedScriptJSON)
   - `bytes` — a `Uint8Array` of the serialized file. Byte-exact to the
     original bytes when the model describes no real change (down to
     treating an empty list the same whether it arrived as `null` or `[]`);
-    freshly generated, valid, re-loadable text otherwise, which does not
-    preserve the original's comments/ordering.
+    the original with only the changed lines rewritten otherwise
+    (comments, blank lines and order kept; format-preserving edit via
+    `Document.SerializeEdited`); fresh, valid text only when the original is
+    empty.
   - `error` — a descriptive message: a malformed original, malformed JSON,
     or a wrong argument count.
 - Same never-throws, never-broken-after-an-error guarantee as `load`.
@@ -223,7 +225,10 @@ See [docs/api.md](api.md#saving-edited-characters) for the underlying
 `character.SerializeDef`/`SerializeAir`/`SerializeCns`/`SerializeCmd`/
 `SerializeZss` functions this glue calls, and
 [`.vibe/decisions/028-wasm-save-path-per-format-diff-or-serialize.md`](../.vibe/decisions/028-wasm-save-path-per-format-diff-or-serialize.md)
-for why the save path is shaped this way.
+(per-format exports, JSON normalization) and
+[`.vibe/decisions/033-format-preserving-edits-per-format-alignment.md`](../.vibe/decisions/033-format-preserving-edits-per-format-alignment.md)
+(how an edited model is applied to the original) for why the save path is
+shaped this way.
 
 ### Example
 

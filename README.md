@@ -54,10 +54,8 @@ This project is in early-stage development. Shipped so far:
 - A character's input command (`.cmd`) file is now loaded along with the rest of the character, natively and via the WebAssembly build (as an optional extra input) — a missing or malformed command file never stops the character from loading, it just comes back without commands and a message saying what went wrong
 - A character's sound effects are now decoded and loaded too, both natively and via the WebAssembly build — every sound is grouped and numbered the same way a character's combat logic already addresses it, ready to be played back; a character with no sound file loads normally with no sounds, while a sound file that is declared but missing or broken is still caught with a clear error
 - A character's Ikemen GO state scripts (`.zss`) are now loaded along with the rest of the character, natively and via the WebAssembly build (as an optional extra input) — they are picked out the way Ikemen GO does it, can sit alongside `.cns` files, and a missing or malformed script never stops the character from loading; a character without a constants file now loads too
-
-Planned:
-
-- Preserving comments and ordering when the saved `.def`/`.air`/`.cns`/`.cmd`/`.zss` file actually differs from the original (today this is guaranteed only when nothing changed)
+- Saving an edited character file (`.def`, `.air`, `.cns`, `.cmd` or `.zss`) rewrites only what was changed — comments, blank lines, section order and formatting of everything else stay as they were, so a one-value edit is a one-line diff; added items land right after the previous one, removed items take the comments just above them, and Ikemen GO extra frame values (scale, angle) survive an edit of that frame — checked against about 4,300 real community files
+- An animation file with a negative or absurdly large collision-box count no longer hangs or crashes the load
 <!-- vibe:end:features -->
 
 <!-- vibe:begin:install -->

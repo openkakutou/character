@@ -17,13 +17,15 @@ import (
 // convenient structured access to what was parsed — but Serialize does not
 // read it back. As long as Document.Script is left untouched, ParseDocument
 // followed by Serialize reproduces the original source byte-for-byte.
-// Mutating Script has no effect on Serialize's output: regenerating text
-// from an edited Script while still preserving unrelated formatting around
-// the edit is a heavier per-line reconciliation this type does not attempt.
+// Mutating Script has no effect on Serialize's output; to write an edited
+// Script while keeping every untouched comment, blank line and wrapped
+// header byte-exact, use SerializeEdited (rules documented there).
 type Document struct {
 	Script Script
 
-	source []byte
+	source   []byte
+	baseline Script      // independent copy of the parsed Script, for diffing
+	spans    []blockSpan // per-block line ranges in source, parallel to baseline.Blocks
 }
 
 // ParseDocument reads Ikemen GO .zss text from r, decoding it the same way
@@ -40,7 +42,12 @@ func ParseDocument(r io.Reader) (*Document, error) {
 		return nil, err
 	}
 
-	return &Document{Script: script, source: source}, nil
+	baseline, err := Parse(bytes.NewReader(source))
+	if err != nil {
+		return nil, err
+	}
+
+	return &Document{Script: script, source: source, baseline: baseline, spans: indexBlocks(splitLines(source))}, nil
 }
 
 // Serialize writes the Document's retained source back out to w verbatim,

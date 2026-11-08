@@ -40,7 +40,7 @@ graph TD
 
 | Package | Responsibility | Status |
 |---|---|---|
-| `character` (root) | Assembles the sub-packages into a single `Character{}` struct, resolves an animation frame to its actual sprite (`ResolveSprite`), loads a full `Character` directly from a `.def` file path (`Load`), and saves an edited character back out per format (`SerializeDef`/`SerializeAir`/`SerializeCns`/`SerializeCmd`/`SerializeZss`) | `Animations []air.Animation`, `Sprites []sff.SpriteGroup`, `StateDefs []cns.StateDef`, and `Sounds []SoundGroup` all wired in, via a `.def`-driven top-level loader — completing the full read surface across all four text formats plus both binary asset formats; `SoundFile`/`Sounds` are optional (empty when absent, unlike the other three) — see `.vibe/decisions/029-sound-file-optional-when-absent-hard-error-once-referenced.md`; `character/cmd` is wired in as `Commands`/`CommandError` (a non-fatal load, see `.vibe/decisions/031-cmd-wired-into-character-non-fatal-error-field.md`); `character/zss` is wired in as `Scripts` (`[]ScriptFile`, one per referenced `.zss`, with a non-fatal per-file `Error`; `cns` may now be empty, see `.vibe/decisions/032-zss-scripts-wired-into-character-ikemen-file-selection.md`) as well as into the save functions; the write path (item 039) is byte-exact to the original when nothing changed, freshly serialized otherwise — see `.vibe/decisions/028-wasm-save-path-per-format-diff-or-serialize.md` |
+| `character` (root) | Assembles the sub-packages into a single `Character{}` struct, resolves an animation frame to its actual sprite (`ResolveSprite`), loads a full `Character` directly from a `.def` file path (`Load`), and saves an edited character back out per format (`SerializeDef`/`SerializeAir`/`SerializeCns`/`SerializeCmd`/`SerializeZss`) | `Animations []air.Animation`, `Sprites []sff.SpriteGroup`, `StateDefs []cns.StateDef`, and `Sounds []SoundGroup` all wired in, via a `.def`-driven top-level loader — completing the full read surface across all four text formats plus both binary asset formats; `SoundFile`/`Sounds` are optional (empty when absent, unlike the other three) — see `.vibe/decisions/029-sound-file-optional-when-absent-hard-error-once-referenced.md`; `character/cmd` is wired in as `Commands`/`CommandError` (a non-fatal load, see `.vibe/decisions/031-cmd-wired-into-character-non-fatal-error-field.md`); `character/zss` is wired in as `Scripts` (`[]ScriptFile`, one per referenced `.zss`, with a non-fatal per-file `Error`; `cns` may now be empty, see `.vibe/decisions/032-zss-scripts-wired-into-character-ikemen-file-selection.md`) as well as into the save functions; the write path (items 039, 061) is byte-exact to the original when nothing changed, a format-preserving `Document.SerializeEdited` (only changed lines rewritten) when edited, and a fresh `Serialize` only for an empty original — see `.vibe/decisions/028-wasm-save-path-per-format-diff-or-serialize.md` and `.vibe/decisions/033-format-preserving-edits-per-format-alignment.md` |
 | `character/air` | MUGEN/Ikemen GO animation (`.air`) files: the `Animation`/`Frame`/`ClsnBox` data model, a parser that reads `.air` text into that model, a serializer that writes it back out, a `Document` type for comment-preserving round trips, and a `SpriteResolver` that resolves a `Frame`'s sprite reference against sprites loaded via `github.com/openkakutou/sff` | Data model + read path implemented; `Serialize` produces valid, re-readable output (not a byte-exact round-trip of an original file's formatting); `Document`/`ParseDocument` round-trip unmodified files byte-for-byte, comments included; `SpriteResolver` resolves every `Frame` reference to its `sff.Sprite`, or a descriptive error for a missing one, regardless of `.sff` version |
 | `character/def` | Character definition (`.def`) files — the entry point referencing the other formats: the `CharacterInfo` data model, a text parser (`Parse`), a serializer (`Serialize`), and a `Document` type for comment-preserving round trips | Data model and read+write cycle implemented (`CharacterInfo`; `Parse` reads `[Info]`/`[Files]` text into it, skipping unrecognized sections; `Serialize` writes it back out to valid, re-readable text; `Document`/`ParseDocument` round-trip unmodified files byte-for-byte, comments and unrecognized sections included); wired into the root `Character` struct via `character.Load` |
 | `character/cns` | Combat logic / state machine (`.cns`, text) files: the `StateDef`/`Controller` data model, a text parser (`Parse`) that reads `[Statedef N]`/`[State ...]` blocks into it, keeping trigger conditions and parameters as unevaluated data (and, for `StateDef`'s own numeric and boolean header fields, an unevaluated-expression fallback via `HeaderExprs`), a serializer (`Serialize`) that writes it back out, and a `Document` type for comment-preserving round trips | Data model and read+write cycle implemented; unrecognized sections are skipped by `Parse` rather than aborting the read, matching `def.Parse`'s tolerance; a `[State ...]` header's content is unconstrained (no state number required, matching real-world files) since `Parse` never stores it; `Document`/`ParseDocument` round-trip unmodified files byte-for-byte, comments and unrelated sections included; wired into the root `Character` struct via `character.Load` |
@@ -81,10 +81,13 @@ sub-concerns apart, even before they become separate files:
   `Document.Serialize`) covers the format-preserving case: it retains the
   original source alongside the decoded `Animation`s, so round-tripping a
   file that wasn't modified reproduces it exactly — comments and ordering
-  included. It does not yet regenerate output around an *edited*
-  `Animations` slice while keeping unrelated comments intact; that heavier
-  reconciliation is deferred until a concrete editing workflow needs it. See
-  [`.vibe/decisions/003-air-round-trip-via-separate-document-type.md`](../.vibe/decisions/003-air-round-trip-via-separate-document-type.md).
+  included. For an *edited* `Animations` slice,
+  `Document.SerializeEdited` rewrites only the changed lines and keeps
+  unrelated comments, blank lines and order (insertion after the nearest
+  surviving predecessor; deletion takes the comments directly above). See
+  [`.vibe/decisions/003-air-round-trip-via-separate-document-type.md`](../.vibe/decisions/003-air-round-trip-via-separate-document-type.md)
+  and
+  [`.vibe/decisions/033-format-preserving-edits-per-format-alignment.md`](../.vibe/decisions/033-format-preserving-edits-per-format-alignment.md).
 
 Because Go only compiles what's imported, a consumer that imports only the
 read-oriented parts of a package never pulls in write-only logic — this
@@ -99,10 +102,11 @@ alongside comments and original section ordering — is instead handled by
 `Document` split above: it retains the original source alongside the
 decoded `CharacterInfo`, so round-tripping a file that wasn't modified
 reproduces it exactly, unrecognized sections included. `def.Serialize`
-covers the other case — turning a `CharacterInfo` built or edited in memory
-back into fresh, valid `.def` text — but, like `air.Serialize`, does not
-attempt a byte-exact reproduction of any original file. See
-[`.vibe/decisions/009-def-parse-ignores-unknown-sections.md`](../.vibe/decisions/009-def-parse-ignores-unknown-sections.md).
+covers the case of a `CharacterInfo` built in memory (fresh, valid `.def`
+text, no original), while `def.Document.SerializeEdited` saves an edited
+`CharacterInfo` against its original, rewriting only the changed lines. See
+[`.vibe/decisions/009-def-parse-ignores-unknown-sections.md`](../.vibe/decisions/009-def-parse-ignores-unknown-sections.md) and
+[`.vibe/decisions/033-format-preserving-edits-per-format-alignment.md`](../.vibe/decisions/033-format-preserving-edits-per-format-alignment.md).
 
 `character/cns` follows the exact same split as `def` (and, before it,
 `air`): `cns.Serialize` turns a `[]StateDef` built or edited in memory back
@@ -112,8 +116,11 @@ written sorted by key, since neither carries a meaningful original order to
 preserve — while `cns.Document` (`ParseDocument`/`Document.Serialize`)
 retains the original source bytes alongside the decoded `StateDef`s, so
 round-tripping a file that wasn't modified reproduces it exactly —
-comments, block ordering, and unrecognized sections included. See
-[`.vibe/decisions/003-air-round-trip-via-separate-document-type.md`](../.vibe/decisions/003-air-round-trip-via-separate-document-type.md).
+comments, block ordering, and unrecognized sections included; its
+`SerializeEdited` saves edited `StateDef`s by rewriting only the changed
+lines, keeping those comments, ordering and sections. See
+[`.vibe/decisions/003-air-round-trip-via-separate-document-type.md`](../.vibe/decisions/003-air-round-trip-via-separate-document-type.md) and
+[`.vibe/decisions/033-format-preserving-edits-per-format-alignment.md`](../.vibe/decisions/033-format-preserving-edits-per-format-alignment.md).
 
 ## Cross-format resolution: air depends on sff
 

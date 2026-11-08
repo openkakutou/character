@@ -19,13 +19,14 @@ import (
 // read it back. As long as Document.StateDefs is left untouched,
 // ParseDocument followed by Serialize reproduces the original source
 // byte-for-byte, comments and all. Mutating StateDefs has no effect on
-// Serialize's output: regenerating text from an edited StateDefs slice
-// while still preserving unrelated comments/sections/ordering around the
-// edit is a heavier per-line reconciliation this type does not attempt.
+// Serialize's output; to write an edited model while keeping untouched
+// comments, blank lines and order, pass it to SerializeEdited (see edit.go
+// and .vibe/decisions/033-format-preserving-edits-per-format-alignment.md).
 type Document struct {
 	StateDefs []StateDef
 
 	source []byte
+	index  *sourceIndex
 }
 
 // ParseDocument reads MUGEN/Ikemen GO .cns combat logic text from r,
@@ -42,7 +43,7 @@ func ParseDocument(r io.Reader) (*Document, error) {
 		return nil, err
 	}
 
-	return &Document{StateDefs: states, source: source}, nil
+	return &Document{StateDefs: states, source: source, index: indexSource(source)}, nil
 }
 
 // Serialize writes the Document's retained source back out to w verbatim,

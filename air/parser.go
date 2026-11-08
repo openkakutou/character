@@ -266,7 +266,7 @@ var clsnBoxLinePattern = regexp.MustCompile(`(?i)^Clsn[12]\s*\[\d+\]\s*=\s*(-?\d
 // readClsnBoxes reads the next count Clsn[i] box lines from scanner.
 // lineNumber is updated as lines are consumed for error reporting.
 func readClsnBoxes(scanner *bufio.Scanner, lineNumber *int, count int) ([]ClsnBox, int, error) {
-	boxes := make([]ClsnBox, 0, count)
+	boxes := []ClsnBox{} // count is untrusted: no preallocation, a negative one reads nothing
 	n := *lineNumber
 	for i := 0; i < count; i++ {
 		if !scanner.Scan() {

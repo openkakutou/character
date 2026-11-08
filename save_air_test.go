@@ -90,3 +90,39 @@ func TestSerializeAir_MalformedOriginal_ReturnsDescriptiveError(t *testing.T) {
 		t.Fatalf("expected error to mention the air package's own diagnostic, got: %v", err)
 	}
 }
+
+func TestSerializeAir_WithEdits_KeepsUnrelatedComment(t *testing.T) {
+	original := []byte("; my note\n[Begin Action 200]\n0,0, 0,0, 5\n0,1, 10,10, 5\n")
+	animations, err := air.Parse(strings.NewReader(string(original)))
+	if err != nil {
+		t.Fatalf("test setup: %v", err)
+	}
+	animations[0].Frames[1].Time = 7
+
+	out, err := SerializeAir(original, animations)
+	if err != nil {
+		t.Fatalf("SerializeAir returned an error: %v", err)
+	}
+	want := "; my note\n[Begin Action 200]\n0,0, 0,0, 5\n0,1, 10,10, 7\n"
+	if string(out) != want {
+		t.Fatalf("got:\n%q\nwant:\n%q", out, want)
+	}
+}
+
+func TestSerializeAir_NoEdits_NilVsEmptySlicesDoNotCountAsEdited(t *testing.T) {
+	original := []byte("; note\n[Begin Action 200]\n0,0, 0,0, 5\n")
+	animations, err := air.Parse(strings.NewReader(string(original)))
+	if err != nil {
+		t.Fatalf("test setup: %v", err)
+	}
+	animations[0].Frames[0].Clsn1 = []air.ClsnBox{}
+	animations[0].Frames[0].Clsn2 = []air.ClsnBox{}
+
+	out, err := SerializeAir(original, animations)
+	if err != nil {
+		t.Fatalf("SerializeAir returned an error: %v", err)
+	}
+	if string(out) != string(original) {
+		t.Fatalf("got:\n%q\nwant:\n%q", out, original)
+	}
+}

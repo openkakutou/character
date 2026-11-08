@@ -1,5 +1,5 @@
 ---
-status: todo
+status: in_progress
 ---
 # Preserve comments and ordering when a saved file was modified
 

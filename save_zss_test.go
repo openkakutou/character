@@ -97,3 +97,38 @@ func TestSerializeZss_MalformedOriginal_ReturnsDescriptiveError(t *testing.T) {
 		t.Fatalf("expected error to mention the zss package's own diagnostic, got: %v", err)
 	}
 }
+
+func TestSerializeZss_WithEdits_KeepsUnrelatedComment(t *testing.T) {
+	original := []byte("# my note\n[Statedef 200; type: S; ctrl: 0;]\nif AnimElem = 1 {\n\tmapAdd{map:\"x\";value:1}\n}\n\n# second\n[Function Eff()]\nhelper{id: 1;}\n")
+	script, err := zss.Parse(strings.NewReader(string(original)))
+	if err != nil {
+		t.Fatalf("test setup: %v", err)
+	}
+	script.Blocks[0].HeaderParams["ctrl"] = "1"
+
+	out, err := SerializeZss(original, script)
+	if err != nil {
+		t.Fatalf("SerializeZss returned an error: %v", err)
+	}
+	want := "# my note\n[Statedef 200; ctrl: 1; type: S]\nif AnimElem = 1 {\n\tmapAdd{map:\"x\";value:1}\n}\n\n# second\n[Function Eff()]\nhelper{id: 1;}\n"
+	if string(out) != want {
+		t.Fatalf("got:\n%q\nwant:\n%q", out, want)
+	}
+}
+
+func TestSerializeZss_NoEdits_NilVsEmptyDoNotCountAsEdited(t *testing.T) {
+	original := []byte("# note\n[Function Eff()]\nhelper{id: 1;}\n")
+	script, err := zss.Parse(strings.NewReader(string(original)))
+	if err != nil {
+		t.Fatalf("test setup: %v", err)
+	}
+	script = normalizeScriptForJSON(script)
+
+	out, err := SerializeZss(original, script)
+	if err != nil {
+		t.Fatalf("SerializeZss returned an error: %v", err)
+	}
+	if string(out) != string(original) {
+		t.Fatalf("got:\n%q\nwant:\n%q", out, original)
+	}
+}

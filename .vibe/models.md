@@ -24,7 +24,7 @@ Defined in: `def/character_info.go`, `def/parser.go`, `def/serializer.go`
 | Info | CharacterInfo | Decoded the same way `Parse`'s return value is |
 | source | []byte | Unexported; the exact bytes `ParseDocument` read, replayed verbatim by `Serialize` |
 
-Write-path type: `ParseDocument`/`Document.Serialize` round-trip an unmodified `.def` file byte-for-byte, including comments, section ordering, and unrecognized sections. Mutating `Info` does not change what `Serialize` writes. Mirrors `air`'s own `Document` (see below).
+Write-path type: `ParseDocument`/`Document.Serialize` round-trip an unmodified `.def` file byte-for-byte, including comments, section ordering, and unrecognized sections. Mutating `Info` does not change what `Serialize` writes; `SerializeEdited` is the edit-aware path (ADR 033). Mirrors `air`'s own `Document` (see below).
 
 Defined in: `def/document.go`
 
@@ -126,7 +126,7 @@ Defined in: `air/animation.go`
 | Animations | []Animation | Decoded the same way `Parse`'s return value is |
 | source | []byte | Unexported; the exact bytes `ParseDocument` read, replayed verbatim by `Serialize` |
 
-Write-path type: `ParseDocument`/`Document.Serialize` round-trip an unmodified `.air` file byte-for-byte, including comments. Mutating `Animations` does not change what `Serialize` writes.
+Write-path type: `ParseDocument`/`Document.Serialize` round-trip an unmodified `.air` file byte-for-byte, including comments. Mutating `Animations` does not change what `Serialize` writes; `SerializeEdited` is the edit-aware path (ADR 033).
 
 Defined in: `air/document.go`
 
@@ -225,7 +225,7 @@ Defined in: `cns/statedef.go`, `cns/parser.go`
 | StateDefs | []StateDef | Decoded the same way `Parse`'s return value is, for convenient structured access |
 | source | []byte | Unexported; the exact bytes `ParseDocument` read, replayed verbatim by `Serialize` |
 
-Write-path type: `ParseDocument`/`Document.Serialize` round-trip an unmodified `.cns` file byte-for-byte, including comments, block ordering, and unrecognized sections. Mutating `StateDefs` does not change what `Serialize` writes. Mirrors `air`'s and `def`'s own `Document` (see above).
+Write-path type: `ParseDocument`/`Document.Serialize` round-trip an unmodified `.cns` file byte-for-byte, including comments, block ordering, and unrecognized sections. Mutating `StateDefs` does not change what `Serialize` writes; `SerializeEdited` is the edit-aware path (ADR 033). Mirrors `air`'s and `def`'s own `Document` (see above).
 
 Defined in: `cns/document.go`
 
@@ -286,7 +286,7 @@ Defined in: `cmd/command.go`
 | File | CommandFile | Decoded the same way `Parse`'s return value is |
 | source | []byte | Unexported; the exact bytes `ParseDocument` read, replayed verbatim by `Serialize` |
 
-Write-path type: `ParseDocument`/`Document.Serialize` round-trip an unmodified `.cmd` file byte-for-byte, including comments and section ordering. Mutating `File` does not change what `Serialize` writes. Mirrors `air`'s/`def`'s/`cns`'s own `Document`.
+Write-path type: `ParseDocument`/`Document.Serialize` round-trip an unmodified `.cmd` file byte-for-byte, including comments and section ordering. Mutating `File` does not change what `Serialize` writes; `SerializeEdited` is the edit-aware path (ADR 033). Mirrors `air`'s/`def`'s/`cns`'s own `Document`.
 
 Defined in: `cmd/document.go`
 
@@ -323,6 +323,6 @@ Defined in: `zss/script.go`
 | Script | Script | Decoded the same way `Parse`'s return value is |
 | source | []byte | Unexported; the exact bytes `ParseDocument` read, replayed verbatim by `Serialize` |
 
-Write-path type: `ParseDocument`/`Document.Serialize` round-trip an unmodified `.zss` file byte-for-byte. Mutating `Script` does not change what `Serialize` writes. Mirrors `air`'s/`def`'s/`cns`'s/`cmd`'s own `Document`.
+Write-path type: `ParseDocument`/`Document.Serialize` round-trip an unmodified `.zss` file byte-for-byte. Mutating `Script` does not change what `Serialize` writes; `SerializeEdited` is the edit-aware path (ADR 033). Mirrors `air`'s/`def`'s/`cns`'s/`cmd`'s own `Document`.
 
 Defined in: `zss/document.go`

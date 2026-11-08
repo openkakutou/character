@@ -221,15 +221,20 @@ equivalent — the same normalization `LoadBytes` already applies to its own
 JSON contract), is unchanged from what parsing `original` itself produces,
 the original bytes are written back out verbatim — a byte-exact round trip,
 matching each format's own `Document` guarantee. Otherwise (the model was
-edited, or `original` is empty) fresh text is generated via that format's
-own `Serialize`, reflecting the model's current values without preserving
-`original`'s comments/ordering. A malformed `original` returns a
-descriptive error rather than silently falling back to a fresh serialize.
+edited) the format's `Document.SerializeEdited` rewrites only the lines
+that changed: comments, blank lines and order are kept, an added element is
+inserted after its nearest surviving predecessor, a deleted element is
+removed with the comments/blank lines directly above it, and generated
+lines use the file's dominant line ending. Only an empty `original` (a
+brand new file) produces fresh text via that format's own `Serialize`. A
+malformed `original` returns a descriptive error rather than silently
+falling back to a fresh serialize.
 See
+[`.vibe/decisions/033-format-preserving-edits-per-format-alignment.md`](../.vibe/decisions/033-format-preserving-edits-per-format-alignment.md)
+for how an edited model is applied to the original, and
 [`.vibe/decisions/028-wasm-save-path-per-format-diff-or-serialize.md`](../.vibe/decisions/028-wasm-save-path-per-format-diff-or-serialize.md)
-for why this strategy was chosen, and why these five are independent
-functions rather than a single call taking one unified, extended
-`Character`.
+for why these five are independent functions rather than a single call
+taking one unified, extended `Character`, and for the JSON normalization.
 
 Exposed to a browser/JS caller as `saveDef`/`saveAir`/`saveCns`/`saveCmd`/
 `saveZss` on the WASM entrypoint — see [docs/wasm.md](wasm.md).
@@ -330,12 +335,17 @@ func (d *Document) Serialize(w io.Writer) error
 the original file byte-for-byte — comments, blank lines, and original line
 endings included.
 
-Mutating `Document.Animations` has no effect on `Serialize`'s output: this
-type guarantees a faithful round trip for the "load, don't touch, save"
-case only. Regenerating output from an edited `Animations` slice while still
-preserving unrelated comments/ordering around the edit is not implemented
-yet — see
-[`.vibe/decisions/003-air-round-trip-via-separate-document-type.md`](../.vibe/decisions/003-air-round-trip-via-separate-document-type.md).
+Mutating `Document.Animations` has no effect on `Serialize`'s output, which
+stays the faithful "load, don't touch, save" round trip. To save an edited
+`Animations` slice, call `Document.SerializeEdited(w, animations)`: only the
+changed lines are rewritten, while unrelated comments, blank lines and
+ordering are kept (a new animation goes after its nearest surviving
+predecessor; a removed one takes the comments directly above it with it;
+Ikemen GO frame extension fields after Blend are kept on an edited frame
+line). An empty original falls back to a fresh `Serialize`.
+`SerializeEdited` is the supported way to save an edited model while
+keeping unrelated comments/ordering — see
+[`.vibe/decisions/033-format-preserving-edits-per-format-alignment.md`](../.vibe/decisions/033-format-preserving-edits-per-format-alignment.md).
 
 ### Data model
 
@@ -610,12 +620,14 @@ func (d *Document) Serialize(w io.Writer) error
 the original file byte-for-byte — comments, section ordering, and
 unrecognized sections included.
 
-Mutating `Document.Info` has no effect on `Serialize`'s output: this type
-guarantees a faithful round trip for the "load, don't touch, save" case
-only, mirroring `air.Document`. Regenerating output from an edited `Info`
-while still preserving unrelated comments/sections/ordering around the edit
-is not implemented yet — see
-[`.vibe/decisions/003-air-round-trip-via-separate-document-type.md`](../.vibe/decisions/003-air-round-trip-via-separate-document-type.md).
+Mutating `Document.Info` has no effect on `Serialize`'s output. To save an
+edited `Info`, call `Document.SerializeEdited(w, info)`, mirroring
+`air.Document`: only changed `key = value` lines are patched in place
+(comments, unrecognized sections and ordering are kept); appended `st`/`pal`
+keys use "max existing number + 1". An empty original falls back to a fresh
+`Serialize`. `SerializeEdited` is the supported way to save an edited model while
+keeping unrelated comments/ordering — see
+[`.vibe/decisions/033-format-preserving-edits-per-format-alignment.md`](../.vibe/decisions/033-format-preserving-edits-per-format-alignment.md).
 
 ### Example
 
@@ -813,12 +825,14 @@ func (d *Document) Serialize(w io.Writer) error
 the original file byte-for-byte — comments, block ordering, and
 unrecognized sections included.
 
-Mutating `Document.StateDefs` has no effect on `Serialize`'s output: this
-type guarantees a faithful round trip for the "load, don't touch, save"
-case only, mirroring `air.Document`/`def.Document`. Regenerating output from
-an edited `StateDefs` while still preserving unrelated comments/sections/
-ordering around the edit is not implemented yet — see
-[`.vibe/decisions/003-air-round-trip-via-separate-document-type.md`](../.vibe/decisions/003-air-round-trip-via-separate-document-type.md).
+Mutating `Document.StateDefs` has no effect on `Serialize`'s output. To save
+edited `StateDefs`, call `Document.SerializeEdited(w, stateDefs)`, mirroring
+`air.Document`/`def.Document`: only changed lines are rewritten, and
+comments, unrecognized sections and ordering are kept. An empty original
+falls back to a fresh `Serialize`.
+`SerializeEdited` is the supported way to save an edited model while
+keeping unrelated comments/ordering — see
+[`.vibe/decisions/033-format-preserving-edits-per-format-alignment.md`](../.vibe/decisions/033-format-preserving-edits-per-format-alignment.md).
 
 ### Example
 
@@ -1002,9 +1016,13 @@ func (d *Document) Serialize(w io.Writer) error
 reproduces the original file byte-for-byte — comments, section ordering,
 and unrecognized sections included.
 
-Mutating `Document.File` has no effect on `Serialize`'s output: this type
-guarantees a faithful round trip for the "load, don't touch, save" case
-only, mirroring `air.Document`/`def.Document`/`cns.Document`.
+Mutating `Document.File` has no effect on `Serialize`'s output. To save an
+edited `CommandFile`, call `Document.SerializeEdited(w, file)`, mirroring
+the other formats: only changed lines are rewritten, comments and section
+ordering are kept. An empty original falls back to a fresh `Serialize`.
+`SerializeEdited` is the supported way to save an edited model while
+keeping unrelated comments/ordering — see
+[`.vibe/decisions/033-format-preserving-edits-per-format-alignment.md`](../.vibe/decisions/033-format-preserving-edits-per-format-alignment.md).
 
 ### Example
 
@@ -1176,9 +1194,13 @@ func (d *Document) Serialize(w io.Writer) error
 `ParseDocument` → `Serialize` round trip on **unmodified** content
 reproduces the original file byte-for-byte.
 
-Mutating `Document.Script` has no effect on `Serialize`'s output: this type
-guarantees a faithful round trip for the "load, don't touch, save" case
-only, mirroring `air.Document`/`def.Document`/`cns.Document`/`cmd.Document`.
+Mutating `Document.Script` has no effect on `Serialize`'s output. To save an
+edited script, call `Document.SerializeEdited(w, script)`, mirroring the
+other formats: only changed lines are rewritten, comments and block order
+are kept. An empty original falls back to a fresh `Serialize`.
+`SerializeEdited` is the supported way to save an edited model while
+keeping unrelated comments/ordering — see
+[`.vibe/decisions/033-format-preserving-edits-per-format-alignment.md`](../.vibe/decisions/033-format-preserving-edits-per-format-alignment.md).
 
 ### Example
 

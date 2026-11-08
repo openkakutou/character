@@ -166,3 +166,8 @@ Agents active for `/vibe:review` on this project:
 | `vibe:review-web-security` | ❌ | inactive: no HTTP surface |
 | `vibe:review-pentest` | ❌ | inactive: no runnable networked app |
 | `vibe:review-hexagonal` | ❌ | inactive: no declared hexagonal (ports & adapters) architecture |
+| `vibe:review-correctness` | ✅ | always active |
+| `vibe:review-comments` | ✅ | always active |
+| `vibe:review-signatures` | ✅ | always active |
+| `vibe:review-coordination` | ✅ | always active |
+| `vibe:review-docs` | ✅ | active: Markdown documentation beyond the README (`docs/`, `.vibe/`, ADRs) |

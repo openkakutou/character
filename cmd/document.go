@@ -15,11 +15,9 @@ import (
 // convenient structured access to what was parsed — but Serialize does not
 // read it back. As long as Document.File is left untouched, ParseDocument
 // followed by Serialize reproduces the original source byte-for-byte,
-// comments and all. Mutating File has no effect on Serialize's output:
-// regenerating text from an edited CommandFile while still preserving
-// unrelated comments/sections/ordering around the edit is a heavier
-// per-line reconciliation this type does not attempt, mirroring
-// def.Document/air.Document.
+// comments and all. Mutating File has no effect on Serialize's output; to
+// write an edited CommandFile while keeping the untouched comments, blank
+// lines and ordering, use SerializeEdited (rules in edit.go).
 type Document struct {
 	File CommandFile
 

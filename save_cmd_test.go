@@ -107,3 +107,38 @@ func TestSerializeCmd_MalformedOriginal_ReturnsDescriptiveError(t *testing.T) {
 		t.Fatalf("expected error to mention the cmd package's own diagnostic, got: %v", err)
 	}
 }
+
+func TestSerializeCmd_WithEdits_KeepsUnrelatedComment(t *testing.T) {
+	original := []byte("; my note\n[Command]\nname = \"a\"\ncommand = a\ntime = 1\n")
+	file, err := cmd.Parse(strings.NewReader(string(original)))
+	if err != nil {
+		t.Fatalf("test setup: %v", err)
+	}
+	file.Commands[0].Time = 5
+
+	out, err := SerializeCmd(original, file)
+	if err != nil {
+		t.Fatalf("SerializeCmd returned an error: %v", err)
+	}
+	want := "; my note\n[Command]\nname = \"a\"\ncommand = a\ntime = 5\n"
+	if string(out) != want {
+		t.Fatalf("got:\n%q\nwant:\n%q", out, want)
+	}
+}
+
+func TestSerializeCmd_NoEdits_NilVsEmptyDoNotCountAsEdited(t *testing.T) {
+	original := []byte("; my note\n[Command]\nname = \"a\"\ncommand = a\n")
+	file, err := cmd.Parse(strings.NewReader(string(original)))
+	if err != nil {
+		t.Fatalf("test setup: %v", err)
+	}
+	file = normalizeCommandFileForJSON(file)
+
+	out, err := SerializeCmd(original, file)
+	if err != nil {
+		t.Fatalf("SerializeCmd returned an error: %v", err)
+	}
+	if string(out) != string(original) {
+		t.Fatalf("got:\n%q\nwant:\n%q", out, original)
+	}
+}
