@@ -1099,7 +1099,8 @@ const (
 
 type Block struct {
     Kind         BlockKind
-    Number       int               // Statedef's N; unused for Function
+    Number       int               // Statedef's N when it is a plain integer; 0 otherwise, and unused for Function
+    NumberRaw    string            // Statedef's state-number token kept verbatim when it is not a plain integer ("const(StateDizzy)", "+1"); empty otherwise
     HeaderParams map[string]string // Statedef's "key: value" header fields, lowercase-keyed; unused for Function
     Name         string            // Function's name; empty for Statedef
     Params       []string          // Function's parenthesized parameter names, in order; empty for Statedef
@@ -1116,7 +1117,7 @@ type Script struct {
 `Script`/`Block` is the pure-data vocabulary for an Ikemen GO `.zss` file: an
 alternative to `.cns` combat logic (a character may use either, or mix both).
 Every field is always present in the JSON form (`number`, `headerParams`,
-`params`, `ret`, `blocks`); only `name` and `preamble` are omitted when empty. Following the same "unevaluated data" principle `cns.Controller`
+`params`, `ret`, `blocks`); only `name`, `numberRaw` and `preamble` are omitted when empty. A Statedef header whose number is a named constant or a relative offset keeps that token in `numberRaw` (with `number` at `0`) for `engine` to resolve. Following the same "unevaluated data" principle `cns.Controller`
 already applies to trigger conditions, a `Block`'s `Body` — the Lua-like
 statements between one block header and the next — is kept as raw,
 unevaluated text: this package parses `.zss` structure only, it does not
