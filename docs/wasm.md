@@ -259,8 +259,9 @@ node cmd/wasm/smoke.mjs [path/to/character.wasm]  # defaults to ./character.wasm
 `.github/workflows/release.yml` runs on every pushed tag matching
 `v[0-9]*.[0-9]*.[0-9]*` (e.g. `v1.2.3`). It builds and tests the module
 normally first (`go build ./...`, `go test ./...`, `go vet ./...`) — nothing
-is published if any of those fail — then builds `character.wasm` and copies
-the matching `wasm_exec.js`, publishing both as assets on that tag's GitHub
+is published if any of those fail — then builds `character.wasm`, copies
+the matching `wasm_exec.js`, runs `cmd/wasm/smoke.mjs` against the build (a
+failing smoke test also blocks publishing) and publishes both as assets on that tag's GitHub
 Release under stable, predictable names. `wasm_exec.js` is
 Go-version-specific glue; the workflow always builds and copies it from the
 same Go toolchain install that produced the `.wasm`, so the two published
