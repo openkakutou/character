@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- The browser build's built-in self-check no longer reports a false sound-loading failure, and it now runs automatically before every release.
+
 ## [0.14.0] - 2026-11-09
 
 ### Added

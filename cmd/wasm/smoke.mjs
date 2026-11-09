@@ -192,8 +192,8 @@ function buildV1Snd(entries) {
 			subView.setUint32(0, offsets[i + 1], true);
 		}
 		subView.setUint32(4, e.payload.length, true);
-		subView.setInt16(8, e.group, true);
-		subView.setInt16(10, e.sample, true);
+		subView.setUint32(8, e.group, true);
+		subView.setUint32(12, e.sample, true);
 		chunks.push(sub, e.payload);
 	});
 

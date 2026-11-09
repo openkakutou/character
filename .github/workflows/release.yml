@@ -37,6 +37,9 @@ jobs:
       - name: Copy wasm_exec.js glue
         run: cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" wasm_exec.js
 
+      - name: Smoke test WASM module
+        run: node cmd/wasm/smoke.mjs character.wasm
+
       - name: Publish release assets
         uses: softprops/action-gh-release@v3
         with:
