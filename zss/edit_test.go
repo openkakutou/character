@@ -244,3 +244,28 @@ func TestSerializeEditedNoOpOnSampleFixtureIsByteExact(t *testing.T) {
 		t.Fatalf("crlf got %q", got)
 	}
 }
+
+const symSrc = "# dizzy\n[StateDef const(StateDizzy);\n  type: S]\nx := 1\n"
+
+func TestSerializeEditedSymbolicBodyEditKeepsWrappedHeaderVerbatim(t *testing.T) {
+	got := edited(t, symSrc, func(s *Script) { s.Blocks[0].Body = "x := 2\n" })
+	want := strings.Replace(symSrc, "x := 1", "x := 2", 1)
+	if got != want {
+		t.Fatalf("got %q, want %q", got, want)
+	}
+}
+
+func TestSerializeEditedSymbolicNumberRawChangeRewritesHeader(t *testing.T) {
+	got := edited(t, symSrc, func(s *Script) { s.Blocks[0].NumberRaw = "const(StateOther)" })
+	want := "# dizzy\n[Statedef const(StateOther); type: S]\nx := 1\n"
+	if got != want {
+		t.Fatalf("got %q, want %q", got, want)
+	}
+}
+
+func TestSerializeEditedSymbolicToPlainNumberRewritesHeader(t *testing.T) {
+	got := edited(t, "[Statedef +1]\nx\n", func(s *Script) { s.Blocks[0].NumberRaw = ""; s.Blocks[0].Number = 5 })
+	if got != "[Statedef 5]\nx\n" {
+		t.Fatalf("got %q", got)
+	}
+}

@@ -13,3 +13,7 @@ status: accepted
 **Rejected alternatives:**
 - *Parse the Lua-like body into statements/expressions*: rejected — `character` has no expression/execution engine (that's `engine`'s responsibility, not yet built even for the simpler `.cns` triggers), so a body parser would have no way to validate itself and no current consumer needing structured access below the block level.
 - *Keep the whole block (header + body) as one opaque raw string, no structured header fields*: rejected — the header's block kind and identifying number/name (needed to index/look up a given state or function) are cheap, genuinely structured data a caller (e.g. `character-editor`, `engine`) will want without re-parsing raw text, unlike the body.
+
+## Amendment (item 066)
+
+Statedef numbers are no longer limited to plain integers. Ikemen GO data uses symbolic `[StateDef const(StateDizzy); ...]` (validated on the 12 local `data/*.zss` files) and relative `[StateDef +1]` (seen in Ikemen's system/demo.zss, not verified against a real file here). `Block.Number` stays an `int` (0 when the token is not a plain integer, `number` always in JSON); a new `Block.NumberRaw` (`numberRaw`, omitted when empty) carries the verbatim token for non-integer forms. `-N` stays a plain negative integer; a leading `+` marks a relative number. A Statedef's identity for format-preserving edits is `Number` + `NumberRaw`. A header with no number token (`[Statedef]`) is still a malformed block header.

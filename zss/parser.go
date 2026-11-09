@@ -12,10 +12,16 @@ import (
 )
 
 // statedefHeaderPattern matches a "[Statedef N]" or
-// "[Statedef N; key: value; ...]" line, capturing the state number and the
-// raw text of the semicolon-separated header parameters (possibly empty).
+// "[Statedef N; key: value; ...]" line, capturing the state-number token
+// (up to the first whitespace, ";" or "]", e.g. "200", "-1", "+1" or
+// "const(StateDizzy)") and the raw text of the semicolon-separated header
+// parameters (possibly empty). The token must be non-empty.
 // Case-insensitive: real .zss files use both "Statedef" and "StateDef".
-var statedefHeaderPattern = regexp.MustCompile(`(?i)^\[\s*statedef\s+(-?\d+)\s*;?\s*(.*)\]$`)
+var statedefHeaderPattern = regexp.MustCompile(`(?i)^\[\s*statedef\s+([^;\[\]\s]+)\s*;?\s*(.*)\]$`)
+
+// plainIntegerPattern matches a plain (optionally negative) integer state
+// number; anything else, including "+N", is kept as Block.NumberRaw.
+var plainIntegerPattern = regexp.MustCompile(`^-?\d+$`)
 
 // functionHeaderPattern matches a "[Function Name(params) ret]" line,
 // capturing the function name, its raw comma-separated parameter list
@@ -67,13 +73,20 @@ func Parse(r io.Reader) (Script, error) {
 
 			if m := statedefHeaderPattern.FindStringSubmatch(trimmed); m != nil {
 				flushBody()
-				number, err := strconv.Atoi(m[1])
-				if err != nil {
-					return Script{}, fmt.Errorf("zss: line %d: invalid Statedef number %q: %w", lineNumber, m[1], err)
+				number, numberRaw := 0, ""
+				if plainIntegerPattern.MatchString(m[1]) {
+					n, err := strconv.Atoi(m[1])
+					if err != nil {
+						return Script{}, fmt.Errorf("zss: line %d: invalid Statedef number %q: %w", lineNumber, m[1], err)
+					}
+					number = n
+				} else {
+					numberRaw = m[1]
 				}
 				script.Blocks = append(script.Blocks, Block{
 					Kind:         BlockKindStatedef,
 					Number:       number,
+					NumberRaw:    numberRaw,
 					HeaderParams: parseHeaderParams(m[2]),
 				})
 				current = &script.Blocks[len(script.Blocks)-1]

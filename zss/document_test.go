@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -108,4 +109,37 @@ noop{}
 	if buf.String() != src {
 		t.Errorf("expected Serialize to ignore mutated Script and reproduce original source.\n--- want ---\n%s\n--- got ---\n%s", src, buf.String())
 	}
+}
+
+func TestParseDocument_IkemenGOData_RoundTripsByteExact(t *testing.T) {
+	dir := os.Getenv("IKEMEN_GO_DATA_DIR")
+	if dir == "" {
+		dir = "/home/neolao/workspace/ikemen-quick-versus/.engine/Ikemen_GO/data"
+	}
+	files, _ := filepath.Glob(filepath.Join(dir, "*.zss"))
+	if len(files) == 0 {
+		t.Skipf("no .zss files in %s (set IKEMEN_GO_DATA_DIR)", dir)
+	}
+	symbolic := 0
+	for _, f := range files {
+		src, err := os.ReadFile(f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		doc, err := ParseDocument(bytes.NewReader(src))
+		if err != nil {
+			t.Errorf("%s: %v", f, err)
+			continue
+		}
+		for _, b := range doc.Script.Blocks {
+			if b.NumberRaw != "" {
+				symbolic++
+			}
+		}
+		var buf bytes.Buffer
+		if err := doc.Serialize(&buf); err != nil || !bytes.Equal(buf.Bytes(), src) {
+			t.Errorf("%s: round trip not byte-exact (err=%v)", f, err)
+		}
+	}
+	t.Logf("%d files, %d symbolic Statedef blocks", len(files), symbolic)
 }

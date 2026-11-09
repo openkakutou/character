@@ -37,8 +37,16 @@ type Block struct {
 	Kind BlockKind `json:"kind"`
 
 	// Number is the state number this block defines (the N in
-	// "[Statedef N; ...]"). Unused (zero) for a Function block.
+	// "[Statedef N; ...]") when it is a plain integer. Zero for a Function
+	// block and for a Statedef whose number token is symbolic or relative
+	// (see NumberRaw).
 	Number int `json:"number"`
+	// NumberRaw is the verbatim state-number token when it is not a plain
+	// integer: an Ikemen GO symbolic "const(StateDizzy)" or a relative
+	// "+1". Empty for plain integers (including negative ones such as -1)
+	// and Function blocks; omitted from JSON when empty. Together with
+	// Number it identifies a Statedef.
+	NumberRaw string `json:"numberRaw,omitempty"`
 	// HeaderParams are a Statedef header's semicolon-separated
 	// "key: value" fields (e.g. "type", "physics", "movetype", "anim",
 	// "ctrl"), verbatim and unevaluated, keyed by lowercase field name —

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -62,8 +63,12 @@ func writeBlockHeader(w io.Writer, b Block) error {
 // writeStatedefHeader writes "[Statedef N]" (no HeaderParams) or
 // "[Statedef N; key1: value1; key2: value2]" (HeaderParams sorted by key).
 func writeStatedefHeader(w io.Writer, b Block) error {
+	number := strconv.Itoa(b.Number)
+	if b.NumberRaw != "" {
+		number = b.NumberRaw
+	}
 	if len(b.HeaderParams) == 0 {
-		_, err := fmt.Fprintf(w, "[Statedef %d]\n", b.Number)
+		_, err := fmt.Fprintf(w, "[Statedef %s]\n", number)
 		return err
 	}
 
@@ -78,7 +83,7 @@ func writeStatedefHeader(w io.Writer, b Block) error {
 		pairs[i] = fmt.Sprintf("%s: %s", k, b.HeaderParams[k])
 	}
 
-	_, err := fmt.Fprintf(w, "[Statedef %d; %s]\n", b.Number, strings.Join(pairs, "; "))
+	_, err := fmt.Fprintf(w, "[Statedef %s; %s]\n", number, strings.Join(pairs, "; "))
 	return err
 }
 

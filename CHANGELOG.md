@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Ikemen GO scripts whose state header names its state by a constant (such as the dizzy, guard-break and tag scripts shipped with Ikemen GO) or by a relative offset now open instead of being rejected; the state number is kept exactly as written and saved back unchanged.
+
 ## [0.13.0] - 2026-11-08
 
 ### Added

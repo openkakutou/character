@@ -88,11 +88,11 @@ func blockKey(b Block) string {
 	if b.Kind == BlockKindFunction {
 		return string(b.Kind) + "\x00" + b.Name
 	}
-	return fmt.Sprintf("%s\x00%d", b.Kind, b.Number)
+	return fmt.Sprintf("%s\x00%d\x00%s", b.Kind, b.Number, b.NumberRaw)
 }
 
 func headerEqual(a, b Block) bool {
-	return a.Kind == b.Kind && a.Number == b.Number && a.Name == b.Name &&
+	return a.Kind == b.Kind && a.Number == b.Number && a.NumberRaw == b.NumberRaw && a.Name == b.Name &&
 		maps.Equal(a.HeaderParams, b.HeaderParams) &&
 		slices.Equal(a.Params, b.Params) && slices.Equal(a.Ret, b.Ret)
 }

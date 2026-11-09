@@ -173,3 +173,25 @@ func TestSerialize_RoundTripsThroughParse(t *testing.T) {
 		}
 	}
 }
+
+func TestSerialize_StatedefSymbolicNumber_WritesRawTokenAndRoundTrips(t *testing.T) {
+	script := Script{Blocks: []Block{
+		{Kind: BlockKindStatedef, NumberRaw: "const(StateDizzy)", HeaderParams: map[string]string{"type": "S"}, Body: "a\n"},
+		{Kind: BlockKindStatedef, NumberRaw: "+1", Body: "b\n"},
+	}}
+	var sb strings.Builder
+	if err := Serialize(&sb, script); err != nil {
+		t.Fatal(err)
+	}
+	want := "[Statedef const(StateDizzy); type: S]\na\n[Statedef +1]\nb\n"
+	if sb.String() != want {
+		t.Fatalf("got %q, want %q", sb.String(), want)
+	}
+	back, err := Parse(strings.NewReader(sb.String()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if back.Blocks[0].NumberRaw != "const(StateDizzy)" || back.Blocks[1].NumberRaw != "+1" || back.Blocks[1].Body != "b\n" {
+		t.Errorf("round trip mismatch: %+v", back.Blocks)
+	}
+}

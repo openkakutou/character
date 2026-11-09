@@ -290,3 +290,69 @@ noop{}
 		t.Errorf("expected no header params, got %v", b.HeaderParams)
 	}
 }
+
+func TestParse_StatedefSymbolicOrRelativeNumber_KeepsRawTokenAndZeroNumber(t *testing.T) {
+	cases := []struct {
+		name, header, wantRaw string
+		wantNumber            int
+		wantParams            map[string]string
+	}{
+		{"const form", "[StateDef const(StateDizzy); type: S; ctrl: 0]", "const(StateDizzy)", 0, map[string]string{"type": "S", "ctrl": "0"}},
+		{"relative plus", "[StateDef +1]", "+1", 0, nil},
+		{"relative plus zero", "[Statedef +0]", "+0", 0, nil},
+		{"mixed-case keyword extra spaces", "[sTaTeDeF   const(X)   ;  anim: 5 ]", "const(X)", 0, map[string]string{"anim": "5"}},
+		{"plain integer", "[Statedef 200; type: S]", "", 200, map[string]string{"type": "S"}},
+		{"plain negative", "[Statedef -3]", "", -3, nil},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			script, err := Parse(strings.NewReader(c.header + "\nbody\n"))
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			b := script.Blocks[0]
+			if b.NumberRaw != c.wantRaw || b.Number != c.wantNumber {
+				t.Errorf("got Number=%d NumberRaw=%q, want %d %q", b.Number, b.NumberRaw, c.wantNumber, c.wantRaw)
+			}
+			if len(b.HeaderParams) != len(c.wantParams) {
+				t.Errorf("params = %v, want %v", b.HeaderParams, c.wantParams)
+			}
+			for k, v := range c.wantParams {
+				if b.HeaderParams[k] != v {
+					t.Errorf("param %q = %q, want %q", k, b.HeaderParams[k], v)
+				}
+			}
+		})
+	}
+}
+
+func TestParse_WrappedStatedefWithSymbolicNumber_ParsesRawTokenAndParams(t *testing.T) {
+	script, err := Parse(strings.NewReader("[StateDef const(StateDizzy);\ntype: S;\nanim: 7;]\nbody\n"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	b := script.Blocks[0]
+	if b.NumberRaw != "const(StateDizzy)" || b.HeaderParams["type"] != "S" || b.HeaderParams["anim"] != "7" {
+		t.Errorf("got %+v", b)
+	}
+}
+
+func TestParse_StatedefWithoutNumberToken_ReturnsMalformedHeaderError(t *testing.T) {
+	for _, header := range []string{"[Statedef]", "[Statedef ; type: S]", "[Statedef  ]"} {
+		_, err := Parse(strings.NewReader("# c\n" + header + "\n"))
+		if err == nil || !strings.Contains(err.Error(), "line 2") || !strings.Contains(err.Error(), "malformed block header") {
+			t.Errorf("%q: expected line-2 malformed block header error, got %v", header, err)
+		}
+	}
+}
+
+func TestParse_StatedefHeaderWithoutSemicolon_KeepsIntegerNumberAndParams(t *testing.T) {
+	script, err := Parse(strings.NewReader("[Statedef 5 type: S]\n"))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	b := script.Blocks[0]
+	if b.Number != 5 || b.NumberRaw != "" || b.HeaderParams["type"] != "S" {
+		t.Fatalf("got Number=%d NumberRaw=%q params=%v, want 5, \"\", type=S", b.Number, b.NumberRaw, b.HeaderParams)
+	}
+}
