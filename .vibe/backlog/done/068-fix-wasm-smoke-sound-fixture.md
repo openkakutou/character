@@ -1,5 +1,5 @@
 ---
-status: todo
+status: done
 ---
 # Fix the WASM smoke test's broken sound fixture
 
