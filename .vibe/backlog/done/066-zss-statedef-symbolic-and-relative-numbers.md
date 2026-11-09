@@ -1,5 +1,5 @@
 ---
-status: todo
+status: done
 ---
 # Accept symbolic and relative Statedef numbers in .zss headers
 
