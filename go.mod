@@ -2,6 +2,6 @@ module github.com/openkakutou/character
 
 go 1.26.1
 
-require github.com/openkakutou/sff v0.5.2
+require github.com/openkakutou/sff v0.8.0
 
 require github.com/openkakutou/snd v0.3.1
