@@ -4,7 +4,7 @@ status: todo
 # Specify the OpenKakutou-exclusive 3D character extension
 
 ## Description
-Roadmap decision `028` (OpenKakutou-exclusive 3D characters) adds a 3D presentation layer to the existing character format. `character` is the reference for the character format, so it owns the written specification that `character-editor`, `character-viewer-web` and `mode-quick-versus` implement against. Specification only: no glTF reading in this repo, the no-rendering-dependency constraint holds.
+Roadmap decision `028` (OpenKakutou-exclusive 3D characters) adds a 3D presentation layer to the existing character format. `character` is the reference for the character format, so it owns the written specification that `character-editor`, `character-viewer-web` and `game` implement against. Specification only: no glTF reading in this repo, the no-rendering-dependency constraint holds.
 
 Cover:
 - the `.def` `[Files]` `model` key (`.glb` path resolution, same rules as `sprite`/`anim`);

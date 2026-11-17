@@ -16,7 +16,7 @@ The character reuses `common1.cns` plus a few states of its own. Its `.air` uses
 
 Reproducibility: the Blender source (`.blend`) and a headless export script (`blender -b … --python …`) are committed with the fixture, so the `.glb` can be regenerated. The `OPENKAKUTOU_character` extension and `KHR_materials_variants` palettes are added by that script or a post-export step, whichever the Blender glTF exporter allows. Blender is not currently installed in the dev environment.
 
-The whole fixture (Quaternius base + our additions) is released **CC0**, so it stays single-licensed and `character-editor`, `character-viewer-web` and `mode-quick-versus` can vendor it freely for their own tests (pinned to a `character` version, as for WASM per roadmap decisions `016`/`025`).
+The whole fixture (Quaternius base + our additions) is released **CC0**, so it stays single-licensed and `character-editor`, `character-viewer-web` and `game` can vendor it freely for their own tests (pinned to a `character` version, as for WASM per roadmap decisions `016`/`025`).
 
 ## Acceptance Criteria
 - [ ] Fixture committed under a `testdata/` folder, with `CREDITS` naming each Quaternius pack and its CC0 license, and stating our additions are CC0

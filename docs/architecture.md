@@ -58,7 +58,7 @@ repo's own docs cover only how `character`/`air` *use* that module
 Sound (`.snd`, binary) file support follows the same shape: it comes from
 the separate [`github.com/openkakutou/snd`](https://github.com/openkakutou/snd)
 module, a shared, domain-independent dependency also used directly by
-`mode-quick-versus` for non-character sound sets — never implemented as a
+`game` for non-character sound sets — never implemented as a
 sub-package of this repo. The root package peeks a `.snd` file's own
 version byte itself (mirroring `sff`'s own version-detection precedent)
 since `snd` only exposes decoding one already-known `(group, sample)` entry
