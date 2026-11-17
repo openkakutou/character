@@ -53,7 +53,8 @@ Ikemen GO reads `[Files]` entries by key lookup, so an unknown `model` key is
 ignored (`src/char.go:4280-4281` reads `sprite` and `anim` this way, at
 Ikemen-GO commit `54d4148a728153c2097a0fb899a06812b2d3e193`). The same is true
 of this repository's own `def` parser (`def/parser.go:119`: any other key in
-`[Files]` is ignored). MUGEN: not verified.
+`[Files]` is ignored). Ikemen GO is the verification reference (roadmap
+decision `038`).
 
 ## 2. `.air`: the `Pose3D` frame
 
@@ -103,13 +104,7 @@ Both Ikemen GO and the existing `air` parser read a frame line as
   keyword for any future line of this family must keep avoiding those prefixes.
   Verified by reading the source above (commit
   `54d4148a728153c2097a0fb899a06812b2d3e193`); not run.
-- **MUGEN 1.0/1.1**: not verified. Its source is closed and its documentation
-  does not say how a non-frame line inside an action is treated. The only
-  related evidence is indirect: real MUGEN characters carry unrecognized
-  content lines inside `.air` files (the `:`-prefixed lines of the "Mai (98)"
-  character are kept working by the existing parser, see `air/parser.go`
-  `stripComment` and the `:` branch of `Parse`, backlog item 054). Confirming
-  the behavior takes loading a sample character in MUGEN 1.1.
+- **MUGEN 1.0/1.1**: no separate check. Ikemen GO is the verification reference (roadmap decision `038`), and an OpenKakutou-only extension has no MUGEN behavior to match: its only requirement is being strictly additive.
 - **This repository's `air` parser** currently rejects a `Pose3D` line (it
   expects five fields). Teaching it the line is backlog item 070.
 
