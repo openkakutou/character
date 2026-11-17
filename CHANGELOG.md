@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- The format of OpenKakutou 3D characters is now specified: how a character definition names its 3D model, how an animation file lists 3D poses next to sprite frames, how palettes and facing work, and which standard actions a 3D character must provide.
+
 ## [0.14.1] - 2026-11-09
 
 ### Fixed
