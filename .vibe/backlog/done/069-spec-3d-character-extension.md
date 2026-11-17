@@ -1,5 +1,5 @@
 ---
-status: in_progress
+status: done
 ---
 # Specify the OpenKakutou-exclusive 3D character extension
 
