@@ -1,5 +1,5 @@
 ---
-status: todo
+status: done
 ---
 # Zss Statedef Header Comment with Bracket
 
@@ -9,9 +9,9 @@ status: todo
 🔒 MUST: Ikemen GO compatibility (roadmap decision `038`).
 
 ## Acceptance Criteria
-- [ ] A `#` comment inside a multi-line Statedef header, holding `;` or `]`, does not end the header
-- [ ] Ikemen GO's `kfm.zss` gives state 200 its own header and body
-- [ ] A test uses the real `kfm.zss` lines
+- [x] A `#` comment inside a multi-line Statedef header, holding `;` or `]`, does not end the header
+- [x] Ikemen GO's `kfm.zss` gives state 200 its own header and body
+- [x] A test uses the real `kfm.zss` lines
 
 ## Notes
 Found by engine#040 (2026-11-19). Blocks the engine end-to-end scenario where the `.zss` Kung Fu Man does a light punch.

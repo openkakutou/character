@@ -155,6 +155,21 @@ type Controller struct {
 	// trigger lines at all — it runs unconditionally whenever its state
 	// is active, not "never runs".
 	Triggers []string `json:"triggers"`
+	// TriggerAll holds this controller's "triggerall" lines, verbatim and
+	// unevaluated, in file order — read-only data derived from the same
+	// lines as Triggers (item 080). MUGEN/Ikemen GO run the controller when
+	// every TriggerAll line AND at least one TriggerGroups group holds.
+	TriggerAll []string `json:"triggerAll"`
+	// TriggerGroups holds this controller's numbered trigger groups:
+	// TriggerGroups[i] is every "trigger<i+1>" line, verbatim and
+	// unevaluated, in file order (a group is the AND of its lines, groups
+	// are OR'ed). It stops at the first missing number, as Ikemen GO only
+	// evaluates groups up to there (src/compiler.go stateCompileCNS, commit
+	// 54d4148a): with trigger1 and trigger3 but no trigger2, only group 1 is
+	// kept, and without trigger1 it is empty. A "trigger" key Ikemen GO's
+	// parseTriggerNumber rejects (trigger0, trigger01, triggerx) is in no
+	// group. Read-only: Serialize and the edit path write from Triggers.
+	TriggerGroups [][]string `json:"triggerGroups"`
 	// Parameters are this controller's remaining key/value parameters
 	// (every non-trigger line of the block), verbatim and unevaluated,
 	// keyed by parameter name.

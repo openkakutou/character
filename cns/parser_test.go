@@ -3,6 +3,7 @@ package cns
 import (
 	"errors"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -690,4 +691,97 @@ type failingReader struct{}
 
 func (r *failingReader) Read(p []byte) (int, error) {
 	return 0, &failingReaderError{}
+}
+
+// parseSingleController parses src and returns its only controller.
+func parseSingleController(t *testing.T, src string) Controller {
+	t.Helper()
+	states, err := Parse(strings.NewReader(src))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(states) != 1 || len(states[0].Controllers) != 1 {
+		t.Fatalf("expected 1 Statedef with 1 controller, got %+v", states)
+	}
+	return states[0].Controllers[0]
+}
+
+func TestParse_RealCommonTriggerAllAndGroups_KeepsGroupNumbering(t *testing.T) {
+	// Ikemen GO common1.cns:128-133 (commit 54d4148a): the walk animation
+	// changes on triggerall AND (trigger1 OR trigger2).
+	ctrl := parseSingleController(t, `[Statedef 20]
+[State 20, 3]
+type = ChangeAnim
+triggerall = vel x > 0
+trigger1 = Anim != 20 && Anim != 5
+trigger2 = Anim = 5 && AnimTime = 0
+value = 20
+`)
+	if !slices.Equal(ctrl.TriggerAll, []string{"vel x > 0"}) {
+		t.Errorf("TriggerAll: got %q", ctrl.TriggerAll)
+	}
+	want := [][]string{{"Anim != 20 && Anim != 5"}, {"Anim = 5 && AnimTime = 0"}}
+	if !slices.EqualFunc(ctrl.TriggerGroups, want, slices.Equal) {
+		t.Errorf("TriggerGroups: got %q, want %q", ctrl.TriggerGroups, want)
+	}
+	wantFlat := []string{"vel x > 0", "Anim != 20 && Anim != 5", "Anim = 5 && AnimTime = 0"}
+	if !slices.Equal(ctrl.Triggers, wantFlat) {
+		t.Errorf("flat Triggers must keep file order: got %q", ctrl.Triggers)
+	}
+}
+
+func TestParse_TriggerLinesOutOfOrderAndMixedCase_GroupedByNumber(t *testing.T) {
+	ctrl := parseSingleController(t, `[Statedef 0]
+[State 0]
+type = Null
+Trigger2 = b1
+TRIGGERALL = all
+trigger1 = a1
+trigger2 = b2
+`)
+	want := [][]string{{"a1"}, {"b1", "b2"}}
+	if !slices.EqualFunc(ctrl.TriggerGroups, want, slices.Equal) {
+		t.Errorf("TriggerGroups: got %q, want %q", ctrl.TriggerGroups, want)
+	}
+	if !slices.Equal(ctrl.TriggerAll, []string{"all"}) {
+		t.Errorf("TriggerAll: got %q", ctrl.TriggerAll)
+	}
+}
+
+func TestParse_TriggerNumberGap_GroupsStopAtFirstMissingNumber(t *testing.T) {
+	// Ikemen GO only evaluates trigger groups up to the first missing
+	// number (stateCompileCNS's "Loop over triggers" breaks on trexist[i]
+	// == 0), so trigger3 without trigger2 never fires.
+	ctrl := parseSingleController(t, `[Statedef 0]
+[State 0]
+type = Null
+trigger1 = a
+trigger3 = c
+`)
+	want := [][]string{{"a"}}
+	if !slices.EqualFunc(ctrl.TriggerGroups, want, slices.Equal) {
+		t.Errorf("TriggerGroups: got %q, want %q", ctrl.TriggerGroups, want)
+	}
+	if !slices.Equal(ctrl.Triggers, []string{"a", "c"}) {
+		t.Errorf("flat Triggers: got %q", ctrl.Triggers)
+	}
+}
+
+func TestParse_InvalidTriggerNamesOrMissingTrigger1_LeaveNoGroups(t *testing.T) {
+	// Ikemen GO's parseTriggerNumber rejects "trigger0", a leading zero and
+	// a non-digit suffix; without trigger1 no group is ever evaluated.
+	ctrl := parseSingleController(t, `[Statedef 0]
+[State 0]
+type = Null
+trigger0 = z
+trigger01 = lz
+triggerx = x
+trigger2 = b
+`)
+	if len(ctrl.TriggerGroups) != 0 || len(ctrl.TriggerAll) != 0 {
+		t.Errorf("expected no groups and no triggerall, got groups %q all %q", ctrl.TriggerGroups, ctrl.TriggerAll)
+	}
+	if !slices.Equal(ctrl.Triggers, []string{"z", "lz", "x", "b"}) {
+		t.Errorf("flat Triggers: got %q", ctrl.Triggers)
+	}
 }

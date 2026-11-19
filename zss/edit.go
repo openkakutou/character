@@ -44,7 +44,7 @@ func isTrivia(line string) bool {
 }
 
 // indexBlocks finds every block header the way Parse does (a line starting
-// with "[" runs until a line whose trimmed text ends in "]") and records its
+// with "[" runs until a line whose comment-stripped text ends in "]") and records its
 // span. Trivia is the run of blank/"#" lines right above a header, bounded
 // by the end of the previous header.
 func indexBlocks(lines []string) []blockSpan {
@@ -56,7 +56,7 @@ func indexBlocks(lines []string) []blockSpan {
 			continue
 		}
 		end := i + 1
-		for !strings.HasSuffix(strings.TrimSpace(lines[end-1]), "]") && end < len(lines) {
+		for !strings.HasSuffix(headerLineText(lines[end-1]), "]") && end < len(lines) {
 			end++
 		}
 		ts := i

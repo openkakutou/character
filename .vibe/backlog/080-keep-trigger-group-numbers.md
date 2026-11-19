@@ -1,5 +1,5 @@
 ---
-status: todo
+status: done
 ---
 # Keep Trigger Group Numbers
 
@@ -9,9 +9,9 @@ status: todo
 🔒 MUST: MUGEN 1.0/1.1 and Ikemen GO compatibility (roadmap decision `038`).
 
 ## Acceptance Criteria
-- [ ] A parsed controller exposes its `triggerall` lines and its numbered groups in order, each group with its own lines
-- [ ] The existing flat `Triggers` field keeps its current value, so current consumers do not change
-- [ ] The new data survives the JSON shape the WebAssembly build returns, and `.cmd` controllers get it too
+- [x] A parsed controller exposes its `triggerall` lines and its numbered groups in order, each group with its own lines
+- [x] The existing flat `Triggers` field keeps its current value, so current consumers do not change
+- [x] The new data survives the JSON shape the WebAssembly build returns, and `.cmd` controllers get it too
 
 ## Notes
 Needed by engine#061 (2026-11-19). The engine's decision 003 had recorded the flattening as a known gap.

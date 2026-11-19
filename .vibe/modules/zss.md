@@ -6,7 +6,7 @@
 
 **Exports:**
 - `Script{Preamble, Blocks}`, `Block{Kind, Number, NumberRaw, HeaderParams, Name, Params, Ret, Body}`, `BlockKind` (`BlockKindStatedef`/`BlockKindFunction`) — the pure-data model
-- `Parse(r io.Reader) (Script, error)` — reads `.zss` text into a `Script`
+- `Parse(r io.Reader) (Script, error)` — reads `.zss` text into a `Script`; a (possibly multi-line) block header has each line's `#` comment stripped before looking for its closing `]`, as Ikemen GO's tokenizer does (item 081, e.g. `kfm.zss` state 200)
 - `Serialize(w io.Writer, script Script) error` — writes a `Script` back out to valid `.zss` text (not byte-exact; appends a trailing newline when the last block's body lacks one)
 - JSON tags: `Script` always carries `blocks`, `Block` always carries `number`/`headerParams`/`params`/`ret` (no `omitempty`; unused ones are `0`/`null`); only `preamble`, `name` and `numberRaw` are omitted when empty (`numberRaw` holds the verbatim non-integer Statedef number token such as `const(StateDizzy)` or `+1`, in which case `number` is `0`; item 066)
 - `Document{Script}`, `ParseDocument(r io.Reader) (*Document, error)`, `(*Document) Serialize(w io.Writer) error` — byte-exact round trip for unmodified content

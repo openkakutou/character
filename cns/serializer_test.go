@@ -77,6 +77,9 @@ func TestSerialize_RoundTripsThroughParse_ProducesEquivalentStateDefs(t *testing
 				{
 					Type:     "ChangeState",
 					Triggers: []string{`Command = "holdback"`, "StateType = S"},
+					// Serialize writes Triggers as trigger1, trigger2, ...,
+					// so they reparse as one group each (item 080).
+					TriggerGroups: [][]string{{`Command = "holdback"`}, {"StateType = S"}},
 					Parameters: map[string]string{
 						"value": "10",
 						"ctrl":  "0",

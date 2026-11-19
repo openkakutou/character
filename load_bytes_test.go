@@ -129,6 +129,10 @@ name = Bare
 type = S
 movetype = I
 physics = S
+
+[Statedef 1]
+[State 1]
+type = Null
 `)
 
 	c, err := LoadBytes(defBytes, airBytes, sffBuf.Bytes(), cnsBytes, nil, nil, nil)
@@ -153,6 +157,9 @@ physics = S
 	}
 	if !strings.Contains(out, `"controllers":[]`) {
 		t.Errorf("expected state's controllers to marshal as an empty array, got: %s", out)
+	}
+	if !strings.Contains(out, `"triggers":[],"triggerAll":[],"triggerGroups":[]`) {
+		t.Errorf("expected an untriggered controller's triggers/triggerAll/triggerGroups to marshal as empty arrays, got: %s", out)
 	}
 	if !strings.Contains(out, `"stateFiles":[]`) {
 		t.Errorf("expected stateFiles to marshal as an empty array, got: %s", out)

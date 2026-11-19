@@ -136,17 +136,35 @@ func Parse(r io.Reader) (Script, error) {
 // parser does too rather than treating the header as a single-line-only
 // construct. *lineNumber is advanced to the line each continuation line was
 // read from, so callers keep accurate line-numbered error reporting.
-// Returns an error if the input ends before a closing "]" is found.
+// Each line goes through headerLineText first, so a "#" comment never ends
+// or feeds the header (item 081). Returns an error if the input ends before
+// a closing "]" is found.
 func readHeaderText(scanner *bufio.Scanner, first string, lineNumber *int) (string, error) {
-	text := strings.TrimSpace(first)
+	text := headerLineText(first)
 	for !strings.HasSuffix(text, "]") {
 		if !scanner.Scan() {
 			return "", fmt.Errorf("unterminated block header %q", text)
 		}
 		*lineNumber++
-		text += " " + strings.TrimSpace(scanner.Text())
+		text += " " + headerLineText(scanner.Text())
 	}
 	return text, nil
+}
+
+// headerLineText returns one physical line of a block header with its "#"
+// comment removed and surrounding whitespace trimmed. Ikemen GO's .zss
+// tokenizer drops everything from "#" to the end of the line inside a
+// header too (src/compiler.go, CharCompiler.tokenizer's '#' case, used by
+// stateCompileZSS/scanStateDef, commit 54d4148a), so a ";" or "]" inside a
+// comment never ends the header — e.g. kfm.zss's "sprpriority: 2;]  #Set
+// p1's ..." closing line (item 081).
+// shortcut: a "#" inside a quoted header value would be cut too; no real
+// .zss header quotes a value.
+func headerLineText(line string) string {
+	if idx := strings.IndexByte(line, '#'); idx != -1 {
+		line = line[:idx]
+	}
+	return strings.TrimSpace(line)
 }
 
 // parseHeaderParams splits a Statedef header's raw semicolon-separated

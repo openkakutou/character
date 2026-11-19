@@ -169,6 +169,11 @@ func Parse(r io.Reader) ([]StateDef, error) {
 		return nil, fmt.Errorf("cns: reading combat logic source: %w", err)
 	}
 
+	for i := range states {
+		for j := range states[i].Controllers {
+			truncateTriggerGroups(&states[i].Controllers[j])
+		}
+	}
 	return states, nil
 }
 
@@ -202,6 +207,7 @@ func applyControllerField(c *Controller, key, value string) {
 	switch {
 	case strings.HasPrefix(strings.ToLower(key), "trigger"):
 		c.Triggers = append(c.Triggers, value)
+		addToTriggerGroup(c, strings.ToLower(key)[len("trigger"):], value)
 	case strings.EqualFold(key, "type"):
 		c.Type = value
 	default:
@@ -209,6 +215,50 @@ func applyControllerField(c *Controller, key, value string) {
 			c.Parameters = make(map[string]string)
 		}
 		c.Parameters[strings.ToLower(key)] = value
+	}
+}
+
+// addToTriggerGroup files a trigger line by its key suffix ("all" or a
+// group number), mirroring Ikemen GO's parseTriggerNumber
+// (src/compiler.go, commit 54d4148a): "all" goes to TriggerAll, a number
+// from 1 to 65536 with no leading zero goes to TriggerGroups[number-1]
+// (growing it with empty groups as needed), anything else to no group.
+func addToTriggerGroup(c *Controller, suffix, value string) {
+	if suffix == "all" {
+		c.TriggerAll = append(c.TriggerAll, value)
+		return
+	}
+	if suffix == "" || suffix[0] == '0' {
+		return
+	}
+	for _, r := range suffix {
+		if r < '0' || r > '9' {
+			return
+		}
+	}
+	n, err := strconv.Atoi(suffix)
+	if err != nil || n > 65536 {
+		return
+	}
+	for len(c.TriggerGroups) < n {
+		c.TriggerGroups = append(c.TriggerGroups, nil)
+	}
+	c.TriggerGroups[n-1] = append(c.TriggerGroups[n-1], value)
+}
+
+// truncateTriggerGroups drops every group from the first missing number on:
+// Ikemen GO's stateCompileCNS stops evaluating groups there ("Loop over
+// triggers" breaks on trexist[i] == 0), so trigger3 without trigger2 never
+// fires.
+func truncateTriggerGroups(c *Controller) {
+	for i, group := range c.TriggerGroups {
+		if len(group) == 0 {
+			c.TriggerGroups = c.TriggerGroups[:i]
+			break
+		}
+	}
+	if len(c.TriggerGroups) == 0 {
+		c.TriggerGroups = nil
 	}
 }
 

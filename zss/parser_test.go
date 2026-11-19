@@ -356,3 +356,84 @@ func TestParse_StatedefHeaderWithoutSemicolon_KeepsIntegerNumberAndParams(t *tes
 		t.Fatalf("got Number=%d NumberRaw=%q params=%v, want 5, \"\", type=S", b.Number, b.NumberRaw, b.HeaderParams)
 	}
 }
+
+// kfmStandLightPunch is an excerpt of Ikemen GO's kfm_zss/kfm.zss (commit
+// 54d4148a): lines 212-222 (state 200's header, each line ending in a "#"
+// comment), one body line (224), then lines 279-283 (state 210's header).
+const kfmStandLightPunch = `[StateDef 200;
+type: S;                              #State-type: S-stand, C-crouch, A-air, L-liedown
+movetype: A;                          #Move-type: A-attack, I-idle, H-gethit
+physics: S;                           #Physics: S-stand, C-crouch, A-air
+juggle: 1;                            #Number of air juggle points move takes
+#Commonly-used controllers:
+velset: 0, 0;                         #Set velocity (x, y) (Def: no change)
+ctrl: 0;                              #Set ctrl (Def: no change)
+anim: 200;                            #Change animation (Def: no change)
+poweradd: 10;                         #Power to add (Def: 0)
+sprpriority: 2;]                      #Set p1's sprite layering priority to 2 (in front)
+
+if animElem = 3 { 
+[StateDef 210;
+type: S; movetype: A; physics: S;
+juggle: 4; poweradd: 30; ctrl: 0;
+velset: 0, 0; anim: 210;
+sprpriority: -1;]
+`
+
+func TestParse_RealKfmStatedefHeaderWithTrailingComments_EndsAtItsOwnBracket(t *testing.T) {
+	script, err := Parse(strings.NewReader(kfmStandLightPunch))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(script.Blocks) != 2 {
+		t.Fatalf("expected 2 blocks (states 200 and 210), got %d", len(script.Blocks))
+	}
+	s200 := script.Blocks[0]
+	if s200.Number != 200 {
+		t.Errorf("expected first block Number 200, got %d", s200.Number)
+	}
+	want := map[string]string{
+		"type": "S", "movetype": "A", "physics": "S", "juggle": "1",
+		"velset": "0, 0", "ctrl": "0", "anim": "200", "poweradd": "10", "sprpriority": "2",
+	}
+	if len(s200.HeaderParams) != len(want) {
+		t.Errorf("expected exactly %d header params, got %v", len(want), s200.HeaderParams)
+	}
+	for k, v := range want {
+		if got := s200.HeaderParams[k]; got != v {
+			t.Errorf("state 200 header param %q: expected %q, got %q", k, v, got)
+		}
+	}
+	if s200.Body != "\nif animElem = 3 { \n" {
+		t.Errorf("state 200 body: got %q", s200.Body)
+	}
+	if script.Blocks[1].Number != 210 || script.Blocks[1].HeaderParams["anim"] != "210" {
+		t.Errorf("expected second block to be state 210 with anim 210, got %+v", script.Blocks[1])
+	}
+}
+
+func TestParse_CommentHoldingBracketInsideHeader_DoesNotEndHeader(t *testing.T) {
+	src := "[StateDef 200; # first [line]\ntype: S; # see [State 210]\nanim: 200;]\nbody\n"
+	script, err := Parse(strings.NewReader(src))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(script.Blocks) != 1 {
+		t.Fatalf("expected 1 block, got %d", len(script.Blocks))
+	}
+	got := script.Blocks[0].HeaderParams
+	if got["type"] != "S" || got["anim"] != "200" || len(got) != 2 {
+		t.Errorf("expected only type/anim header params, got %v", got)
+	}
+	if script.Blocks[0].Body != "body\n" {
+		t.Errorf("expected body %q, got %q", "body\n", script.Blocks[0].Body)
+	}
+}
+
+func TestParse_HeaderClosedOnlyInsideComment_ReturnsUnterminatedError(t *testing.T) {
+	src := "[StateDef 200;\ntype: S; # closed here? ]\n"
+	_, err := Parse(strings.NewReader(src))
+	if err == nil || !strings.Contains(err.Error(), "line 1") || !strings.Contains(err.Error(), "unterminated") {
+		t.Fatalf("expected line-numbered unterminated header error, got %v", err)
+	}
+}

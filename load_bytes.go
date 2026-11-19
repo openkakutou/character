@@ -220,6 +220,12 @@ func normalizeStateDefForJSON(s *cns.StateDef) {
 		if s.Controllers[i].Triggers == nil {
 			s.Controllers[i].Triggers = []string{}
 		}
+		if s.Controllers[i].TriggerAll == nil {
+			s.Controllers[i].TriggerAll = []string{}
+		}
+		if s.Controllers[i].TriggerGroups == nil {
+			s.Controllers[i].TriggerGroups = [][]string{}
+		}
 		if s.Controllers[i].Parameters == nil {
 			s.Controllers[i].Parameters = map[string]string{}
 		}

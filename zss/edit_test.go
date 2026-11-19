@@ -269,3 +269,16 @@ func TestSerializeEditedSymbolicToPlainNumberRewritesHeader(t *testing.T) {
 		t.Fatalf("got %q", got)
 	}
 }
+
+func TestSerializeEditedRealKfmHeaderWithTrailingComments_KeepsBothHeaders(t *testing.T) {
+	if got := edited(t, kfmStandLightPunch, func(*Script) {}); got != kfmStandLightPunch {
+		t.Fatalf("no-op edit not byte-exact: %q", got)
+	}
+	got := edited(t, kfmStandLightPunch, func(s *Script) {
+		s.Blocks[0].Body = strings.Replace(s.Blocks[0].Body, "animElem = 3", "animElem = 4", 1)
+	})
+	want := strings.Replace(kfmStandLightPunch, "animElem = 3", "animElem = 4", 1)
+	if got != want {
+		t.Fatalf("got %q\nwant %q", got, want)
+	}
+}

@@ -1,6 +1,7 @@
 package character
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 )
@@ -131,5 +132,41 @@ func TestParseCmd_MalformedInput_ReturnsDescriptiveError(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "cmd:") {
 		t.Errorf("expected error to mention the cmd package's own diagnostic, got: %v", err)
+	}
+}
+
+// TestParseCmd_RealKfmTriggerGroups_SurviveJSON pins item 080 on the loadCmd
+// WASM boundary, with Ikemen GO kfm.cmd:373-386 (commit 54d4148a).
+func TestParseCmd_RealKfmTriggerGroups_SurviveJSON(t *testing.T) {
+	src := []byte(`[Statedef -1]
+
+[State -1, Smash Kung Fu Upper]
+type = ChangeState
+value = 3050
+triggerall = command = "SmashKFUpper"
+triggerall = power >= 1000
+triggerall = statetype != A
+trigger1 = ctrl
+trigger2 = hitdefattr = SC, NA, SA, HA
+trigger2 = stateno != [3050,3100)
+trigger2 = movecontact
+trigger3 = stateno = 1310 || stateno = 1330 ;From blocking
+`)
+	file, err := ParseCmd(src)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	data, err := json.Marshal(file)
+	if err != nil {
+		t.Fatalf("json.Marshal returned error: %v", err)
+	}
+	out := string(data)
+	wantAll := `"triggerAll":["command = \"SmashKFUpper\"","power \u003e= 1000","statetype != A"]`
+	if !strings.Contains(out, wantAll) {
+		t.Errorf("expected %s in %s", wantAll, out)
+	}
+	wantGroups := `"triggerGroups":[["ctrl"],["hitdefattr = SC, NA, SA, HA","stateno != [3050,3100)","movecontact"],["stateno = 1310 || stateno = 1330"]]`
+	if !strings.Contains(out, wantGroups) {
+		t.Errorf("expected %s in %s", wantGroups, out)
 	}
 }
