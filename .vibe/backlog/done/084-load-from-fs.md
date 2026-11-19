@@ -1,5 +1,5 @@
 ---
-status: todo
+status: done
 ---
 # Load a character from an `fs.FS`
 
@@ -9,7 +9,7 @@ Roadmap decision `045` (`game` item 062): `game`'s shared core must load content
 🔒 MUST: no change for any character `Load` reads today (real-file corpus included).
 
 ## Acceptance Criteria
-- [ ] `LoadFS` over an in-memory `fstest.MapFS` loads a real character identically to `Load` on disk
-- [ ] Case-insensitive and backslash references resolve inside an `fs.FS` as on disk
-- [ ] A reference that leaves the root of `fsys` is reported as a missing file, never a panic
-- [ ] `Load` is implemented on top of `LoadFS`; existing tests pass unchanged
+- [x] `LoadFS` over an in-memory `fstest.MapFS` loads a real character identically to `Load` on disk
+- [x] Case-insensitive and backslash references resolve inside an `fs.FS` as on disk
+- [x] A reference that leaves the root of `fsys` is reported as a missing file, never a panic
+- [x] `Load` is implemented on top of `LoadFS`; existing tests pass unchanged
