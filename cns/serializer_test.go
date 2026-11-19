@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -118,7 +119,7 @@ func TestSerialize_RoundTripsThroughParse_ProducesEquivalentStateDefs(t *testing
 		t.Fatalf("unexpected error re-parsing serialized output: %v\n--- output ---\n%s", err, buf.String())
 	}
 
-	if !reflect.DeepEqual(reparsed, states) {
+	if !reflect.DeepEqual(withoutWritten(reparsed), states) {
 		t.Errorf("round trip did not produce an equivalent structure.\n--- original ---\n%+v\n--- reparsed ---\n%+v", states, reparsed)
 	}
 }
@@ -154,7 +155,7 @@ func TestSerialize_NumericHeaderFieldExpression_RoundTripsThroughParse(t *testin
 	if err != nil {
 		t.Fatalf("unexpected error re-parsing serialized output: %v\n--- output ---\n%s", err, buf.String())
 	}
-	if !reflect.DeepEqual(reparsed, states) {
+	if !reflect.DeepEqual(withoutWritten(reparsed), states) {
 		t.Errorf("round trip did not produce an equivalent structure.\n--- original ---\n%+v\n--- reparsed ---\n%+v", states, reparsed)
 	}
 }
@@ -194,7 +195,7 @@ func TestSerialize_BooleanHeaderFieldExpression_RoundTripsThroughParse(t *testin
 	if err != nil {
 		t.Fatalf("unexpected error re-parsing serialized output: %v\n--- output ---\n%s", err, buf.String())
 	}
-	if !reflect.DeepEqual(reparsed, states) {
+	if !reflect.DeepEqual(withoutWritten(reparsed), states) {
 		t.Errorf("round trip did not produce an equivalent structure.\n--- original ---\n%+v\n--- reparsed ---\n%+v", states, reparsed)
 	}
 }
@@ -248,4 +249,30 @@ type failingWriter struct{}
 
 func (w *failingWriter) Write(p []byte) (int, error) {
 	return 0, &failingWriterError{}
+}
+
+// withoutWritten drops StateDef.Written, which records the source text's
+// written header fields: a fresh Serialize writes every field, so the
+// reparsed Written always lists them all (see
+// TestSerialize_WritesEveryHeaderField_SoReparsedWrittenListsThemAll).
+func withoutWritten(states []StateDef) []StateDef {
+	out := slices.Clone(states)
+	for i := range out {
+		out[i].Written = nil
+	}
+	return out
+}
+
+func TestSerialize_WritesEveryHeaderField_SoReparsedWrittenListsThemAll(t *testing.T) {
+	var buf bytes.Buffer
+	if err := Serialize(&buf, []StateDef{{Number: 20, Type: StateTypeStanding}}); err != nil {
+		t.Fatal(err)
+	}
+	reparsed, err := Parse(&buf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := reparsed[0].Written["ctrl"]; got != "0" {
+		t.Errorf("Written[ctrl] = %q, want 0: a fresh Serialize writes ctrl even when the source omitted it", got)
+	}
 }

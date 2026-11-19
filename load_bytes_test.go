@@ -169,6 +169,34 @@ type = Null
 	}
 }
 
+// Item 079: the written header fields reach the WebAssembly JSON, and a
+// state that writes none still marshals an object, not null.
+func TestLoadBytes_StatedefWrittenFields_MarshalUnderWritten(t *testing.T) {
+	sprites := []sff.V1WriteSprite{
+		{Group: 0, Image: 0, PixelData: mustEncodePCXFixture(t, 2, 2), Palette: make([]byte, sff.V1PaletteBlockSize)},
+	}
+	var sffBuf bytes.Buffer
+	if err := sff.SerializeV1(&sffBuf, [4]byte{1, 0, 0, 1}, false, sprites); err != nil {
+		t.Fatalf("test setup: SerializeV1 failed: %v", err)
+	}
+	cnsBytes := []byte("[Statedef 0]\ntype = S\n\n[Statedef 200]\ntype = S\nctrl = 0\nvelset = 2,0\n")
+	c, err := LoadBytes([]byte("[Info]\nname = W\n"), []byte("[Begin Action 0]\n0,0, 0,0, 5\n"), sffBuf.Bytes(), cnsBytes, nil, nil, nil)
+	if err != nil {
+		t.Fatalf("LoadBytes returned error: %v", err)
+	}
+	data, err := json.Marshal(c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := string(data)
+	if !strings.Contains(out, `"written":{"ctrl":"0","velset":"2,0"}`) {
+		t.Errorf("state 200's written fields missing from JSON: %s", out)
+	}
+	if !strings.Contains(out, `"written":{}`) {
+		t.Errorf("state 0 should marshal written as {}: %s", out)
+	}
+}
+
 // TestLoadBytes_DefWithFullMetadata_ThreadsAllCharacterInfoFieldsToCharacter
 // pins backlog item 038: every field def.CharacterInfo already parses (not
 // just Name) must reach the Character LoadBytes returns, since that's the

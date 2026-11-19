@@ -135,6 +135,16 @@ type StateDef struct {
 	// (numeric fields) and item 046 (boolean fields, extending the same
 	// pattern).
 	HeaderExprs map[string]string `json:"headerExprs"`
+	// Written holds every optional header field the Statedef writes
+	// (anim, ctrl, velset, poweradd, juggle, facep2, sprpriority and the
+	// three persist flags), keyed by lowercase name, with its raw source
+	// text; the last line wins on a duplicate. A field absent here was
+	// omitted: Ikemen GO then keeps the fighter's current value instead of
+	// applying a default (bytecode.go:5444-5512, commit 54d4148a), which the
+	// typed fields cannot tell apart from a written 0. nil when the header
+	// writes none of them. Read-only: Serialize writes from the typed fields
+	// and HeaderExprs.
+	Written map[string]string `json:"written"`
 	// Controllers are the state controllers ([State N] blocks) that run
 	// while this state is active, in file order.
 	Controllers []Controller `json:"controllers"`

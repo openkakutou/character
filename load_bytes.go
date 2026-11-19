@@ -213,6 +213,9 @@ func normalizeStateDefForJSON(s *cns.StateDef) {
 	if s.HeaderExprs == nil {
 		s.HeaderExprs = map[string]string{}
 	}
+	if s.Written == nil {
+		s.Written = map[string]string{}
+	}
 	if s.Controllers == nil {
 		s.Controllers = []cns.Controller{}
 	}

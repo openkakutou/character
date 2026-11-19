@@ -271,7 +271,14 @@ func truncateTriggerGroups(c *Controller) {
 // (numeric fields) and item 046 (boolean fields, extending the same
 // pattern).
 func applyStatedefField(s *StateDef, key, value string) error {
-	switch strings.ToLower(key) {
+	name := strings.ToLower(key)
+	if writtenFields[name] {
+		if s.Written == nil {
+			s.Written = make(map[string]string)
+		}
+		s.Written[name] = value
+	}
+	switch name {
 	case "type":
 		s.Type = StateType(value)
 	case "movetype":
@@ -299,6 +306,13 @@ func applyStatedefField(s *StateDef, key, value string) error {
 	}
 	// Any other key is unrecognized within a Statedef header and ignored.
 	return nil
+}
+
+// writtenFields are the optional Statedef header fields StateDef.Written
+// records (Ikemen GO compiler.go:7020-7130, commit 54d4148a).
+var writtenFields = map[string]bool{
+	"anim": true, "ctrl": true, "velset": true, "poweradd": true, "juggle": true, "facep2": true,
+	"sprpriority": true, "hitdefpersist": true, "movehitpersist": true, "hitcountpersist": true,
 }
 
 // applyIntOrExprField sets *dst from value when value parses as a literal

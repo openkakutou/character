@@ -2,6 +2,7 @@ package cns
 
 import (
 	"errors"
+	"maps"
 	"os"
 	"slices"
 	"strings"
@@ -783,5 +784,65 @@ trigger2 = b
 	}
 	if !slices.Equal(ctrl.Triggers, []string{"z", "lz", "x", "b"}) {
 		t.Errorf("flat Triggers: got %q", ctrl.Triggers)
+	}
+}
+
+// Item 079: Ikemen GO treats every header field but type/movetype/physics as
+// optional and evaluates a written one at state entry (compiler.go:7020-7130,
+// bytecode.go:5444-5512, commit 54d4148a): an omitted ctrl keeps control, so
+// consumers must tell "omitted" from "ctrl = 0".
+func TestParse_StatedefHeader_RecordsEveryWrittenFieldWithItsRawText(t *testing.T) {
+	src := "[Statedef 200]\ntype = S\nanim = 200\nctrl = 0\nvelset = 2, -4\npoweradd = 10\njuggle = 4\nfacep2 = 1\nsprpriority = 2\nhitdefpersist = 1\nmovehitpersist = 0\nhitcountpersist = 1\n"
+	states, err := Parse(strings.NewReader(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]string{"anim": "200", "ctrl": "0", "velset": "2, -4", "poweradd": "10", "juggle": "4", "facep2": "1", "sprpriority": "2", "hitdefpersist": "1", "movehitpersist": "0", "hitcountpersist": "1"}
+	if got := states[0].Written; !maps.Equal(got, want) {
+		t.Errorf("Written = %v, want %v", got, want)
+	}
+	if states[0].Anim != 200 || states[0].Ctrl || states[0].PowerAdd != 10 {
+		t.Errorf("typed fields changed: anim %d ctrl %v poweradd %d", states[0].Anim, states[0].Ctrl, states[0].PowerAdd)
+	}
+}
+
+func TestParse_StatedefHeaderOmittingCtrlAndAnim_LeavesThemOutOfWritten(t *testing.T) {
+	// common1.cns:113-116, state 20 (walk): no ctrl, no anim.
+	states, err := Parse(strings.NewReader("[Statedef 20]\ntype    = S\nphysics = S\nsprpriority = 0\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := states[0].Written["ctrl"]; ok {
+		t.Error("ctrl recorded as written, want omitted")
+	}
+	if _, ok := states[0].Written["anim"]; ok {
+		t.Error("anim recorded as written, want omitted")
+	}
+	if states[0].Written["sprpriority"] != "0" {
+		t.Errorf("Written[sprpriority] = %q, want 0", states[0].Written["sprpriority"])
+	}
+}
+
+func TestParse_StatedefHeaderWrittenField_KeepsAnExpressionAndTheLastDuplicate(t *testing.T) {
+	src := "[Statedef 0]\nCtrl = 1\nctrl = ifelse(var(1), 1, 0)\nANIM = IfElse(life > 500, 0, 5)\n"
+	states, err := Parse(strings.NewReader(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := states[0].Written["ctrl"]; got != "ifelse(var(1), 1, 0)" {
+		t.Errorf("Written[ctrl] = %q, want the last line", got)
+	}
+	if got := states[0].Written["anim"]; got != "IfElse(life > 500, 0, 5)" {
+		t.Errorf("Written[anim] = %q (keys are lower-cased)", got)
+	}
+}
+
+func TestParse_StatedefHeaderWithNoOptionalField_HasNoWrittenMap(t *testing.T) {
+	states, err := Parse(strings.NewReader("[Statedef 0]\ntype = S\nmovetype = I\nphysics = S\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if states[0].Written != nil {
+		t.Errorf("Written = %v, want nil (type/movetype/physics are not tracked)", states[0].Written)
 	}
 }
