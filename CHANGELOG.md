@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.17.0] - 2026-11-19
+
+### Added
+- A parsed `.cns` state now records which optional header fields it writes (anim, ctrl, velset, poweradd, juggle, facep2, sprpriority and the persist flags), with each one's text, so an engine can tell an omitted `ctrl` from `ctrl = 0` as Ikemen GO does; the WebAssembly build returns it too.
+
 ## [0.16.0] - 2026-11-19
 
 ### Added
@@ -229,7 +234,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `.sff` v1 sprites can now have their actual decoded pixel data resolved through the same public API as their palette, so a caller can get a sprite's real image, not just its dimensions; validated against real, unmodified MUGEN/Ikemen character files rather than only hand-built test data, which surfaced and fixed two long-standing decoding inaccuracies for real files — a sprite whose stored "linked sprite" reference points at itself or a later sprite now correctly falls back to its own image instead of misreading unrelated data, and a sprite's own color palette is now located correctly for every real file layout, not just the common case; a sprite with a corrupted or nonsensical declared size now falls back to a blank placeholder image instead of risking a crash
 - A character (name, animations, sprites, combat logic) can now be loaded directly in a web browser, no local Go installation required: tagging a new release automatically publishes a downloadable WebAssembly build of the library alongside the small glue file it needs to run
 
-[Unreleased]: https://github.com/openkakutou/character/compare/v0.16.0...HEAD
+[Unreleased]: https://github.com/openkakutou/character/compare/v0.17.0...HEAD
+[0.17.0]: https://github.com/openkakutou/character/compare/v0.16.0...v0.17.0
 [0.16.0]: https://github.com/openkakutou/character/compare/v0.15.0...v0.16.0
 [0.15.0]: https://github.com/openkakutou/character/compare/v0.14.1...v0.15.0
 [0.14.1]: https://github.com/openkakutou/character/compare/v0.14.0...v0.14.1
