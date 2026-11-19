@@ -1,9 +1,13 @@
 package character
 
 import (
+	"bytes"
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 
@@ -32,7 +36,26 @@ import (
 // ScriptFile.Error (.vibe/decisions/032). See
 // .vibe/decisions/010-def-loader-assembles-character-from-referenced-files.md.
 func Load(path string) (*Character, error) {
-	f, err := os.Open(path)
+	return loadFrom(osFiles{}, path, filepath.Dir(path))
+}
+
+// LoadFS does what Load does for a .def stored in fsys instead of on disk:
+// name is the slash-separated path of the .def inside fsys, and every file
+// it references (.air, .sff, .snd, .cmd, .cns, .zss, ...) is resolved
+// relative to the .def's directory, with Windows backslashes accepted and
+// the case-insensitive per-component fallback of backlog item 050. A
+// reference that leaves the root of fsys (a leading "..") is reported as a
+// missing file. Errors follow Load's. See backlog item 084.
+func LoadFS(fsys fs.FS, name string) (*Character, error) {
+	return loadFrom(fsFiles{fsys}, name, path.Dir(name))
+}
+
+// loadFrom is the single implementation behind Load and LoadFS: files gives
+// access to the .def at defPath and to everything it references, resolved
+// against dir.
+func loadFrom(files fileAccess, defPath, dir string) (*Character, error) {
+	path := defPath
+	f, err := files.open(path)
 	if err != nil {
 		return nil, fmt.Errorf("character: opening character definition file %q: %w", path, err)
 	}
@@ -47,14 +70,14 @@ func Load(path string) (*Character, error) {
 		return nil, err
 	}
 
-	dir := filepath.Dir(path)
+	src := source{files: files, dir: dir}
 
-	animations, err := loadAnimations(dir, info.AnimationFile)
+	animations, err := loadAnimations(src, info.AnimationFile)
 	if err != nil {
 		return nil, err
 	}
 
-	sprites, err := loadSprites(dir, info.SpriteFile)
+	sprites, err := loadSprites(src, info.SpriteFile)
 	if err != nil {
 		return nil, err
 	}
@@ -63,14 +86,14 @@ func Load(path string) (*Character, error) {
 	// carry its states in .zss alone (.vibe/decisions/032).
 	var stateDefs []cns.StateDef
 	if info.ConstantsFile != "" {
-		stateDefs, err = loadStateDefs(dir, info.ConstantsFile)
+		stateDefs, err = loadStateDefs(src, info.ConstantsFile)
 		if err != nil {
 			return nil, err
 		}
 	}
 
 	scripts := resolveScripts(info, func(entry string) ([]byte, error) {
-		f, err := openReferencedFile(dir, entry)
+		f, err := src.open(entry)
 		if err != nil {
 			return nil, err
 		}
@@ -78,12 +101,12 @@ func Load(path string) (*Character, error) {
 		return io.ReadAll(f)
 	})
 
-	sounds, err := loadSounds(dir, info.SoundFile)
+	sounds, err := loadSounds(src, info.SoundFile)
 	if err != nil {
 		return nil, err
 	}
 
-	commands, commandErr := loadCommands(dir, info.CommandFile)
+	commands, commandErr := loadCommands(src, info.CommandFile)
 
 	return &Character{
 		Name:            info.Name,
@@ -129,46 +152,94 @@ func validateFilesSection(path string, info def.CharacterInfo) error {
 	return fmt.Errorf("character: %q doesn't look like a character definition: no [Files] section (or it has no recognized entries)", path)
 }
 
-// resolveReferencedPath joins dir with a file path referenced from inside a
-// .def file (e.g. a [Files] entry), normalizing Windows-style backslash
-// separators to forward slashes first. Real .def files are authored on
-// Windows, where a backslash in a path is unambiguously a separator (never
-// a literal filename character, which Windows itself disallows) — but
-// filepath.Join treats an unnormalized backslash-containing string as a
-// single literal path component on a forward-slash filesystem (Linux, and
-// the browser/WASM target this library must also support), so the
-// referenced subdirectory is never traversed. dir itself (derived from
-// Load's own path argument, not from .def content) is left untouched: it is
-// already in the host's native convention. See backlog item 049.
-func resolveReferencedPath(dir, referenced string) string {
-	return filepath.Join(dir, strings.ReplaceAll(referenced, "\\", "/"))
+// fileAccess is the file system a character is read from. join builds the
+// name of a child (and cleans it lexically); open, stat and readDir take
+// names built by join. Two implementations exist: the OS, which keeps the
+// caller's own path spelling so Load behaves and words its errors exactly
+// as it always did, and an fs.FS.
+type fileAccess interface {
+	join(dir, child string) string
+	open(name string) (fs.File, error)
+	stat(name string) (fs.FileInfo, error)
+	readDir(name string) ([]fs.DirEntry, error)
 }
 
-// openReferencedFile opens the file a .def references (dir + referenced,
-// resolved via resolveReferencedPath) and, if no file exists under that
+// osFiles is fileAccess over the operating system, with host path semantics.
+type osFiles struct{}
+
+func (osFiles) join(dir, child string) string         { return filepath.Join(dir, child) }
+func (osFiles) open(name string) (fs.File, error)     { return os.Open(name) }
+func (osFiles) stat(name string) (fs.FileInfo, error) { return os.Stat(name) }
+func (osFiles) readDir(name string) ([]fs.DirEntry, error) {
+	return os.ReadDir(name)
+}
+
+// fsFiles is fileAccess over an fs.FS, with slash-separated path semantics.
+// A name that leaves the root of the fs.FS (a leading "..") is not valid
+// for it and is reported as not found.
+type fsFiles struct{ fsys fs.FS }
+
+func (fsFiles) join(dir, child string) string { return path.Join(dir, child) }
+
+func (f fsFiles) open(name string) (fs.File, error) {
+	if !fs.ValidPath(name) {
+		return nil, &fs.PathError{Op: "open", Path: name, Err: fs.ErrNotExist}
+	}
+	return f.fsys.Open(name)
+}
+
+func (f fsFiles) stat(name string) (fs.FileInfo, error) {
+	if !fs.ValidPath(name) {
+		return nil, &fs.PathError{Op: "stat", Path: name, Err: fs.ErrNotExist}
+	}
+	return fs.Stat(f.fsys, name)
+}
+
+func (f fsFiles) readDir(name string) ([]fs.DirEntry, error) {
+	if !fs.ValidPath(name) {
+		return nil, &fs.PathError{Op: "readdir", Path: name, Err: fs.ErrNotExist}
+	}
+	return fs.ReadDir(f.fsys, name)
+}
+
+// source is where the files referenced from a .def are looked up: through
+// files, relative to dir (the .def's directory).
+type source struct {
+	files fileAccess
+	dir   string
+}
+
+// shown resolves a reference to the path error messages name, normalizing
+// Windows-style backslash separators to forward slashes first. Real .def
+// files are authored on Windows, where a backslash is unambiguously a
+// separator, but on a forward-slash filesystem (Linux, the browser/WASM
+// target) it would be a literal filename character and the referenced
+// subdirectory never traversed. dir itself is left untouched: it is already
+// in the host's convention. See backlog item 049.
+func (s source) shown(referenced string) string {
+	return s.files.join(s.dir, strings.ReplaceAll(referenced, "\\", "/"))
+}
+
+// open opens the file a .def references and, if no file exists under that
 // exact casing, falls back to a case-insensitive match against the actual
-// on-disk directory entries, one path component at a time, before giving
-// up. Real .def files are authored on Windows, where filesystem paths are
-// case-insensitive, and many reference a file under different letter
-// casing than its actual on-disk name — a mismatch Linux and the
-// browser/WASM target this library must also support do not tolerate. The
-// exact-case path is always tried first via a direct os.Open, so a
-// correctly-cased reference never pays for a directory listing. When no
-// case-insensitive match exists either, the original os.Open error against
-// the exact-case path is returned unchanged, preserving the existing
-// descriptive "no such file or directory"-style error. See backlog item
-// 050.
-func openReferencedFile(dir, referenced string) (*os.File, error) {
-	path := resolveReferencedPath(dir, referenced)
-	f, err := os.Open(path)
+// directory entries, one path component at a time, before giving up. Real
+// .def files are authored on Windows, where paths are case-insensitive, and
+// many reference a file under different letter casing than its actual
+// name. The exact-case name is always tried first, so a correctly-cased
+// reference never pays for a directory listing. When no case-insensitive
+// match exists either, the original error against the exact-case name is
+// returned unchanged. See backlog items 050 and 084.
+func (s source) open(referenced string) (fs.File, error) {
+	name := s.shown(referenced)
+	f, err := s.files.open(name)
 	if err == nil {
 		return f, nil
 	}
-	if !os.IsNotExist(err) {
+	if !errors.Is(err, fs.ErrNotExist) {
 		return nil, err
 	}
-	if resolvedPath, ok := resolveCaseInsensitive(dir, strings.ReplaceAll(referenced, "\\", "/")); ok {
-		if f, ferr := os.Open(resolvedPath); ferr == nil {
+	if resolved, ok := s.resolveCaseInsensitive(strings.ReplaceAll(referenced, "\\", "/")); ok {
+		if f, ferr := s.files.open(resolved); ferr == nil {
 			return f, nil
 		}
 	}
@@ -176,24 +247,24 @@ func openReferencedFile(dir, referenced string) (*os.File, error) {
 }
 
 // resolveCaseInsensitive walks relPath component by component starting at
-// base, matching each component against the actual directory entries at
-// that level case-insensitively when no exact match exists. It returns the
-// fully resolved on-disk path and true once every component (including the
-// final file) has been matched, or ("", false) as soon as any component
-// has no match under either casing.
-func resolveCaseInsensitive(base, relPath string) (string, bool) {
-	current := base
+// the .def's directory, matching each component against the actual
+// directory entries at that level case-insensitively when no exact match
+// exists. It returns the fully resolved name and true once every component
+// (including the final file) has been matched, or ("", false) as soon as
+// any component has no match under either casing.
+func (s source) resolveCaseInsensitive(relPath string) (string, bool) {
+	current := s.dir
 	for _, component := range strings.Split(relPath, "/") {
 		if component == "" || component == "." {
 			continue
 		}
-		candidate := filepath.Join(current, component)
-		if _, err := os.Stat(candidate); err == nil {
+		candidate := s.files.join(current, component)
+		if _, err := s.files.stat(candidate); err == nil {
 			current = candidate
 			continue
 		}
 
-		entries, err := os.ReadDir(current)
+		entries, err := s.files.readDir(current)
 		if err != nil {
 			return "", false
 		}
@@ -207,15 +278,15 @@ func resolveCaseInsensitive(base, relPath string) (string, bool) {
 		if match == "" {
 			return "", false
 		}
-		current = filepath.Join(current, match)
+		current = s.files.join(current, match)
 	}
 	return current, true
 }
 
-// loadAnimations opens and parses the .air file dir+referenced points to.
-func loadAnimations(dir, referenced string) ([]air.Animation, error) {
-	path := resolveReferencedPath(dir, referenced)
-	f, err := openReferencedFile(dir, referenced)
+// loadAnimations opens and parses the .air file the reference points to.
+func loadAnimations(src source, referenced string) ([]air.Animation, error) {
+	path := src.shown(referenced)
+	f, err := src.open(referenced)
 	if err != nil {
 		return nil, fmt.Errorf("character: opening animation file %q: %w", path, err)
 	}
@@ -228,26 +299,31 @@ func loadAnimations(dir, referenced string) ([]air.Animation, error) {
 	return animations, nil
 }
 
-// loadSprites opens and loads the .sff file dir+referenced points to.
-func loadSprites(dir, referenced string) ([]sff.SpriteGroup, error) {
-	path := resolveReferencedPath(dir, referenced)
-	f, err := openReferencedFile(dir, referenced)
+// loadSprites opens and loads the .sff file the reference points to.
+func loadSprites(src source, referenced string) ([]sff.SpriteGroup, error) {
+	path := src.shown(referenced)
+	f, err := src.open(referenced)
 	if err != nil {
 		return nil, fmt.Errorf("character: opening sprite file %q: %w", path, err)
 	}
 	defer f.Close()
 
-	sprites, err := sff.Load(f)
+	// sff.Load needs random access, which an fs.File does not promise.
+	data, err := io.ReadAll(f)
+	if err != nil {
+		return nil, fmt.Errorf("character: loading sprite file %q: %w", path, err)
+	}
+	sprites, err := sff.Load(bytes.NewReader(data))
 	if err != nil {
 		return nil, fmt.Errorf("character: loading sprite file %q: %w", path, err)
 	}
 	return sprites, nil
 }
 
-// loadStateDefs opens and parses the .cns file dir+referenced points to.
-func loadStateDefs(dir, referenced string) ([]cns.StateDef, error) {
-	path := resolveReferencedPath(dir, referenced)
-	f, err := openReferencedFile(dir, referenced)
+// loadStateDefs opens and parses the .cns file the reference points to.
+func loadStateDefs(src source, referenced string) ([]cns.StateDef, error) {
+	path := src.shown(referenced)
+	f, err := src.open(referenced)
 	if err != nil {
 		return nil, fmt.Errorf("character: opening combat logic file %q: %w", path, err)
 	}
@@ -260,7 +336,7 @@ func loadStateDefs(dir, referenced string) ([]cns.StateDef, error) {
 	return stateDefs, nil
 }
 
-// loadSounds opens and decodes the .snd file dir+referenced points to.
+// loadSounds opens and decodes the .snd file the reference points to.
 //
 // Unlike loadAnimations/loadSprites/loadStateDefs, referenced == "" is not
 // an error: SoundFile is genuinely optional (validateFilesSection has never
@@ -271,15 +347,15 @@ func loadStateDefs(dir, referenced string) ([]cns.StateDef, error) {
 // referenced files. See .vibe/decisions/029.
 //
 // A resolved v2 external-file-reference entry (Ikemen GO's extension) is
-// looked up relative to dir, the same base every other referenced file
+// looked up relative to the .def directory, the same base every other referenced file
 // already uses.
-func loadSounds(dir, referenced string) ([]SoundGroup, error) {
+func loadSounds(src source, referenced string) ([]SoundGroup, error) {
 	if referenced == "" {
 		return nil, nil
 	}
 
-	path := resolveReferencedPath(dir, referenced)
-	f, err := openReferencedFile(dir, referenced)
+	path := src.shown(referenced)
+	f, err := src.open(referenced)
 	if err != nil {
 		return nil, fmt.Errorf("character: opening sound file %q: %w", path, err)
 	}
@@ -291,26 +367,26 @@ func loadSounds(dir, referenced string) ([]SoundGroup, error) {
 	}
 
 	openExternal := func(ref string) ([]byte, error) {
-		return os.ReadFile(resolveReferencedPath(dir, ref))
+		return readExact(src, ref)
 	}
 	return decodeSoundGroups(data, path, openExternal)
 }
 
-// loadCommands opens and parses the .cmd file dir+referenced points to.
+// loadCommands opens and parses the .cmd file the reference points to.
 //
 // Unlike the other referenced files, a failure is non-fatal: it returns the
 // normalized empty CommandFile plus a descriptive message naming the file and
 // the failing step, which Load stores in Character.CommandError.
 // referenced == "" (no cmd declared) yields the empty value and no message.
 // See .vibe/decisions/031.
-func loadCommands(dir, referenced string) (cmd.CommandFile, string) {
+func loadCommands(src source, referenced string) (cmd.CommandFile, string) {
 	empty := normalizeCommandFileForJSON(cmd.CommandFile{})
 	if referenced == "" {
 		return empty, ""
 	}
 
-	path := resolveReferencedPath(dir, referenced)
-	f, err := openReferencedFile(dir, referenced)
+	path := src.shown(referenced)
+	f, err := src.open(referenced)
 	if err != nil {
 		return empty, fmt.Sprintf("character: opening command file %q: %v", path, err)
 	}
@@ -321,4 +397,15 @@ func loadCommands(dir, referenced string) (cmd.CommandFile, string) {
 		return empty, fmt.Sprintf("character: parsing command file %q: %v", path, err)
 	}
 	return normalizeCommandFileForJSON(file), ""
+}
+
+// readExact reads a file by its exact name (no case-insensitive fallback,
+// as for every v2 .snd external reference before LoadFS existed).
+func readExact(src source, referenced string) ([]byte, error) {
+	f, err := src.files.open(src.shown(referenced))
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	return io.ReadAll(f)
 }
