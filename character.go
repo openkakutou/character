@@ -25,6 +25,10 @@ type Character struct {
 	// Author is the character's author/creator, from the .def [Info]
 	// section's "author" key. Empty when the source .def doesn't set it.
 	Author string `json:"author"`
+	// MugenVersion and IkemenVersion are the .def [Info] versions as written
+	// ("" when absent).
+	MugenVersion  string `json:"mugenVersion,omitempty"`
+	IkemenVersion string `json:"ikemenVersion,omitempty"`
 	// SpriteFile, AnimationFile, SoundFile, CommandFile, and ConstantsFile
 	// are the referenced file paths from the .def [Files] section, exactly
 	// as written there (see def.CharacterInfo). They are metadata only —

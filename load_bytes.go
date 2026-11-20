@@ -130,6 +130,8 @@ func LoadBytes(defBytes, airBytes, sffBytes, cnsBytes, sndBytes, cmdBytes []byte
 	c := &Character{
 		Name:            info.Name,
 		Author:          info.Author,
+		MugenVersion:    info.MugenVersion,
+		IkemenVersion:   info.IkemenVersion,
 		SpriteFile:      info.SpriteFile,
 		AnimationFile:   info.AnimationFile,
 		SoundFile:       info.SoundFile,

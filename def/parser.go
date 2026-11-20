@@ -90,6 +90,10 @@ func Parse(r io.Reader) (CharacterInfo, error) {
 				info.Name = value
 			case "author":
 				info.Author = value
+			case "mugenversion":
+				info.MugenVersion = value
+			case "ikemenversion":
+				info.IkemenVersion = value
 			}
 		case "files":
 			switch {

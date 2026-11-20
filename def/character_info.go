@@ -26,6 +26,11 @@ type CharacterInfo struct {
 	Name string `json:"name"`
 	// Author is the character's author/creator (.def [Info] "author").
 	Author string `json:"author"`
+	// MugenVersion and IkemenVersion are the .def [Info] "mugenversion" and
+	// "ikemenversion" as written ("" when absent); an engine reads them to
+	// choose MUGEN or Ikemen GO behaviours.
+	MugenVersion  string `json:"mugenVersion,omitempty"`
+	IkemenVersion string `json:"ikemenVersion,omitempty"`
 	// SpriteFile is the path to this character's sprite sheet (.sff) file
 	// (.def [Files] "sprite").
 	SpriteFile string `json:"spriteFile"`

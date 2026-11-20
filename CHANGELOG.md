@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.20.0] - 2026-11-21
+
+### Added
+- `.def` [Info] `mugenversion` and `ikemenversion` are read as written into `CharacterInfo` and `Character` (`MugenVersion`, `IkemenVersion`), empty when absent: an engine chooses MUGEN or Ikemen GO behaviours from them.
+
 ## [0.19.0] - 2026-11-20
 
 ### Added

@@ -122,6 +122,8 @@ func loadFrom(files fileAccess, defPath, dir string) (*Character, error) {
 	return &Character{
 		Name:            info.Name,
 		Author:          info.Author,
+		MugenVersion:    info.MugenVersion,
+		IkemenVersion:   info.IkemenVersion,
 		SpriteFile:      info.SpriteFile,
 		AnimationFile:   info.AnimationFile,
 		SoundFile:       info.SoundFile,
