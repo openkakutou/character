@@ -33,7 +33,9 @@ import (
 // panicking. A missing or unparseable .cmd file is the exception: it is
 // non-fatal and reported in Character.CommandError instead (see
 // .vibe/decisions/031); so is a missing or unparseable .zss, reported in its
-// ScriptFile.Error (.vibe/decisions/032). See
+// ScriptFile.Error (.vibe/decisions/032); and a missing or unreadable move
+// list file (Ikemen GO's "movelist" keys), reported in its Movelists entry's
+// Error. See
 // .vibe/decisions/010-def-loader-assembles-character-from-referenced-files.md.
 func Load(path string) (*Character, error) {
 	return loadFrom(osFiles{}, path, filepath.Dir(path))
@@ -108,6 +110,15 @@ func loadFrom(files fileAccess, defPath, dir string) (*Character, error) {
 
 	commands, commandErr := loadCommands(src, info.CommandFile)
 
+	movelists := resolveMovelists(info.Movelists, func(file string) ([]byte, error) {
+		f, err := src.open(file)
+		if err != nil {
+			return nil, err
+		}
+		defer f.Close()
+		return io.ReadAll(f)
+	})
+
 	return &Character{
 		Name:            info.Name,
 		Author:          info.Author,
@@ -126,6 +137,7 @@ func loadFrom(files fileAccess, defPath, dir string) (*Character, error) {
 		Sounds:          sounds,
 		Commands:        commands,
 		CommandError:    commandErr,
+		Movelists:       movelists,
 	}, nil
 }
 

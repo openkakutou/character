@@ -52,7 +52,7 @@ type SoundGroup struct {
 func (c *Character) ResolveSprite(frame air.Frame) (sff.Sprite, error)
 
 func Load(path string) (*Character, error)
-func LoadBytes(defBytes, airBytes, sffBytes, cnsBytes, sndBytes, cmdBytes []byte, zssFiles map[string][]byte) (*Character, error)
+func LoadBytes(defBytes, airBytes, sffBytes, cnsBytes, sndBytes, cmdBytes []byte, zssFiles, movelistFiles map[string][]byte) (*Character, error)
 ```
 
 `Character` is the assembled unit a library consumer (editor, engine) works
@@ -140,6 +140,17 @@ text (path separators and letter case ignored; `nil` means none supplied).
 For the fallback, supply the script under `"<entry>.zss"` (for example
 `"common1.cns.zss"`). A key equal to the non-`.zss` entry itself means "that
 file exists": it is not read as zss and the fallback is not taken.
+
+Ikemen GO move lists: `[Files]` keys `movelist`, `movelist0`, `movelist1`, ...
+(`def.CharacterInfo.Movelists`) are loaded into `Character.Movelists`, one
+`Movelist{Key, Index, File, Text, Error}` per declared key. `Load` reads each
+file next to the `.def` (Ikemen GO also searches the working directory and
+`data/`, which are not searched here); `LoadBytes` takes them as
+`movelistFiles`, keyed like `zssFiles`. `Text` is the file as written, only a
+leading UTF-8 byte order mark removed. A file that cannot be read is
+non-fatal: its entry carries `Error` and an empty `Text`. To pick a text for
+a selected index as Ikemen GO does, take the first entry of that `Index`
+without `Error`, else the first one of index 0. A MUGEN character has none.
 
 Known gap: 5 of Ikemen GO's own 10 `data/*.zss` scripts fail to parse,
 because the `Statedef` header parser rejects `const(...)` and relative

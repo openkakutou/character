@@ -457,6 +457,23 @@ assert(typeof zssMissingCharacter?.scripts?.[0]?.error === "string" && zssMissin
 const zssBadArgResult = globalThis.OpenKakutouCharacter.load(zssDefBytes, airBytes, sffBytes, cnsBytes, null, null, 42);
 assert(zssBadArgResult.character === null && typeof zssBadArgResult.error === "string", "malformed zssFiles argument returns an error");
 
+// --- backlog item 073: Ikemen GO move lists via the optional 8th
+// (movelistFiles) argument, an object mapping the .def value to its bytes ---
+const movelistDefBytes = new TextEncoder().encode("[Files]\nmovelist = help/en.txt\nmovelist1 = fr.txt\n");
+const movelistTextBytes = toUint8Array("testdata/movelist/movelist.txt");
+const movelistResult = globalThis.OpenKakutouCharacter.load(movelistDefBytes, airBytes, sffBytes, cnsBytes, null, null, null, { "help/en.txt": movelistTextBytes });
+assert(movelistResult.error === null, `load with movelistFiles reports no error (got: ${movelistResult.error})`);
+const movelistCharacter = JSON.parse(movelistResult.character ?? "null");
+assert(movelistCharacter?.movelists?.length === 2, "load with movelistFiles: two movelists entries");
+assert(movelistCharacter?.movelists?.[0]?.key === "movelist" && movelistCharacter.movelists[0].index === 0, "load with movelistFiles: movelists[0] is key movelist, index 0");
+assert(movelistCharacter?.movelists?.[0]?.text?.startsWith("Special Moves\r\n"), "load with movelistFiles: movelists[0].text kept as written, byte order mark removed");
+assert(movelistCharacter?.movelists?.[0]?.error === undefined, "load with movelistFiles: movelists[0] has no error");
+assert(movelistCharacter?.movelists?.[1]?.index === 1 && typeof movelistCharacter.movelists[1].error === "string" && movelistCharacter.movelists[1].error.length > 0, "declared move list not supplied: movelists[1].error is set without failing the load");
+assert(Array.isArray(character?.movelists) && character.movelists.length === 0, "load on a .def without movelist keys: movelists is an empty array");
+
+const movelistBadArgResult = globalThis.OpenKakutouCharacter.load(movelistDefBytes, airBytes, sffBytes, cnsBytes, null, null, null, 42);
+assert(movelistBadArgResult.character === null && typeof movelistBadArgResult.error === "string", "malformed movelistFiles argument returns an error");
+
 // The module must still respond correctly after the save* calls above too.
 const afterSaveResult = globalThis.OpenKakutouCharacter.load(defBytes, airBytes, sffBytes, cnsBytes);
 assert(afterSaveResult.error === null, "module still works after the save* calls");

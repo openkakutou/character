@@ -52,13 +52,19 @@ import (
 // (nil = none). A declared .zss that is not supplied, or does not parse, is
 // reported in its Scripts entry's Error, not as a failure of the load.
 //
+// movelistFiles supplies the move list text files the .def declares
+// ("movelist", "movelistN"), keyed by the .def value as written, with
+// separators and letter case ignored (nil = none). A declared file that is not
+// supplied is reported in its Movelists entry's Error, not as a failure of the
+// load.
+//
 // Ikemen GO's fallback applies to a non-.zss entry (e.g.
 // "stcommon = common1.cns") that is not found: its "<entry>.zss" sibling is
 // loaded. Supply that script under the key "<entry>.zss" (e.g.
 // "common1.cns.zss"), matching its name on disk. Keying it under the entry
 // itself (e.g. "common1.cns") means "that .cns file exists": it is not read
 // as zss and the fallback is not taken. See .vibe/decisions/032.
-func LoadBytes(defBytes, airBytes, sffBytes, cnsBytes, sndBytes, cmdBytes []byte, zssFiles map[string][]byte) (*Character, error) {
+func LoadBytes(defBytes, airBytes, sffBytes, cnsBytes, sndBytes, cmdBytes []byte, zssFiles, movelistFiles map[string][]byte) (*Character, error) {
 	info, err := def.Parse(bytes.NewReader(defBytes))
 	if err != nil {
 		return nil, fmt.Errorf("character: parsing character definition bytes: %w", err)
@@ -85,6 +91,18 @@ func LoadBytes(defBytes, airBytes, sffBytes, cnsBytes, sndBytes, cmdBytes []byte
 	}
 	scripts := resolveScripts(info, func(entry string) ([]byte, error) {
 		data, ok := normalized[normalizeZssKey(entry)]
+		if !ok {
+			return nil, fmt.Errorf("not supplied: %w", fs.ErrNotExist)
+		}
+		return data, nil
+	})
+
+	normalizedMovelists := make(map[string][]byte, len(movelistFiles))
+	for name, data := range movelistFiles {
+		normalizedMovelists[normalizeZssKey(name)] = data
+	}
+	movelists := resolveMovelists(info.Movelists, func(file string) ([]byte, error) {
+		data, ok := normalizedMovelists[normalizeZssKey(file)]
 		if !ok {
 			return nil, fmt.Errorf("not supplied: %w", fs.ErrNotExist)
 		}
@@ -127,6 +145,7 @@ func LoadBytes(defBytes, airBytes, sffBytes, cnsBytes, sndBytes, cmdBytes []byte
 		Sounds:          sounds,
 		Commands:        commands,
 		CommandError:    commandErr,
+		Movelists:       movelists,
 	}
 	normalizeForJSON(c)
 	return c, nil

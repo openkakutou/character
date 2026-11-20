@@ -262,7 +262,7 @@ func TestLoad_UnmodifiedZss_SerializeZssIsByteExact(t *testing.T) {
 func TestLoadBytes_ZssSuppliedUnderDifferentCaseAndSeparator_Loaded(t *testing.T) {
 	_, airBytes, sffBytes, cnsBytes := fixtureCharacterBytes(t)
 	defBytes := []byte("[Files]\nst = Sub\\Main.ZSS\n")
-	c, err := LoadBytes(defBytes, airBytes, sffBytes, cnsBytes, nil, nil, map[string][]byte{"sub/main.zss": []byte(zssFixtureText)})
+	c, err := LoadBytes(defBytes, airBytes, sffBytes, cnsBytes, nil, nil, map[string][]byte{"sub/main.zss": []byte(zssFixtureText)}, nil)
 	if err != nil {
 		t.Fatalf("LoadBytes: %v", err)
 	}
@@ -273,7 +273,7 @@ func TestLoadBytes_ZssSuppliedUnderDifferentCaseAndSeparator_Loaded(t *testing.T
 
 func TestLoadBytes_DeclaredZssNotSupplied_ErrorButLoadSucceeds(t *testing.T) {
 	_, airBytes, sffBytes, cnsBytes := fixtureCharacterBytes(t)
-	c, err := LoadBytes([]byte("[Files]\nst = main.zss\n"), airBytes, sffBytes, cnsBytes, nil, nil, nil)
+	c, err := LoadBytes([]byte("[Files]\nst = main.zss\n"), airBytes, sffBytes, cnsBytes, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("LoadBytes: %v", err)
 	}
@@ -285,7 +285,7 @@ func TestLoadBytes_DeclaredZssNotSupplied_ErrorButLoadSucceeds(t *testing.T) {
 func TestLoadBytes_ZssFallbackSupplied_Loaded(t *testing.T) {
 	_, airBytes, sffBytes, cnsBytes := fixtureCharacterBytes(t)
 	c, err := LoadBytes([]byte("[Files]\nstcommon = common1.cns\n"), airBytes, sffBytes, cnsBytes, nil, nil,
-		map[string][]byte{"common1.cns.zss": []byte(zssFixtureText)})
+		map[string][]byte{"common1.cns.zss": []byte(zssFixtureText)}, nil)
 	if err != nil {
 		t.Fatalf("LoadBytes: %v", err)
 	}
@@ -296,7 +296,7 @@ func TestLoadBytes_ZssFallbackSupplied_Loaded(t *testing.T) {
 
 func TestLoadBytes_NoZss_ScriptsJSONIsEmptyArray(t *testing.T) {
 	defBytes, airBytes, sffBytes, cnsBytes := fixtureCharacterBytes(t)
-	c, err := LoadBytes(defBytes, airBytes, sffBytes, cnsBytes, nil, nil, nil)
+	c, err := LoadBytes(defBytes, airBytes, sffBytes, cnsBytes, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("LoadBytes: %v", err)
 	}
@@ -311,7 +311,7 @@ func TestLoadBytes_NoZss_ScriptsJSONIsEmptyArray(t *testing.T) {
 
 func TestLoadBytes_EmptyCnsBytes_YieldsEmptyStateDefs(t *testing.T) {
 	defBytes, airBytes, sffBytes, _ := fixtureCharacterBytes(t)
-	c, err := LoadBytes(defBytes, airBytes, sffBytes, nil, nil, nil, nil)
+	c, err := LoadBytes(defBytes, airBytes, sffBytes, nil, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("LoadBytes: %v", err)
 	}
@@ -349,7 +349,7 @@ func TestResolveScripts_FallbackReadsEachFileOnce(t *testing.T) {
 
 func TestLoadBytes_ErroredScriptEntry_JSONKeepsEmptyBlocks(t *testing.T) {
 	_, airBytes, sffBytes, cnsBytes := fixtureCharacterBytes(t)
-	c, err := LoadBytes([]byte("[Files]\nst = main.zss\n"), airBytes, sffBytes, cnsBytes, nil, nil, nil)
+	c, err := LoadBytes([]byte("[Files]\nst = main.zss\n"), airBytes, sffBytes, cnsBytes, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("LoadBytes: %v", err)
 	}
@@ -362,7 +362,7 @@ func TestLoadBytes_ErroredScriptEntry_JSONKeepsEmptyBlocks(t *testing.T) {
 func TestLoadBytes_ScriptBlockJSON_KeepsZeroNumberAndEmptyCollections(t *testing.T) {
 	_, airBytes, sffBytes, cnsBytes := fixtureCharacterBytes(t)
 	text := "[Statedef 0; type: S;]\nx\n[Function f()]\ny\n"
-	c, err := LoadBytes([]byte("[Files]\nst = a.zss\n"), airBytes, sffBytes, cnsBytes, nil, nil, map[string][]byte{"a.zss": []byte(text)})
+	c, err := LoadBytes([]byte("[Files]\nst = a.zss\n"), airBytes, sffBytes, cnsBytes, nil, nil, map[string][]byte{"a.zss": []byte(text)}, nil)
 	if err != nil {
 		t.Fatalf("LoadBytes: %v", err)
 	}

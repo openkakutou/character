@@ -50,7 +50,7 @@ func main() {
 }
 
 // load is
-// OpenKakutouCharacter.load(defBytes, airBytes, sffBytes, cnsBytes[, sndBytes[, cmdBytes[, zssFiles]]])
+// OpenKakutouCharacter.load(defBytes, airBytes, sffBytes, cnsBytes[, sndBytes[, cmdBytes[, zssFiles[, movelistFiles]]]])
 // as seen from JS: each argument is a Uint8Array (or any JS value
 // js.CopyBytesToGo accepts), holding that file's raw bytes. sndBytes is
 // optional — omitting it, or passing null/undefined, means "no sound data",
@@ -67,7 +67,11 @@ func main() {
 // that is not found, Ikemen GO's fallback loads "<entry>.zss": supply that
 // script under the key "<entry>.zss" (e.g. "common1.cns.zss"), matching its
 // on-disk name. Keying it under the entry itself ("common1.cns") means "that
-// .cns file exists" and it is not read as zss. It always returns a JS object shaped
+// .cns file exists" and it is not read as zss.
+// movelistFiles is optional the same way: a JS object mapping each move list
+// file the .def declares ("movelist", "movelistN", as written there) to its
+// Uint8Array; a declared file left out is reported in that entry of the
+// character JSON's "movelists" ("error"), not as a load failure. It always returns a JS object shaped
 // { character: string|null, error: string|null } — exactly one of the two
 // fields is non-null — never throws and never lets an internal panic escape
 // to the JS caller.
@@ -82,7 +86,7 @@ func load(this js.Value, args []js.Value) any {
 	}()
 
 	if len(args) < 4 {
-		return result(nil, fmt.Errorf("OpenKakutouCharacter.load: expected at least 4 arguments (defBytes, airBytes, sffBytes, cnsBytes[, sndBytes[, cmdBytes[, zssFiles]]]), got %d", len(args)))
+		return result(nil, fmt.Errorf("OpenKakutouCharacter.load: expected at least 4 arguments (defBytes, airBytes, sffBytes, cnsBytes[, sndBytes[, cmdBytes[, zssFiles[, movelistFiles]]]]), got %d", len(args)))
 	}
 
 	defBytes, err := bytesFromJS(args[0])
@@ -126,7 +130,15 @@ func load(this js.Value, args []js.Value) any {
 		}
 	}
 
-	c, err := character.LoadBytes(defBytes, airBytes, sffBytes, cnsBytes, sndBytes, cmdBytes, zssFiles)
+	var movelistFiles map[string][]byte
+	if len(args) >= 8 && !args[7].IsNull() && !args[7].IsUndefined() {
+		movelistFiles, err = zssFilesFromJS(args[7])
+		if err != nil {
+			return result(nil, fmt.Errorf("OpenKakutouCharacter.load: movelistFiles: %w", err))
+		}
+	}
+
+	c, err := character.LoadBytes(defBytes, airBytes, sffBytes, cnsBytes, sndBytes, cmdBytes, zssFiles, movelistFiles)
 	if err != nil {
 		return result(nil, err)
 	}
@@ -139,7 +151,7 @@ func load(this js.Value, args []js.Value) any {
 	return result(data, nil)
 }
 
-// zssFilesFromJS converts a JS object mapping .def entry text to a
+// zssFilesFromJS (also used for the move list files) converts a JS object mapping .def entry text to a
 // Uint8Array into a Go map, returning a descriptive error if v is not an
 // object or one of its values is not a byte array.
 func zssFilesFromJS(v js.Value) (files map[string][]byte, err error) {

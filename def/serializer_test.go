@@ -2,6 +2,7 @@ package def
 
 import (
 	"errors"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -166,5 +167,26 @@ func TestSerialize_StateCommonFile_WrittenAsStcommonAndRoundTrips(t *testing.T) 
 	}
 	if got.StateCommonFile != "common1.cns" {
 		t.Errorf("StateCommonFile = %q after round trip", got.StateCommonFile)
+	}
+}
+
+func TestSerialize_Movelists_WrittenWithTheirKeysAndRoundTrip(t *testing.T) {
+	info := CharacterInfo{
+		SpriteFile: "a.sff",
+		Movelists: []MovelistRef{
+			{Key: "movelist", Index: 0, File: "m.txt"},
+			{Key: "movelist1", Index: 1, File: "m1.txt"},
+		},
+	}
+	var buf strings.Builder
+	if err := Serialize(&buf, info); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	got, err := Parse(strings.NewReader(buf.String()))
+	if err != nil {
+		t.Fatalf("re-parsing failed: %v", err)
+	}
+	if !reflect.DeepEqual(got.Movelists, info.Movelists) {
+		t.Fatalf("Movelists: got %#v, want %#v", got.Movelists, info.Movelists)
 	}
 }

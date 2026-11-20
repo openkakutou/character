@@ -50,6 +50,7 @@ func Parse(r io.Reader) (CharacterInfo, error) {
 	}
 	var palettes []paletteEntry
 	var stateFiles []paletteEntry
+	var movelists []MovelistRef
 
 	lineNumber := 0
 	for scanner.Scan() {
@@ -115,6 +116,10 @@ func Parse(r io.Reader) (CharacterInfo, error) {
 				m := paletteKeyPattern.FindStringSubmatch(key)
 				number, _ := strconv.Atoi(m[1])
 				palettes = append(palettes, paletteEntry{number: number, path: value})
+			default:
+				if ref, ok := movelistRef(key, value); ok {
+					movelists = append(movelists, ref)
+				}
 			}
 			// Any other key within [Files] is unrecognized and ignored.
 		}
@@ -140,7 +145,47 @@ func Parse(r io.Reader) (CharacterInfo, error) {
 		}
 	}
 
+	sort.SliceStable(movelists, func(i, j int) bool {
+		if movelists[i].Index != movelists[j].Index {
+			return movelists[i].Index < movelists[j].Index
+		}
+		return isBareMovelistKey(movelists[i].Key) && !isBareMovelistKey(movelists[j].Key)
+	})
+	info.Movelists = movelists
+
 	return info, nil
+}
+
+// movelistKeyPrefix starts every move list key: "movelist", "movelist0",
+// "movelist1", ...
+const movelistKeyPrefix = "movelist"
+
+// movelistRef reads a [Files] key/value as a move list declaration the way
+// Ikemen GO's loadMovelists does (src/char.go:3425-3452, commit
+// 54d4148a728153c2097a0fb899a06812b2d3e193): the key is matched
+// case-insensitively, "movelist" alone is index 0, a decimal suffix is the
+// index, and an empty value, a negative index or any other suffix declares
+// nothing.
+func movelistRef(key, value string) (MovelistRef, bool) {
+	lower := strings.ToLower(key)
+	if !strings.HasPrefix(lower, movelistKeyPrefix) || value == "" {
+		return MovelistRef{}, false
+	}
+	suffix := lower[len(movelistKeyPrefix):]
+	if suffix == "" {
+		return MovelistRef{Key: key, Index: 0, File: value}, true
+	}
+	index, err := strconv.Atoi(suffix)
+	if err != nil || index < 0 {
+		return MovelistRef{}, false
+	}
+	return MovelistRef{Key: key, Index: index, File: value}, true
+}
+
+// isBareMovelistKey reports whether key is "movelist" without an index, which
+// Ikemen GO tries before "movelist0" (src/char.go:3445-3446).
+func isBareMovelistKey(key string) bool {
+	return strings.EqualFold(key, movelistKeyPrefix)
 }
 
 // stripComment removes a ".def" comment from line — everything from the

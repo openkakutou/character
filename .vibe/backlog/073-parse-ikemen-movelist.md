@@ -1,5 +1,5 @@
 ---
-status: todo
+status: done
 ---
 # Read Ikemen GO move list files
 
@@ -9,6 +9,6 @@ Ikemen GO characters can declare a move list in `.def` `[Files]` with `movelist`
 🔒 MUST: Ikemen GO behavior grounded in its source (key names, index meaning, path resolution, encoding); MUGEN has no move list, so MUGEN characters keep loading unchanged.
 
 ## Acceptance Criteria
-- [ ] A real Ikemen GO character with a move list exposes its text, per declared key
-- [ ] A missing or unreadable move list file is reported on `Character` without failing the load
-- [ ] Round trip: saving the `.def` keeps the movelist keys byte-exact
+- [x] A real Ikemen GO character with a move list exposes its text, per declared key
+- [x] A missing or unreadable move list file is reported on `Character` without failing the load
+- [x] Round trip: saving the `.def` keeps the movelist keys byte-exact

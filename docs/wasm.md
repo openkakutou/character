@@ -23,7 +23,7 @@ never touch it.
 The module registers a single global on `js.Global()`:
 
 ```js
-globalThis.OpenKakutouCharacter.load(defBytes, airBytes, sffBytes, cnsBytes[, sndBytes[, cmdBytes[, zssFiles]]])
+globalThis.OpenKakutouCharacter.load(defBytes, airBytes, sffBytes, cnsBytes[, sndBytes[, cmdBytes[, zssFiles[, movelistFiles]]]])
 ```
 
 - **Arguments**: four required `Uint8Array`s — the raw bytes of a
@@ -48,7 +48,14 @@ globalThis.OpenKakutouCharacter.load(defBytes, airBytes, sffBytes, cnsBytes[, sn
   `script` is empty). For Ikemen GO's fallback (an entry such as
   `common1.cns` that is not found), supply the script under
   `"common1.cns.zss"`. A value that is not an object of byte arrays is an
-  error (see `.vibe/decisions/032`).
+  error (see `.vibe/decisions/032`). An eighth optional argument,
+  `movelistFiles`, is the same kind of object for Ikemen GO's move list text
+  files, keyed by the value written after `movelist`/`movelistN` in the
+  `.def`. They come back as `movelists`: `[{ key, index, file, text, error }]`,
+  one per declared key, `text` kept as written (glyph tokens and line endings
+  included, a leading UTF-8 byte order mark removed); a file not supplied sets
+  `error` and does not fail the load. `movelists` is `[]` for a MUGEN
+  character.
 - **Return value**: always a plain object `{ character, error }`, exactly
   one field non-`null`:
   - `character` — a JSON string of the loaded `Character` (see

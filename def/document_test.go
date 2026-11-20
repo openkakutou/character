@@ -130,3 +130,21 @@ sprite = kfm.sff
 		t.Errorf("expected Serialize to ignore mutated Info and reproduce original source.\n--- want ---\n%s\n--- got ---\n%s", src, buf.String())
 	}
 }
+
+func TestParseDocument_MovelistKeys_SerializeReproducesSourceByteForByte(t *testing.T) {
+	src := "[Files]\r\nsprite = a.sff\r\nMovelist = \"cmd.txt\" ; en\r\nmovelist1=fr.txt\r\n"
+	doc, err := ParseDocument(strings.NewReader(src))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(doc.Info.Movelists) != 2 {
+		t.Fatalf("expected 2 Movelists, got %#v", doc.Info.Movelists)
+	}
+	var out bytes.Buffer
+	if err := doc.SerializeEdited(&out, doc.Info); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out.String() != src {
+		t.Fatalf("round trip differs:\n got %q\nwant %q", out.String(), src)
+	}
+}

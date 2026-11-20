@@ -67,6 +67,11 @@ type Character struct {
 	// but could not be opened or parsed. It is non-fatal: the load still
 	// succeeds, mirroring Sound.Error (.vibe/decisions/030).
 	CommandError string `json:"commandError,omitempty"`
+	// Movelists holds one entry per move list key declared in the .def
+	// (Ikemen GO's "movelist", "movelist0", "movelist1", ...), each with its
+	// text or its non-fatal Error. It is empty for a MUGEN character, which
+	// has no move list.
+	Movelists []Movelist `json:"movelists"`
 }
 
 // ResolveSprite returns the Sprite that frame's (Group, Image) reference

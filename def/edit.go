@@ -185,6 +185,8 @@ func patchValue(body, value string) string {
 //     plus one: "st" (number 0) then "stN", and "palN" starting at pal1.
 //     Contiguous files get the numbers Serialize writes; sparse ones never
 //     collide or reorder on reparse.
+//   - Movelists are read-only here: movelist lines are never changed, added
+//     or removed, so they always stay byte-for-byte as in the source.
 func (d *Document) SerializeEdited(w io.Writer, info CharacterInfo) error {
 	l := d.layout
 	eol := dominantEOL(l.lines)

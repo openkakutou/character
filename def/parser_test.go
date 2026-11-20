@@ -2,6 +2,7 @@ package def
 
 import (
 	"errors"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -329,5 +330,66 @@ func TestParse_DuplicateStateNumbers_KeepFileOrder(t *testing.T) {
 	want := "zero,first,second"
 	if got := strings.Join(info.StateFiles, ","); got != want {
 		t.Errorf("StateFiles = %q, want %q", got, want)
+	}
+}
+
+// Key names, index meaning and ordering follow Ikemen GO's loadMovelists
+// (src/char.go:3425-3452 at commit 54d4148a): "movelist" and "movelist0" are
+// index 0, "movelistN" is index N, a negative index or an empty value is
+// ignored.
+func TestParse_MovelistKeys_ExposeEachDeclaredKeyWithItsIndex(t *testing.T) {
+	src := `[Files]
+movelist = cmd.txt
+MoveList1 = fr.txt
+movelist12 = "it.txt"  ; trailing comment
+`
+	info, err := Parse(strings.NewReader(src))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	want := []MovelistRef{
+		{Key: "movelist", Index: 0, File: "cmd.txt"},
+		{Key: "MoveList1", Index: 1, File: "fr.txt"},
+		{Key: "movelist12", Index: 12, File: "it.txt"},
+	}
+	if !reflect.DeepEqual(info.Movelists, want) {
+		t.Fatalf("Movelists:\n got %#v\nwant %#v", info.Movelists, want)
+	}
+}
+
+func TestParse_MovelistAndMovelist0_BothKept_MovelistFirst(t *testing.T) {
+	src := "[Files]\nmovelist0 = b.txt\nmovelist = a.txt\n"
+	info, err := Parse(strings.NewReader(src))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	want := []MovelistRef{
+		{Key: "movelist", Index: 0, File: "a.txt"},
+		{Key: "movelist0", Index: 0, File: "b.txt"},
+	}
+	if !reflect.DeepEqual(info.Movelists, want) {
+		t.Fatalf("Movelists:\n got %#v\nwant %#v", info.Movelists, want)
+	}
+}
+
+func TestParse_MovelistKeys_IgnoredWhenEmptyNegativeOrNotAnIndex(t *testing.T) {
+	src := "[Files]\nmovelist =\nmovelist-1 = neg.txt\nmovelistfr = fr.txt\nmovelist2 = ok.txt\n"
+	info, err := Parse(strings.NewReader(src))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	want := []MovelistRef{{Key: "movelist2", Index: 2, File: "ok.txt"}}
+	if !reflect.DeepEqual(info.Movelists, want) {
+		t.Fatalf("Movelists:\n got %#v\nwant %#v", info.Movelists, want)
+	}
+}
+
+func TestParse_MovelistKey_OutsideFilesSection_Ignored(t *testing.T) {
+	info, err := Parse(strings.NewReader("[Info]\nmovelist = a.txt\n"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(info.Movelists) != 0 {
+		t.Fatalf("expected no Movelists, got %#v", info.Movelists)
 	}
 }

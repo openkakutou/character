@@ -54,4 +54,28 @@ type CharacterInfo struct {
 	// Palettes lists this character's palette (.act) files, in palette
 	// number order (.def [Files] "pal1", "pal2", ...).
 	Palettes []string `json:"palettes"`
+	// Movelists lists this character's Ikemen GO move list declarations
+	// (.def [Files] "movelist", "movelist0", "movelist1", ...), one per
+	// declared key with a non-empty value, ordered by Index and, within one
+	// Index, with "movelist" before "movelist0", then in file order. MUGEN
+	// has no move list: it is empty for a MUGEN character.
+	Movelists []MovelistRef `json:"movelists"`
+}
+
+// MovelistRef is one move list declaration of a .def [Files] section: the
+// key as written, the index it stands for and the file path as written.
+//
+// Ikemen GO treats "movelist" and "movelist0" as index 0 and "movelistN" as
+// index N, N being what a ChangeMovelist state controller selects, with
+// index 0 as the fallback when the selected index has no move list
+// (src/char.go:3425-3452 loadMovelists, src/script.go:3996-4014
+// getMovelist, commit 54d4148a728153c2097a0fb899a06812b2d3e193). For index
+// 0, "movelist" is tried first and "movelist0" only when it did not load.
+type MovelistRef struct {
+	// Key is the key as written in the .def, letter case included.
+	Key string `json:"key"`
+	// Index is the move list number the key stands for.
+	Index int `json:"index"`
+	// File is the path of the move list text file, as written.
+	File string `json:"file"`
 }

@@ -20,7 +20,7 @@ import (
 // clean for a minimal CharacterInfo. StateCommonFile is written as "stcommon"
 // between the cns and st entries. StateFiles are written as "st", "st1",
 // "st2", ... in slice order; Palettes are written as "pal1", "pal2", ... in
-// slice order. Parse reconstructs both lists from the numeric suffix, so
+// slice order; Movelists are written last, each under its own Key. Parse reconstructs both lists from the numeric suffix, so
 // this numbering always round-trips regardless of the exact key chosen.
 func Serialize(w io.Writer, info CharacterInfo) error {
 	if err := writeInfoSection(w, info); err != nil {
@@ -91,6 +91,12 @@ func writeFilesSection(w io.Writer, info CharacterInfo) error {
 		key := fmt.Sprintf("pal%d", i+1)
 		if _, err := fmt.Fprintf(w, "%s = %s\n", key, path); err != nil {
 			return fmt.Errorf("def: writing %s: %w", key, err)
+		}
+	}
+
+	for _, ref := range info.Movelists {
+		if _, err := fmt.Fprintf(w, "%s = %s\n", ref.Key, ref.File); err != nil {
+			return fmt.Errorf("def: writing %s: %w", ref.Key, err)
 		}
 	}
 
