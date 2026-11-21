@@ -72,10 +72,17 @@ func Parse(r io.Reader) ([]Animation, error) {
 	// very next frame line, then are consumed.
 	var pendingClsn1, pendingClsn2 []ClsnBox
 
-	lineNumber := 0
+	var lines []string
 	for scanner.Scan() {
-		lineNumber++
-		line := stripComment(scanner.Text())
+		lines = append(lines, scanner.Text())
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("air: reading: %w", err)
+	}
+
+	for i := 0; i < len(lines); i++ {
+		lineNumber := i + 1
+		line := stripComment(lines[i])
 
 		if line == "" {
 			continue
@@ -150,10 +157,8 @@ func Parse(r io.Reader) ([]Animation, error) {
 		}
 
 		if declType, count, ok := parseClsnDeclarationHeader(line); ok {
-			boxes, newLineNumber, err := readClsnBoxes(scanner, &lineNumber, count)
-			if err != nil {
-				return nil, err
-			}
+			var boxes []ClsnBox
+			boxes, i = readClsnBoxes(lines, i, count)
 			switch declType {
 			case "Clsn1Default":
 				defaultClsn1 = boxes
@@ -164,7 +169,6 @@ func Parse(r io.Reader) ([]Animation, error) {
 			case "Clsn2":
 				pendingClsn2 = boxes
 			}
-			lineNumber = newLineNumber
 			continue
 		}
 
@@ -251,34 +255,88 @@ func parseClsnDeclarationHeader(line string) (declType string, count int, ok boo
 	return declType, n, true
 }
 
-// clsnBoxLinePattern matches a "Clsn1[0] = L,T,R,B" (or Clsn2) line and
-// captures the four coordinates. Whitespace between the keyword and the
-// "[index]" bracket is optional: real MUGEN/Ikemen engines tolerate a line
-// like "Clsn2 [0] = ...", which some real-world .air files use.
-var clsnBoxLinePattern = regexp.MustCompile(`(?i)^Clsn[12]\s*\[\d+\]\s*=\s*(-?\d+)\s*,\s*(-?\d+)\s*,\s*(-?\d+)\s*,\s*(-?\d+)\s*$`)
-
-// readClsnBoxes reads the next count Clsn[i] box lines from scanner.
-// lineNumber is updated as lines are consumed for error reporting.
-func readClsnBoxes(scanner *bufio.Scanner, lineNumber *int, count int) ([]ClsnBox, int, error) {
-	boxes := []ClsnBox{} // count is untrusted: no preallocation, a negative one reads nothing
-	n := *lineNumber
-	for i := 0; i < count; i++ {
-		if !scanner.Scan() {
-			return nil, n, fmt.Errorf("air: line %d: expected %d Clsn box line(s), got %d", n, count, i)
+// readClsnBoxes reads the count box lines following the declaration at
+// lines[at] as Ikemen GO's readClsn does (anim.go:469-566, commit
+// 54d4148a): blank lines are skipped; a box line starts with "Clsn" and
+// holds an "=" followed by four comma-separated numbers, read leniently;
+// its optional [n] places it, else (or when n is out of range or taken) the
+// first free slot; the first other line ends the boxes and is read again
+// as content. Boxes the declaration counts but the file lacks stay empty
+// (Ikemen GO warns and keeps the action). It returns the boxes and the
+// index of the last line consumed.
+func readClsnBoxes(lines []string, at, count int) ([]ClsnBox, int) {
+	boxes := []ClsnBox{} // count is untrusted: grown as boxes are read
+	filled := []bool{}
+	slot := func(n int) int {
+		for len(boxes) <= n {
+			boxes, filled = append(boxes, ClsnBox{}), append(filled, false)
 		}
-		n++
-		line := stripComment(scanner.Text())
-		m := clsnBoxLinePattern.FindStringSubmatch(line)
-		if m == nil {
-			return nil, n, fmt.Errorf("air: line %d: malformed Clsn box line %q", n, line)
-		}
-		left, _ := strconv.Atoi(m[1])
-		top, _ := strconv.Atoi(m[2])
-		right, _ := strconv.Atoi(m[3])
-		bottom, _ := strconv.Atoi(m[4])
-		boxes = append(boxes, ClsnBox{Left: left, Top: top, Right: right, Bottom: bottom})
+		return n
 	}
-	return boxes, n, nil
+	read := 0
+	i := at + 1
+	for ; read < count && i < len(lines); i++ {
+		line := strings.ToLower(stripComment(lines[i]))
+		if line == "" {
+			continue
+		}
+		eq := strings.IndexByte(line, '=')
+		if !strings.HasPrefix(line, "clsn") || eq < 0 {
+			break
+		}
+		values := strings.Split(line[eq+1:], ",")
+		if len(values) < 4 {
+			break
+		}
+		n := clsnBoxIndex(line[:eq])
+		if n < 0 || n >= count || (n < len(filled) && filled[n]) {
+			n = firstFree(filled, count)
+		}
+		slot(n)
+		boxes[n] = ClsnBox{Left: lenientInt(values[0]), Top: lenientInt(values[1]), Right: lenientInt(values[2]), Bottom: lenientInt(values[3])}
+		filled[n] = true
+		read++
+	}
+	if read > 0 {
+		slot(count - 1)
+	}
+	return boxes, i - 1
+}
+
+// clsnBoxIndex is the [n] of a box line's left side, -1 without a valid one.
+func clsnBoxIndex(left string) int {
+	open := strings.IndexByte(left, '[')
+	if open < 0 {
+		return -1
+	}
+	end := strings.IndexByte(left[open:], ']')
+	if end <= 0 {
+		return -1
+	}
+	n, err := strconv.Atoi(strings.TrimSpace(left[open+1 : open+end]))
+	if err != nil || n < 0 {
+		return -1
+	}
+	return n
+}
+
+// firstFree is the first slot of count not filled yet.
+func firstFree(filled []bool, count int) int {
+	for k := range count {
+		if k >= len(filled) || !filled[k] {
+			return k
+		}
+	}
+	return count - 1
+}
+
+// lenientInt is Ikemen GO's Atoi: the leading integer, 0 without one.
+func lenientInt(field string) int {
+	n, err := parseLeadingInt(field)
+	if err != nil {
+		return 0
+	}
+	return n
 }
 
 // leadingIntPattern matches an optionally-signed run of digits at the start

@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.22.0] - 2026-11-21
+
+### Fixed
+- `.air` Clsn box lines are read as Ikemen GO reads them (anim.go readClsn): any line starting with `Clsn` and holding an `=` (Blanka SFA's `Clsn[0]=...` included), its optional `[n]` placing the box, blank lines skipped, numbers read leniently; a malformed box line or fewer boxes than declared no longer fail the whole file, the frame keeps the boxes found.
+
 ## [0.21.0] - 2026-11-21
 
 ### Fixed

@@ -635,21 +635,62 @@ func TestParse_ColonPrefixedLine_TreatedAsComment(t *testing.T) {
 	}
 }
 
-// A Clsn box line that is missing a coordinate is a genuine error, not a
-// tolerated formatting quirk, and must still be reported as such after
-// loosening the pattern to accept a space before the bracket.
-func TestParse_ClsnBoxLineWithMissingCoordinate_ReturnsError(t *testing.T) {
+// Ikemen GO's readClsn (anim.go:469-566) stops at a box line with fewer
+// than four values, warns, and keeps the action: the frame after it still
+// loads, without that box.
+func TestParse_ClsnBoxLineWithMissingCoordinate_IsDroppedNotFatal(t *testing.T) {
 	src := "[Begin Action 0]\n" +
 		"Clsn2: 1\n" +
 		" Clsn2[0] = -17, -97, 18\n" +
 		"0,0, 0,0, 5\n"
 
-	_, err := Parse(strings.NewReader(src))
-	if err == nil {
-		t.Fatal("expected an error for a Clsn box line with a missing coordinate, got nil")
+	animations, err := Parse(strings.NewReader(src))
+	if err != nil {
+		t.Fatal(err)
 	}
-	if !strings.Contains(err.Error(), "line 3") {
-		t.Errorf("expected the error to name line 3, got: %v", err)
+	if len(animations) != 1 || len(animations[0].Frames) != 1 || len(animations[0].Frames[0].Clsn2) != 0 {
+		t.Errorf("animations = %+v, want one frame without boxes", animations)
+	}
+}
+
+// readClsn accepts any line starting "Clsn" with an "=": Blanka (SFA)'s
+// "Clsn[0]=-35,-42,36,4" has no 1 or 2; the [n] places a box, blank lines
+// between boxes are skipped and numbers are read as Atoi does.
+func TestParse_ClsnBoxLinesAsIkemenGOReadsThem(t *testing.T) {
+	src := "[Begin Action 100]\n" +
+		"Clsn2: 3\n" +
+		"Clsn[1]=-25,-71,41,-33\n" +
+		"\n" +
+		"Clsn[0]=-35,-42,36,4\n" +
+		"clsn2 = 1.5, 2x, 3, 4\n" +
+		"10,0,0,0,2\n"
+
+	animations, err := Parse(strings.NewReader(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := animations[0].Frames[0].Clsn2
+	want := []ClsnBox{{-35, -42, 36, 4}, {-25, -71, 41, -33}, {1, 2, 3, 4}}
+	if len(got) != 3 || got[0] != want[0] || got[1] != want[1] || got[2] != want[2] {
+		t.Errorf("boxes = %+v, want %+v", got, want)
+	}
+}
+
+// Fewer box lines than declared: the boxes found are kept, the frame line
+// after them is read as a frame.
+func TestParse_FewerClsnBoxesThanDeclared(t *testing.T) {
+	src := "[Begin Action 0]\n" +
+		"Clsn1: 2\n" +
+		"Clsn1[0] = 1, 2, 3, 4\n" +
+		"5,6, 0,0, 7\n"
+
+	animations, err := Parse(strings.NewReader(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+	fr := animations[0].Frames
+	if len(fr) != 1 || fr[0].Group != 5 || len(fr[0].Clsn1) != 2 || fr[0].Clsn1[0] != (ClsnBox{1, 2, 3, 4}) {
+		t.Errorf("frames = %+v, want frame 5,6 with the box found and an empty one", fr)
 	}
 }
 

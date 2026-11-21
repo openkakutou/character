@@ -82,7 +82,7 @@ func indexSource(source []byte) []actionSpan {
 			continue
 		}
 		if _, count, ok := parseClsnDeclarationHeader(s); ok {
-			i += boundedSkip(count, i, len(lines)) // the box lines are consumed with their declaration
+			_, i = readClsnBoxes(lines, i, count) // the box lines are consumed with their declaration
 		}
 	}
 
@@ -124,16 +124,16 @@ func indexSource(source []byte) []actionSpan {
 			}
 			if declType, count, ok := parseClsnDeclarationHeader(s); ok {
 				idx := int(declType[4] - '1')
-				count = boundedSkip(count, i, sp.end)
+				boxes, last := readClsnBoxes(lines[:sp.end], i, count)
 				if strings.HasSuffix(declType, "Default") {
-					def[idx] = scanBoxes(lines, i+1, count)
+					def[idx] = boxes
 				} else {
 					if pending[idx] != nil {
 						sp.ambiguous = true
 					}
-					pending[idx] = &blockSpan{i, count}
+					pending[idx] = &blockSpan{i, last - i}
 				}
-				i += count
+				i = last
 				continue
 			}
 			fs := frameSpan{line: i, start: i, blocks: pending, def: def}
@@ -151,38 +151,6 @@ func indexSource(source []byte) []actionSpan {
 		spans = append(spans, sp)
 	}
 	return spans
-}
-
-// boundedSkip clamps the box-line count of a ClsnN declaration at line i to
-// what the source can hold below line limit: the count is untrusted input, a
-// negative one counts as zero and a huge one must not run past the source.
-func boundedSkip(count, i, limit int) int {
-	if count < 0 {
-		return 0
-	}
-	if remaining := limit - i - 1; count > remaining {
-		if remaining < 0 {
-			return 0
-		}
-		return remaining
-	}
-	return count
-}
-
-// scanBoxes reads count box lines starting at line from; unparsable lines are skipped.
-func scanBoxes(lines []string, from, count int) []ClsnBox {
-	boxes := []ClsnBox{}
-	for i := from; i < from+count && i < len(lines); i++ {
-		if m := clsnBoxLinePattern.FindStringSubmatch(stripComment(lineContent(lines[i]))); m != nil {
-			var b ClsnBox
-			fmt.Sscan(m[1], &b.Left)
-			fmt.Sscan(m[2], &b.Top)
-			fmt.Sscan(m[3], &b.Right)
-			fmt.Sscan(m[4], &b.Bottom)
-			boxes = append(boxes, b)
-		}
-	}
-	return boxes
 }
 
 func frameEqual(a, b Frame) bool {
