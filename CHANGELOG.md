@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.23.0] - 2026-11-21
+
+### Added
+- `.air` `Copy Action N` (Ikemen GO): the action takes the frames and loop start of action N, through a chain of copies up to 8 links; one whose target is missing or itself is dropped, as Ikemen GO's resolveCopyAction does.
+
 ## [0.22.0] - 2026-11-21
 
 ### Fixed

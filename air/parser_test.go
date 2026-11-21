@@ -716,3 +716,32 @@ func TestParse_LinesIkemenGOSkipsAreSkipped(t *testing.T) {
 		t.Errorf("Clsn2 per frame = %d, %d; want the misspelled default on the next frame only", len(a.Frames[1].Clsn2), len(a.Frames[2].Clsn2))
 	}
 }
+
+// anim.go:359-370, 1386-1424: "Copy Action N" makes the action a copy of
+// action N, through a chain of copies; a missing or self target drops it.
+func TestParse_CopyActionCopiesTheNamedAction(t *testing.T) {
+	src := "[Begin Action 1]\n1,0, 0,0, 5\nLoopstart\n1,1, 0,0, 6\n" +
+		"[Begin Action 2]\nCopy Action 1\n9,9, 0,0, 9\n" +
+		"[Begin Action 3]\ncopy action 2\n" +
+		"[Begin Action 4]\nCopy Action 77\n" +
+		"[Begin Action 5]\nCopy Action 5\n"
+	animations, err := Parse(strings.NewReader(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+	byNumber := map[int]Animation{}
+	for _, a := range animations {
+		byNumber[a.Number] = a
+	}
+	for _, n := range []int{2, 3} {
+		a, ok := byNumber[n]
+		if !ok || len(a.Frames) != 2 || a.Frames[1].Image != 1 || a.LoopStart != 1 {
+			t.Errorf("action %d = %+v, want action 1's two frames and loop start", n, a)
+		}
+	}
+	for _, n := range []int{4, 5} {
+		if _, ok := byNumber[n]; ok {
+			t.Errorf("action %d kept, want it dropped (missing or self target)", n)
+		}
+	}
+}

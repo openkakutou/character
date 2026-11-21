@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -80,6 +81,11 @@ func Parse(r io.Reader) ([]Animation, error) {
 		return nil, fmt.Errorf("air: reading: %w", err)
 	}
 
+	// copyOf records each "Copy Action N" action (index in animations)
+	// with N; copying skips the rest of its block.
+	copyOf := map[int]int{}
+	copying := false
+
 	for i := 0; i < len(lines); i++ {
 		lineNumber := i + 1
 		line := stripComment(lines[i])
@@ -127,14 +133,26 @@ func Parse(r io.Reader) ([]Animation, error) {
 			}
 			animations = append(animations, Animation{Number: number})
 			current = &animations[len(animations)-1]
+			copying = false
 			defaultClsn1, defaultClsn2 = nil, nil
 			pendingClsn1, pendingClsn2 = nil, nil
 			continue
 		}
 
-		if current == nil {
+		if current == nil || copying {
 			// Non-header content before the first action header has no
 			// action to attach to; nothing meaningful can be done with it.
+			// A Copy Action block ends at its Copy Action line.
+			continue
+		}
+
+		// Ikemen GO's "Copy Action N" makes the action a copy of action N
+		// (anim.go:359-370); an invalid N leaves it as it is.
+		if lower := strings.ToLower(line); strings.HasPrefix(lower, "copy action ") {
+			copying = true
+			if n, err := strconv.Atoi(strings.TrimSpace(lower[len("copy action "):])); err == nil {
+				copyOf[len(animations)-1] = n
+			}
 			continue
 		}
 
@@ -199,11 +217,58 @@ func Parse(r io.Reader) ([]Animation, error) {
 		current.Frames = append(current.Frames, frame)
 	}
 
-	if err := scanner.Err(); err != nil {
-		return nil, fmt.Errorf("air: reading animation source: %w", err)
-	}
+	return resolveCopyActions(animations, copyOf), nil
+}
 
-	return animations, nil
+// copyChainLimit is how many Copy Action links Ikemen GO follows.
+const copyChainLimit = 8
+
+// resolveCopyActions gives each Copy Action action the frames of the action
+// it names, following a copy of a copy up to 8 links, as Ikemen GO's
+// resolveCopyAction does (anim.go:1386-1424); one whose target is missing,
+// itself or too far down the chain is dropped.
+func resolveCopyActions(animations []Animation, copyOf map[int]int) []Animation {
+	if len(copyOf) == 0 {
+		return animations
+	}
+	byNumber := map[int]int{}
+	for i, a := range animations {
+		if _, seen := byNumber[a.Number]; !seen {
+			byNumber[a.Number] = i
+		}
+	}
+	dropped := map[int]bool{}
+	for idx := range animations {
+		target, isCopy := copyOf[idx]
+		if !isCopy {
+			continue
+		}
+		resolved := false
+		for range copyChainLimit {
+			ti, ok := byNumber[target]
+			if !ok || ti == idx {
+				break
+			}
+			if next, chained := copyOf[ti]; chained {
+				target = next
+				continue
+			}
+			animations[idx].Frames = slices.Clone(animations[ti].Frames)
+			animations[idx].LoopStart = animations[ti].LoopStart
+			resolved = true
+			break
+		}
+		if !resolved {
+			dropped[idx] = true
+		}
+	}
+	kept := animations[:0]
+	for i, a := range animations {
+		if !dropped[i] {
+			kept = append(kept, a)
+		}
+	}
+	return kept
 }
 
 // interpolateDirectives lists the Ikemen GO ".air" Interpolate directive
