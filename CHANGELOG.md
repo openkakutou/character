@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.23.1] - 2026-11-21
+
+### Fixed
+- sff v0.10.0: a sprite with truncated PCX data loads as Ikemen GO loads it instead of failing the character (Yamcha).
+
 ## [0.23.0] - 2026-11-21
 
 ### Added
