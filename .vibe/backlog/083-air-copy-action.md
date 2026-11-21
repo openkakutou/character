@@ -12,3 +12,6 @@ Ikemen GO accepts a `Copy Action N` line in an action (and in a lifebar's `[Begi
 - [ ] An action with `Copy Action N` gets action N's frames, as in Ikemen GO
 - [ ] A copy of a missing action behaves as in Ikemen GO
 - [ ] `lifebar` can drop its `shortcut:` once released
+
+## Notes
+2026-11-21 audit: `Parse` already resolves `Copy Action` (v0.23.0); the edit path does not, see item 085. Close this item once `lifebar` drops its shortcut.

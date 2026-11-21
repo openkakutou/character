@@ -17,3 +17,5 @@ Apply the same rules as `game`: resolve `..` textually before touching the disk,
 
 ## Notes
 Raised by `game#037` (2026-11-18). Once released, `game` bumps its `character` dependency.
+- [ ] Every referenced file is a regular file read with a size cap (`load.go:233-261, 418-425`, `load_movelist.go:41-54`): `cns = ../../../dev/zero` errors, and a move list cannot return a file from outside the character folder (audit 2026-11-21)
+- [ ] v2 `.snd` external audio references use the same case-insensitive open as every other reference (`load.go:416-425`, `readExact`), with a test

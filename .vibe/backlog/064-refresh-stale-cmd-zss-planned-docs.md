@@ -13,3 +13,4 @@ CLAUDE.md still labels .cmd and .zss as planned (backlog items 036/037, sff item
 
 ## Notes
 Verified in character/CLAUDE.md lines about .cmd and .zss.
+- [ ] `docs/architecture.md:48`, `docs/api.md:1096-1097`, `.vibe/modules/cmd.md:3`, `.vibe/models.md:257, 301`, `.vibe/modules/root.md:10`, `.vibe/modules/wasm.md:9` no longer say `.cmd` / `.zss` are not wired; `models.md:257` names `Commands`, not `Scripts` (audit 2026-11-21)

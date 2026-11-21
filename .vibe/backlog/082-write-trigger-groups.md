@@ -14,3 +14,4 @@ status: todo
 
 ## Notes
 Found by item 080 (2026-11-19).
+- [ ] Fresh `SerializeCns` / `SerializeCmd` and a regenerated controller in `SerializeEdited` keep `triggerall` and multi-line groups (audit 2026-11-21 reproduced `triggerall=A / trigger1=B / trigger1=C` written as `trigger1=A, trigger2=B, trigger3=C`, an AND turned into an OR); `ctrlEqual` compares the groups
