@@ -360,17 +360,18 @@ type = RemoveExplod
 	}
 }
 
-func TestParse_StateBlockOutsideAnyStatedef_ReturnsError(t *testing.T) {
-	src := `[State 0]
-type = VelSet
-`
-
-	_, err := Parse(strings.NewReader(src))
-	if err == nil {
-		t.Fatal("expected an error for a [State N] block with no enclosing Statedef, got nil")
+// compiler.go:7228-7238, 7280-7290 (Ikemen GO 54d4148a): a [State] block
+// outside any Statedef is skipped, lines and all, until the next Statedef;
+// one after a section that is not "[State ...]" too (Robert XIII writes
+// "[state, explod]", which ends Statedef 3108 in Ikemen GO).
+func TestParse_StateBlocksOutsideAnyStatedefAreSkipped(t *testing.T) {
+	src := "[State 0]\ntype = VelSet\n\n[Statedef 5]\ntype = S\n[State 5, 1]\ntype = Null\ntrigger1 = 1\n[state, explod]\nanim = 9\n[State 5, 2]\ntype = VelSet\n\n[Statedef 6]\n[State 6, 1]\ntype = Null\n"
+	states, err := Parse(strings.NewReader(src))
+	if err != nil {
+		t.Fatal(err)
 	}
-	if !strings.Contains(err.Error(), "line 1") {
-		t.Errorf("expected error to identify line 1, got: %v", err)
+	if len(states) != 2 || len(states[0].Controllers) != 1 || states[0].Controllers[0].Type != "Null" || len(states[1].Controllers) != 1 {
+		t.Errorf("states = %+v, want 5 with its first controller only, and 6", states)
 	}
 }
 
@@ -844,5 +845,19 @@ func TestParse_StatedefHeaderWithNoOptionalField_HasNoWrittenMap(t *testing.T) {
 	}
 	if states[0].Written != nil {
 		t.Errorf("Written = %v, want nil (type/movetype/physics are not tracked)", states[0].Written)
+	}
+}
+
+// compiler.go:7759-7792 (Ikemen GO 54d4148a): text after the state number is
+// ignored, as real corpus files write it (Mr X "[Statedef 1051 - Throw]",
+// Galka Monk "[Statedef 20005" + a Shift-JIS label + "]").
+func TestParse_TextAfterTheStatedefNumberIsIgnored(t *testing.T) {
+	src := "[Statedef 1051 - Throw]\ntype = S\n\n[Statedef 20005\x89\xf1\x94\xf0]\ntype = A\n\n[Statedef -3 extra]\n"
+	states, err := Parse(strings.NewReader(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(states) != 3 || states[0].Number != 1051 || states[1].Number != 20005 || states[2].Number != -3 {
+		t.Errorf("states = %+v, want 1051, 20005 and -3", states)
 	}
 }

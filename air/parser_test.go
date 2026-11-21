@@ -380,27 +380,6 @@ func TestParse_MalformedActionHeaderMidFile_ReturnsErrorNamingLine(t *testing.T)
 	}
 }
 
-func TestParse_FrameLineWithNonNumericField_ReturnsErrorNamingLine(t *testing.T) {
-	src := "[Begin Action 0]\nabc,0, 0,0, 5\n"
-
-	_, err := Parse(strings.NewReader(src))
-	if err == nil {
-		t.Fatal("expected an error for a non-numeric frame field, got nil")
-	}
-	if !strings.Contains(err.Error(), "line 2") {
-		t.Errorf("expected the error to name line 2, got: %v", err)
-	}
-}
-
-func TestParse_FrameLineMissingFields_ReturnsError(t *testing.T) {
-	src := "[Begin Action 0]\n0,0\n"
-
-	_, err := Parse(strings.NewReader(src))
-	if err == nil {
-		t.Fatal("expected an error for a frame line missing required fields, got nil")
-	}
-}
-
 func TestParse_FrameLineFieldWithTrailingGarbageAfterLeadingInteger_UsesLeadingInteger(t *testing.T) {
 	// Real-world value found verbatim, copy-pasted across 14 otherwise
 	// unrelated real characters (item 048): the Image field has a valid
@@ -422,21 +401,6 @@ func TestParse_FrameLineFieldWithTrailingGarbageAfterLeadingInteger_UsesLeadingI
 	}
 	if f.X != 0 || f.Y != 2 {
 		t.Errorf("expected X 0 and Y 2, got X %d Y %d", f.X, f.Y)
-	}
-}
-
-func TestParse_FrameLineFieldWithNoUsableLeadingDigits_StillReturnsError(t *testing.T) {
-	// A field that isn't a valid integer at all (no usable leading digits)
-	// must still be rejected, not silently treated as 0 — this is what
-	// distinguishes the fix from a blanket "ignore invalid fields" change.
-	src := "[Begin Action 0]\nabc def,0, 0,0, 5\n"
-
-	_, err := Parse(strings.NewReader(src))
-	if err == nil {
-		t.Fatal("expected an error for a field with no usable leading digits, got nil")
-	}
-	if !strings.Contains(err.Error(), "line 2") {
-		t.Errorf("expected the error to name line 2, got: %v", err)
 	}
 }
 
@@ -578,23 +542,6 @@ func TestParse_EachInterpolateDirectiveKeyword_IsIgnored(t *testing.T) {
 	}
 }
 
-// A line that merely starts with "Interpolate" but isn't one of the four
-// recognized directive keywords must still be treated as a frame line and
-// rejected as malformed — the fix recognizes specific keywords, not an
-// open-ended relaxation of frame-line validation (item 045's acceptance
-// criteria).
-func TestParse_UnrecognizedInterpolateKeyword_StillReturnsError(t *testing.T) {
-	src := "[Begin Action 0]\nInterpolate Foo\n"
-
-	_, err := Parse(strings.NewReader(src))
-	if err == nil {
-		t.Fatal("expected an error for an unrecognized Interpolate keyword, got nil")
-	}
-	if !strings.Contains(err.Error(), "line 2") {
-		t.Errorf("expected the error to name line 2, got: %v", err)
-	}
-}
-
 // Reproduces a real .air file (Bardock, from a community MUGEN character)
 // which widely uses Group -1 with a varying, more-negative-than -1 Image
 // (-1,0 / -1,-1 / -1,-2 / -1,-3 / -1,-4 / -1,-5, one per frame in the same
@@ -703,5 +650,28 @@ func TestParse_ClsnBoxLineWithMissingCoordinate_ReturnsError(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "line 3") {
 		t.Errorf("expected the error to name line 3, got: %v", err)
+	}
+}
+
+// anim.go:45-60, 395-430 (Ikemen GO 54d4148a): a line that is not a frame
+// Ikemen GO can read is skipped, never an error, as real corpus files carry
+// them (labels, "Loopstart:", stray controller lines, Shift-JIS notes); a
+// header's text after the action number is ignored; "Loopstart:" starts the
+// loop; a misspelled Clsn default declares the next frame's boxes only.
+func TestParse_LinesIkemenGOSkipsAreSkipped(t *testing.T) {
+	src := "[Begin Action 1045 Up]\nShield Jump forward/back start frame\nabc,0, 0,0, 5\n0,0\nabc def,0, 0,0, 5\nInterpolate Foo\ntype = ChangeAnim\n\x83_\x83E\n0,0, 0,0, 3\nLoopstart:\nClsn2Defailt: 1\n Clsn2[0] = -1,-2,3,4\n0,1, 0,0, 4\n0,2, 0,0, 5\n"
+	anims, err := Parse(strings.NewReader(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(anims) != 1 || anims[0].Number != 1045 {
+		t.Fatalf("animations = %+v, want action 1045", anims)
+	}
+	a := anims[0]
+	if len(a.Frames) != 3 || a.LoopStart != 1 {
+		t.Fatalf("frames %d loopstart %d, want 3 frames, loop from 1", len(a.Frames), a.LoopStart)
+	}
+	if len(a.Frames[1].Clsn2) != 1 || len(a.Frames[2].Clsn2) != 0 {
+		t.Errorf("Clsn2 per frame = %d, %d; want the misspelled default on the next frame only", len(a.Frames[1].Clsn2), len(a.Frames[2].Clsn2))
 	}
 }

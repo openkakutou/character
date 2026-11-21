@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.21.0] - 2026-11-21
+
+### Fixed
+- Files Ikemen GO loads no longer fail to load, found by running 373 corpus characters: a `[Statedef N ...]` or `[Begin Action N ...]` header ignores the text after its number (Ikemen GO's Atoi); `[State]` blocks outside any Statedef are skipped with their lines, as after a section that is not `[State ...]`; an `.air` line that is not a frame Ikemen GO reads is skipped instead of failing the file; `Loopstart:` starts the loop; a Clsn declaration is read as Ikemen GO does, so a misspelled default (`Clsn2Defailt`, `Clsn1deault`) declares the next frame's boxes only.
+
 ## [0.20.0] - 2026-11-21
 
 ### Added

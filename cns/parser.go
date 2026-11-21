@@ -12,9 +12,12 @@ import (
 )
 
 // statedefHeaderPattern matches a "[Statedef N]" line, capturing the state
-// number. A trailing ", label" comment (e.g. "[Statedef 0, Standing]") is
-// tolerated and ignored, matching common .cns authoring style.
-var statedefHeaderPattern = regexp.MustCompile(`(?i)^\[\s*statedef\s+(-?\d+)\s*(?:,[^\]]*)?\]$`)
+// number. Whatever follows the number is ignored, as Ikemen GO reads the
+// number with Atoi, which stops at the first non-digit (scanStateDef,
+// compiler.go:7759-7792, commit 54d4148a): "[Statedef 0, Standing]",
+// "[Statedef 1051 - Throw]" and "[Statedef 20005<Shift-JIS label>]" are
+// states 0, 1051 and 20005.
+var statedefHeaderPattern = regexp.MustCompile(`(?i)^\[\s*statedef\s+(-?\d+)[^\]]*\]$`)
 
 // statedefAttemptPattern recognizes any bracket line that starts with the
 // "statedef" keyword, whether or not it goes on to match
@@ -123,8 +126,12 @@ func Parse(r io.Reader) ([]StateDef, error) {
 			}
 
 			if stateHeaderPattern.MatchString(line) {
+				// A block outside any Statedef is skipped with its lines, as
+				// Ikemen GO skips everything until the next Statedef
+				// (compiler.go:7228-7238, 7280-7290, commit 54d4148a).
 				if current == nil {
-					return nil, fmt.Errorf("cns: line %d: [State ...] block found outside of any Statedef: %q", lineNumber, line)
+					currentCtrl = nil
+					continue
 				}
 				current.Controllers = append(current.Controllers, Controller{})
 				currentCtrl = &current.Controllers[len(current.Controllers)-1]

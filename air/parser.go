@@ -22,7 +22,7 @@ func stripComment(line string) string {
 
 // actionHeaderPattern matches a "[Begin Action N]" line and captures the
 // action number.
-var actionHeaderPattern = regexp.MustCompile(`(?i)^\[\s*begin\s+action\s+(-?\d+)\s*\]`)
+var actionHeaderPattern = regexp.MustCompile(`(?i)^\[\s*begin\s+action\s+(-?\d+)[^\]]*\]`)
 
 // actionHeaderAttemptPattern recognizes any bracket line that starts with
 // the "begin" keyword, whether or not it goes on to match
@@ -131,7 +131,9 @@ func Parse(r io.Reader) ([]Animation, error) {
 			continue
 		}
 
-		if strings.EqualFold(line, "loopstart") {
+		// Ikemen GO matches "loopstart" as a prefix (anim.go:395), so
+		// "Loopstart:" is one too.
+		if len(line) >= 9 && strings.EqualFold(line[:9], "loopstart") {
 			current.LoopStart = len(current.Frames)
 			continue
 		}
@@ -166,9 +168,15 @@ func Parse(r io.Reader) ([]Animation, error) {
 			continue
 		}
 
+		// Ikemen GO reads a frame only from a line starting with a digit or
+		// '-' and skips any other (anim.go:45-60); a frame line it cannot
+		// read is reported but not fatal there, and skipped here.
+		if line[0] != '-' && (line[0] < '0' || line[0] > '9') {
+			continue
+		}
 		frame, err := parseFrameLine(line)
 		if err != nil {
-			return nil, fmt.Errorf("air: line %d: %w", lineNumber, err)
+			continue
 		}
 
 		if pendingClsn1 != nil {
@@ -218,43 +226,29 @@ func isInterpolateDirective(line string) bool {
 	return false
 }
 
-// clsnDeclarationKeywords maps each recognized spelling of a Clsn
-// declaration header keyword to the canonical declaration type it means.
-// Besides the four correctly spelled keywords, "Clsn1deault"/"Clsn2deault"
-// (a missing "f") are also recognized: a real-world authoring typo found in
-// at least one real character file (Darkstalkers' Donovan), tolerated here
-// the same way def.Parse/cns.Parse tolerate other specific real-world
-// authoring mistakes rather than attempting open-ended fuzzy matching.
-var clsnDeclarationKeywords = map[string]string{
-	"Clsn1Default": "Clsn1Default",
-	"Clsn2Default": "Clsn2Default",
-	"Clsn1deault":  "Clsn1Default",
-	"Clsn2deault":  "Clsn2Default",
-	"Clsn1":        "Clsn1",
-	"Clsn2":        "Clsn2",
-}
-
-// clsnDeclarationCandidates lists clsnDeclarationKeywords' keys, longest
-// first, so a longer keyword (e.g. "Clsn1Default") is matched before a
-// shorter one it starts with (e.g. "Clsn1").
-var clsnDeclarationCandidates = []string{"Clsn1Default", "Clsn2Default", "Clsn1deault", "Clsn2deault", "Clsn1", "Clsn2"}
-
-// parseClsnDeclarationHeader recognizes a "Clsn1Default: N", "Clsn2Default:
-// N", "Clsn1: N", or "Clsn2: N" line (or one of clsnDeclarationKeywords'
-// tolerated misspellings) and returns its declaration type and the number
-// of Clsn[i] lines that follow it.
+// parseClsnDeclarationHeader recognizes a Clsn declaration as Ikemen GO
+// does (anim.go:405-430, commit 54d4148a): a line starting "Clsn1" or
+// "Clsn2" (any case) and holding a ':' followed by the box count; it is a
+// default one when "default" follows the digit, so a misspelling such as
+// "Clsn2Defailt" or "Clsn1deault" declares the next frame's boxes only.
 func parseClsnDeclarationHeader(line string) (declType string, count int, ok bool) {
-	for _, candidate := range clsnDeclarationCandidates {
-		prefix := candidate + ":"
-		if len(line) >= len(prefix) && strings.EqualFold(line[:len(prefix)], prefix) {
-			n, err := strconv.Atoi(strings.TrimSpace(line[len(prefix):]))
-			if err != nil {
-				return "", 0, false
-			}
-			return clsnDeclarationKeywords[candidate], n, true
-		}
+	lower := strings.ToLower(line)
+	if len(lower) < 5 || !strings.HasPrefix(lower, "clsn") || (lower[4] != '1' && lower[4] != '2') {
+		return "", 0, false
 	}
-	return "", 0, false
+	colon := strings.IndexByte(lower, ':')
+	if colon < 0 {
+		return "", 0, false
+	}
+	n, err := strconv.Atoi(strings.TrimSpace(lower[colon+1:]))
+	if err != nil || n < 0 {
+		return "", 0, false
+	}
+	declType = "Clsn" + string(lower[4])
+	if strings.HasPrefix(lower[5:], "default") {
+		declType += "Default"
+	}
+	return declType, n, true
 }
 
 // clsnBoxLinePattern matches a "Clsn1[0] = L,T,R,B" (or Clsn2) line and

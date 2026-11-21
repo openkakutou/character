@@ -184,18 +184,6 @@ func TestParseDocument_ReaderFailure_ReturnsErrorNotPanic(t *testing.T) {
 	}
 }
 
-func TestParseDocument_MalformedFrameLine_ReturnsError(t *testing.T) {
-	src := "[Begin Action 0]\nabc,0, 0,0, 5\n"
-
-	_, err := ParseDocument(strings.NewReader(src))
-	if err == nil {
-		t.Fatal("expected an error for a malformed frame line, got nil")
-	}
-	if !strings.Contains(err.Error(), "line 2") {
-		t.Errorf("expected the error to name line 2, got: %v", err)
-	}
-}
-
 func TestDocumentSerialize_ReturnsError_OnWriterFailure(t *testing.T) {
 	doc, err := ParseDocument(strings.NewReader("[Begin Action 0]\n0,0, 0,0, 1\n"))
 	if err != nil {
